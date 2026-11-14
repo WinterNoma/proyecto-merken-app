@@ -8,6 +8,10 @@ license.workspace = true
 [dependencies]
 rusqlite.workspace = true
 merken-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+merken-seed.workspace = true
 
 [lints]
 workspace = true
