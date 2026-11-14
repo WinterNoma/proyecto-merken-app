@@ -12,7 +12,7 @@ export interface AstronautTelemetry {
   astronaut_name: string;
   space_radiation: number; // µSv/h
   distance_from_earth: number; // km
-  blood_pressure: BloodPressure;
+  blood_pressure: BloodPressure; // mmHg
   heart_rate: number; // bpm
   blood_sugar: number; // mg/dL
   body_temperature: number; // °C
@@ -20,4 +20,13 @@ export interface AstronautTelemetry {
   mood: string;
   nutrition: number; // kcal
   oxygen_in_blood: number; // SpO2 %
+}
+
+export interface AstronautProfile {
+  id: string;
+  name: string;
+  role: string;
+  badge: string;
+  color: string;
+  telemetry: AstronautTelemetry;
 }
