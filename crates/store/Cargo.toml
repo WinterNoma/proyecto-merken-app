@@ -1,0 +1,13 @@
+[package]
+name = "merken-store"
+description = "Persistencia local en SQLite y bandeja de salida"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rusqlite.workspace = true
+merken-core.workspace = true
+
+[lints]
+workspace = true
