@@ -3,7 +3,7 @@ use crate::{
     ErrorCode, ValidationError,
     catalog::{BodyZone, Indicator, SleepQuality},
     time::Timestamp,
-    units::{Bpm, Celsius, Hours, MgDl, MmHg, Score},
+    units::{Bpm, Celsius, Hours, Kcal, Km, MgDl, MicroSvPerHour, MmHg, Percent, Score},
     validate_text,
 };
 use serde_json::{Value, json};
@@ -31,8 +31,17 @@ pub enum Measurement {
     Mood {
         score: Score,
     },
-    Headache {
-        score: Score,
+    OxygenInBlood {
+        percentage: Percent,
+    },
+    SpaceRadiation {
+        usv_h: MicroSvPerHour,
+    },
+    DistanceFromEarth {
+        km: Km,
+    },
+    Nutrition {
+        kcal: Kcal,
     },
     Symptom {
         body_zone: BodyZone,
@@ -100,7 +109,11 @@ impl Measurement {
             Indicator::BodyTemperature => &["celsius"],
             Indicator::Glucose => &["mg_dl"],
             Indicator::Sleep => &["hours", "quality", "window_start", "window_end"],
-            Indicator::Mood | Indicator::Headache => &["score"],
+            Indicator::Mood => &["score"],
+            Indicator::OxygenInBlood => &["percentage"],
+            Indicator::SpaceRadiation => &["usv_h"],
+            Indicator::DistanceFromEarth => &["km"],
+            Indicator::Nutrition => &["kcal"],
             Indicator::Symptom => &["body_zone", "score", "description"],
         };
         if let Some(key) = obj.keys().find(|k| !allowed.contains(&k.as_str())) {
@@ -186,8 +199,17 @@ impl Measurement {
             Indicator::Mood => Self::Mood {
                 score: score(value)?,
             },
-            Indicator::Headache => Self::Headache {
-                score: score(value)?,
+            Indicator::OxygenInBlood => Self::OxygenInBlood {
+                percentage: Percent::try_from(number(value, "percentage")?)?,
+            },
+            Indicator::SpaceRadiation => Self::SpaceRadiation {
+                usv_h: MicroSvPerHour::try_from(number(value, "usv_h")?)?,
+            },
+            Indicator::DistanceFromEarth => Self::DistanceFromEarth {
+                km: Km::try_from(number(value, "km")?)?,
+            },
+            Indicator::Nutrition => Self::Nutrition {
+                kcal: Kcal::try_from(number(value, "kcal")?)?,
             },
             Indicator::Symptom => {
                 let zone = value
@@ -216,7 +238,10 @@ impl Measurement {
             Self::Glucose { .. } => Indicator::Glucose,
             Self::Sleep { .. } => Indicator::Sleep,
             Self::Mood { .. } => Indicator::Mood,
-            Self::Headache { .. } => Indicator::Headache,
+            Self::OxygenInBlood { .. } => Indicator::OxygenInBlood,
+            Self::SpaceRadiation { .. } => Indicator::SpaceRadiation,
+            Self::DistanceFromEarth { .. } => Indicator::DistanceFromEarth,
+            Self::Nutrition { .. } => Indicator::Nutrition,
             Self::Symptom { .. } => Indicator::Symptom,
         }
     }
@@ -236,9 +261,11 @@ impl Measurement {
             Self::BodyTemperature { celsius } => celsius.value(),
             Self::Glucose { mg_dl } => mg_dl.value(),
             Self::Sleep { hours, .. } => hours.value(),
-            Self::Mood { score } | Self::Headache { score } | Self::Symptom { score, .. } => {
-                f64::from(score.value())
-            }
+            Self::OxygenInBlood { percentage } => percentage.value(),
+            Self::SpaceRadiation { usv_h } => usv_h.value(),
+            Self::DistanceFromEarth { km } => km.value(),
+            Self::Nutrition { kcal } => kcal.value(),
+            Self::Mood { score } | Self::Symptom { score, .. } => f64::from(score.value()),
         }
     }
     pub fn to_value(&self) -> Value {
@@ -262,7 +289,11 @@ impl Measurement {
                 }
                 v
             }
-            Self::Mood { score } | Self::Headache { score } => json!({"score":score.value()}),
+            Self::Mood { score } => json!({"score":score.value()}),
+            Self::OxygenInBlood { percentage } => json!({"percentage":percentage.value()}),
+            Self::SpaceRadiation { usv_h } => json!({"usv_h":usv_h.value()}),
+            Self::DistanceFromEarth { km } => json!({"km":km.value()}),
+            Self::Nutrition { kcal } => json!({"kcal":kcal.value()}),
             Self::Symptom {
                 body_zone,
                 score,

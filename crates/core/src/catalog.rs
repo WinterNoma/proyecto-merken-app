@@ -24,7 +24,7 @@ macro_rules! catalog_enum {
     };
 }
 
-catalog_enum!(Indicator, "indicator", { HeartRate => "heart_rate", BloodPressure => "blood_pressure", BodyTemperature => "body_temperature", Glucose => "glucose", Sleep => "sleep", Mood => "mood", Headache => "headache", Symptom => "symptom" });
+catalog_enum!(Indicator, "indicator", { HeartRate => "heart_rate", BloodPressure => "blood_pressure", BodyTemperature => "body_temperature", Glucose => "glucose", Sleep => "sleep", Mood => "mood", OxygenInBlood => "oxygen_in_blood", SpaceRadiation => "space_radiation", DistanceFromEarth => "distance_from_earth", Nutrition => "nutrition", Symptom => "symptom" });
 
 impl Indicator {
     /// Devuelve la unidad exigida por el contrato.
@@ -35,8 +35,23 @@ impl Indicator {
             Self::BodyTemperature => "°C",
             Self::Glucose => "mg/dL",
             Self::Sleep => "h",
-            Self::Mood | Self::Headache | Self::Symptom => "score_0_10",
+            Self::Mood | Self::Symptom => "score_0_10",
+            Self::OxygenInBlood => "%",
+            Self::SpaceRadiation => "µSv/h",
+            Self::DistanceFromEarth => "km",
+            Self::Nutrition => "kcal",
         }
+    }
+
+    /// `true` si el indicador entra en la evaluación de salud.
+    /// Radiación (RF-12: va como dosis acumulada, no colorea el estado),
+    /// distancia a la Tierra y nutrición son contexto: se guardan y se
+    /// muestran, pero no tienen estado ni cuentan para `overall`.
+    pub const fn is_evaluated(self) -> bool {
+        !matches!(
+            self,
+            Self::SpaceRadiation | Self::DistanceFromEarth | Self::Nutrition
+        )
     }
 }
 

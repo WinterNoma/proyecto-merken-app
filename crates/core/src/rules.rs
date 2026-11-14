@@ -47,6 +47,11 @@ pub const PLAUSIBILITY: &[PlausibleRange] = &[
     (Indicator::BodyTemperature, 34.0, 41.5, None),
     (Indicator::Glucose, 40.0, 450.0, None),
     (Indicator::Sleep, 0.0, 14.0, None),
+    (Indicator::OxygenInBlood, 80.0, 100.0, None),
+    (Indicator::Nutrition, 0.0, 6000.0, None),
+    // > 10 mSv/h: errores de unidad (µSv/día, mSv) o un SPE intenso en espacio
+    // profundo; fondo ISS 17-42 µSv/h y SAA ~1500-3000 µSv/h no avisan (Hydrogen v2).
+    (Indicator::SpaceRadiation, 0.0, 10_000.0, None),
 ];
 pub const ABSOLUTE: &[Rule] = &[
     Rule {
@@ -299,27 +304,29 @@ pub const ABSOLUTE: &[Rule] = &[
         secondary: None,
     },
     Rule {
-        id: "headache.attention_high",
-        indicator: Indicator::Headache,
-        status: Status::Change,
-        direction: Direction::Up,
-        floor: Escalation::SelfCare,
+        id: "oxygen_in_blood.alarm_low",
+        indicator: Indicator::OxygenInBlood,
+        status: Status::Alarm,
+        direction: Direction::Down,
+        floor: Escalation::Urgent,
         source: SourceKind::Published,
         source_ref: Some(
-            "Numeric Rating Scale 0-10: 4-6 moderate pain (Krebs et al., J Gen Intern Med 2007)",
+            "RCP National Early Warning Score (NEWS) 2, 2017: SpO2 Scale 1, <= 91% scores 3",
         ),
-        primary: (Compare::Ge, 4.0),
+        primary: (Compare::Le, 91.0),
         secondary: None,
     },
     Rule {
-        id: "headache.severe_high",
-        indicator: Indicator::Headache,
+        id: "oxygen_in_blood.attention_low",
+        indicator: Indicator::OxygenInBlood,
         status: Status::Change,
-        direction: Direction::Up,
-        floor: Escalation::FlagForGround,
+        direction: Direction::Down,
+        floor: Escalation::SelfCare,
         source: SourceKind::Published,
-        source_ref: Some("Numeric Rating Scale 0-10: 7-10 severe pain (Serlin et al., Pain 1995)"),
-        primary: (Compare::Ge, 7.0),
+        source_ref: Some(
+            "BTS Guideline for oxygen use in adults, Thorax 2017;72(Suppl 1): target SpO2 94-98%",
+        ),
+        primary: (Compare::Lt, 94.0),
         secondary: None,
     },
     Rule {
@@ -354,7 +361,11 @@ pub fn history(ind: Indicator) -> (f64, Option<Direction>, i64) {
         Indicator::Glucose => (30.0, None, 72 * HOUR),
         Indicator::Sleep => (1.5, Some(Direction::Down), 48 * HOUR),
         Indicator::Mood => (3.0, Some(Direction::Down), 48 * HOUR),
-        Indicator::Headache => (3.0, Some(Direction::Up), 48 * HOUR),
+        Indicator::OxygenInBlood => (3.0, Some(Direction::Down), 48 * HOUR),
+        // Contexto (`Indicator::is_evaluated` es `false`): nunca se evalúan.
+        Indicator::SpaceRadiation | Indicator::DistanceFromEarth | Indicator::Nutrition => {
+            (f64::INFINITY, None, 48 * HOUR)
+        }
         Indicator::Symptom => (3.0, Some(Direction::Up), 72 * HOUR),
     }
 }

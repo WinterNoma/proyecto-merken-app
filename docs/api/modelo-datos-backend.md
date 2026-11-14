@@ -277,6 +277,7 @@ La idempotencia la dan la clave y la condición, **no** el `ClientRequestToken` 
 **El backend rechaza solo lo que no tiene sentido** (`invalid_value`):
 - Tipo incorrecto, número no finito (`NaN`, `Infinity`) o unidad distinta de la del catálogo.
 - Valores negativos o cero donde no pueden darse: `bpm`, `systolic`, `diastolic`, `mg_dl` y `celsius` deben ser mayores que 0.
+- `percentage` (SpO₂) debe ser mayor que 0 y como máximo 100. `usv_h`, `km` y `kcal` deben ser 0 o más. `km` es la distancia desde la superficie de la Tierra (en órbita baja, la altitud). `space_radiation`, `distance_from_earth` y `nutrition` son de contexto: el núcleo no les da estado de salud.
 - Puntuaciones que no son enteros de 0 a 10.
 - Sueño: `window_end` debe ser posterior a `window_start`, la ventana no puede pasar de 24 h y `hours` debe estar entre 0 y la duración de la ventana. `quality` admite `poor`, `fair`, `good` o `null`.
 - `body_zone` fuera del enum: `head`, `neck`, `chest`, `abdomen`, `back`, `left_arm`, `right_arm`, `left_hand`, `right_hand`, `left_leg`, `right_leg`, `left_foot`, `right_foot`, `other`.

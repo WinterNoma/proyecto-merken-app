@@ -90,7 +90,14 @@ pub fn scenario(scenario: Scenario, now: Timestamp) -> DemoData {
                 }),
             ),
             (Indicator::Mood, json!({"score": 7})),
-            (Indicator::Headache, json!({"score": 1})),
+            (
+                Indicator::OxygenInBlood,
+                json!({"percentage": 97.5 + variation * 0.1}),
+            ),
+            (
+                Indicator::SpaceRadiation,
+                json!({"usv_h": 15.0 + variation * 0.5}),
+            ),
         ] {
             records.push(DemoRecord {
                 indicator,

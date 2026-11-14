@@ -32,6 +32,59 @@ positive_unit!(MmHg, "mmHg");
 positive_unit!(Celsius, "celsius");
 positive_unit!(MgDl, "mg_dl");
 
+macro_rules! non_negative_unit {
+    ($name:ident, $field:literal) => {
+        #[derive(Clone, Copy, Debug, PartialEq)]
+        pub struct $name(f64);
+        impl $name {
+            /// Devuelve el valor validado.
+            pub const fn value(self) -> f64 {
+                self.0
+            }
+        }
+        impl TryFrom<f64> for $name {
+            type Error = ValidationError;
+            fn try_from(value: f64) -> Result<Self, Self::Error> {
+                if value.is_finite() && value >= 0.0 {
+                    Ok(Self(value))
+                } else {
+                    Err(ValidationError {
+                        code: ErrorCode::InvalidValue,
+                        field: $field.to_owned(),
+                        message: "Value must be finite and not negative".to_owned(),
+                    })
+                }
+            }
+        }
+    };
+}
+non_negative_unit!(MicroSvPerHour, "usv_h");
+non_negative_unit!(Km, "km");
+non_negative_unit!(Kcal, "kcal");
+
+/// Saturación de oxígeno en porcentaje: mayor que 0 y como máximo 100.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Percent(f64);
+impl Percent {
+    pub const fn value(self) -> f64 {
+        self.0
+    }
+}
+impl TryFrom<f64> for Percent {
+    type Error = ValidationError;
+    fn try_from(value: f64) -> Result<Self, Self::Error> {
+        if value.is_finite() && value > 0.0 && value <= 100.0 {
+            Ok(Self(value))
+        } else {
+            Err(ValidationError {
+                code: ErrorCode::InvalidValue,
+                field: "percentage".to_owned(),
+                message: "Percentage must be greater than 0 and at most 100".to_owned(),
+            })
+        }
+    }
+}
+
 /// Duración de sueño en horas, entre cero y 24.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Hours(f64);

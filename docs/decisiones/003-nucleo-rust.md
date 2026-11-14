@@ -16,8 +16,8 @@ Umbrales médicos y sus fuentes: [`docs/api/umbrales-core.md`](../api/umbrales-c
 ## 2. Tipos de `core` (resumen)
 
 - `Timestamp(i64)`: milisegundos UTC desde la época Unix. `Timestamp::parse_rfc3339(&str)` y `to_rfc3339()` → `"2026-11-14T21:05:33.120Z"` (siempre `Z` y 3 decimales). Crate `time` solo para parsear/formatear (sin `now()`).
-- Unidades con `newtype` validados al construirlos (`TryFrom<f64>` / `TryFrom<u8>`): `Bpm`, `MmHg`, `Celsius`, `MgDl`, `Hours`, `Score`.
-- `Indicator` (enum, `snake_case`): `heart_rate`, `blood_pressure`, `body_temperature`, `glucose`, `sleep`, `mood`, `headache`, `symptom`.
+- Unidades con `newtype` validados al construirlos (`TryFrom<f64>` / `TryFrom<u8>`): `Bpm`, `MmHg`, `Celsius`, `MgDl` (> 0), `Hours` (0–24), `Score` (0–10), `Percent` (SpO₂: > 0 y ≤ 100), `MicroSvPerHour`, `Km`, `Kcal` (≥ 0).
+- `Indicator` (enum, `snake_case`): `heart_rate`, `blood_pressure`, `body_temperature`, `glucose`, `sleep`, `mood`, `oxygen_in_blood`, `space_radiation`, `distance_from_earth`, `nutrition`, `symptom` (catálogo del 14-nov: se quitó `headache`). `Indicator::is_evaluated()` es `false` para los tres de contexto (radiación, distancia, nutrición): se validan y guardan, pero no se evalúan y no cuentan para `overall` (`reason: not_applicable`). La radiación sigue RF-12: va como dosis acumulada, no como estado de salud.
 - `BodyZone` (enum §5, 14 valores). `SleepQuality`: `poor`, `fair`, `good`.
 - `Measurement` (enum por indicador con sus tipos). Se construye **solo** desde `RawValue` (el JSON `value` del contrato) con `Measurement::validate(indicator, &serde_json::Value, unit: Option<&str>) -> Result<Measurement, ValidationError>`. No hay `Deserialize` derivado que se salte la validación (RNF-02): al leer de SQLite o de JSON se vuelve a validar.
 - `Measurement::to_value()` → JSON del contrato y `unit()` → unidad del catálogo.
@@ -25,7 +25,7 @@ Umbrales médicos y sus fuentes: [`docs/api/umbrales-core.md`](../api/umbrales-c
 
 ### Escalas de puntuación (0–10, enteros)
 - `mood`: 0 = muy mal, 10 = muy bien (más alto es mejor).
-- `headache`, `symptom`: 0 = nada, 10 = el peor imaginable (más alto es peor).
+- `symptom`: 0 = nada, 10 = el peor imaginable (más alto es peor).
 
 ## 3. Validación dura (§5) — se rechaza
 
@@ -53,9 +53,10 @@ Ciclos o raíces que no existen (dato corrupto): el registro forma su propio gru
 
 `core::evaluate::evaluate_series(key: SeriesKey, series: &[&RecordView], now: Timestamp) -> Evaluation` (pura; reglas en `rules.rs`). `series` = registros efectivos de ese indicador/zona, ordenados por `measured_at`.
 
-**Estados** (contrato §3): `not_evaluated` (con `reason`: `no_data`, `too_few_data`, `stale`), `stable`, `change` (con `direction`: `up`/`down`, `persistent`), `alarm`.
+**Estados** (contrato §3): `not_evaluated` (con `reason`: `no_data`, `too_few_data`, `stale`; y solo en local `not_applicable` para contexto), `stable`, `change` (con `direction`: `up`/`down`, `persistent`), `alarm`.
 
 Algoritmo (en este orden):
+0. Indicador de contexto (`is_evaluated() == false`) → siempre `not_evaluated / not_applicable`, con `latest_value` si hay datos, `source_kind: approved_protocol` y `history_needed: 0`. No cuenta para `overall` y no se guarda ni se sube como evaluación (el contrato §3 no admite ese motivo); sus registros sí se suben.
 1. Sin registros efectivos → `not_evaluated / no_data`.
 2. El último tiene más antigüedad que `stale_after` del indicador → `not_evaluated / stale`, **salvo** que disparara una regla de alarma: entonces sigue en `alarm` hasta que haya otra lectura (Hydrogen).
 3. Se aplican **todas** las reglas del indicador sobre el último valor; cada una puede devolver `alarm`, `change(dir)` o nada:
@@ -64,7 +65,7 @@ Algoritmo (en este orden):
      - Si `prior.len() ≥ 5`: `baseline = median(prior[2..])` y se miran el último, `prior[0]` y `prior[1]`. Cambio si `|último − baseline| ≥ delta` del indicador. `persistent = true` si los tres se desvían en la misma dirección.
      - Si `3 ≤ prior.len() < 5`: `baseline = median(prior)`, `persistent = false`.
      - Si `prior.len() < 3`: la regla no se puede aplicar.
-     - Solo cuentan las direcciones relevantes (`mood` solo `down`; `headache`/`symptom` solo `up`; sueño solo `down`).
+     - Solo cuentan las direcciones relevantes (`mood`, sueño y `oxygen_in_blood` solo `down`; `symptom` solo `up`).
    - Para las reglas de rango absoluto, `persistent = true` si el último y los dos efectivos anteriores (dentro de 14 días) disparan la misma regla.
 4. Resultado = la regla más grave (`alarm` > `change` > nada). Empates: la de `rule_id` menor en orden alfabético (determinista).
 5. Si ninguna regla se dispara:
@@ -91,6 +92,7 @@ Migraciones con `PRAGMA user_version`. Tablas:
 | `evaluations` | `evaluation_id` PK, `series_key`, `payload_json`, `evaluated_at`, `is_demo` |
 | `outbox` | `outbox_id` INTEGER PK (FIFO), `entity`, `entity_id`, `payload_json`, `state` (`pending`/`synced`/`failed`), `attempts`, `last_error`, `created_at` |
 | `sync_state` | `key` PK, `value` (`pull_cursor`, `last_push_at`, `last_pull_at`) |
+| (v3) | Lo pendiente en la outbox con `indicator: headache` pasa a `failed` con `retired_indicator`: se conserva, no se envía. En `pull`, un `headache` histórico bien formado queda en `pulled_changes` sin convertirse en registro vigente (Sol, B1/I1) |
 | `pulled_changes` (v2) | `seq` PK, `entity`, `entity_id`, `payload_json`: todo lo recibido en `pull`, íntegro (Sol, B4) |
 
 Reglas:

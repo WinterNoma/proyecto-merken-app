@@ -647,7 +647,8 @@ fn status_json_matches_core_api_keys() {
             "summary"
         ]
     );
-    assert_eq!(v["indicators"].as_array().unwrap().len(), 7);
+    // 7 evaluados + `space_radiation` (contexto con datos en la DEMO).
+    assert_eq!(v["indicators"].as_array().unwrap().len(), 8);
     assert_eq!(v["body_zones"].as_array().unwrap().len(), 14);
     let rec =
         serde_json::to_value(&store.list_records(ListRecordsInput::default()).unwrap()[0]).unwrap();
@@ -715,4 +716,163 @@ fn pull_rejects_incoherent_journal() {
     no_rx.payload.as_object_mut().unwrap().remove("received_at");
     assert!(store.apply_pull_page(&[no_rx], "c5", now()).is_err());
     assert_eq!(store.get_cursor().unwrap().as_deref(), Some("c1"));
+}
+
+#[test]
+fn context_indicators_are_stored_but_not_evaluated() {
+    let mut store = Store::open_in_memory().unwrap();
+    for (indicator, value) in [
+        (Indicator::SpaceRadiation, json!({"usv_h": 14.2})),
+        (Indicator::DistanceFromEarth, json!({"km": 384_400.0})),
+        (Indicator::Nutrition, json!({"kcal": 2400.0})),
+    ] {
+        let r = log(&mut store, indicator, value, now());
+        let LogResult::Saved { evaluation, .. } = r else {
+            panic!("expected saved");
+        };
+        assert_eq!(evaluation.status, Status::NotEvaluated);
+        assert_eq!(evaluation.reason, Some(NotEvaluatedReason::NotApplicable));
+        assert!(evaluation.latest_value.is_some());
+    }
+    assert_eq!(outbox_count(&store, "record"), 3);
+    let status = store.status(now(), V).unwrap();
+    let radiation = status
+        .indicators
+        .iter()
+        .find(|e| e.indicator == "space_radiation")
+        .unwrap();
+    assert_eq!(radiation.reason, Some(NotEvaluatedReason::NotApplicable));
+    assert_eq!(radiation.latest_value, Some(json!({"usv_h": 14.2})));
+    assert!(!status.overall.worst.iter().any(|w| w == "space_radiation"));
+}
+
+#[test]
+fn oxygen_in_blood_low_raises_alarm_and_rejects_over_100() {
+    let mut store = Store::open_in_memory().unwrap();
+    let r = log(
+        &mut store,
+        Indicator::OxygenInBlood,
+        json!({"percentage": 90}),
+        now(),
+    );
+    let LogResult::Saved { evaluation, .. } = r else {
+        panic!("expected saved");
+    };
+    assert_eq!(evaluation.status, Status::Alarm);
+    assert_eq!(evaluation.rule_id, "oxygen_in_blood.alarm_low");
+    let err = store
+        .log_record(
+            LogRecordInput {
+                indicator: Indicator::OxygenInBlood,
+                value: json!({"percentage": 101}),
+                measured_at: Some(now()),
+                source: None,
+                note: None,
+                confirm_warnings: true,
+            },
+            now(),
+            V,
+        )
+        .unwrap_err();
+    assert_eq!(err.field.as_deref(), Some("value.percentage"), "{err:?}");
+}
+
+#[test]
+fn pull_page_with_retired_headache_advances_and_keeps_it() {
+    let mut store = Store::open_in_memory().unwrap();
+    let headache = PulledChange {
+        seq: 7,
+        entity: "record".into(),
+        id: "0193aaaa-0000-7000-8000-0000000000aa".into(),
+        payload: json!({
+            "record_id": "0193aaaa-0000-7000-8000-0000000000aa", "indicator": "headache",
+            "value": {"score": 6}, "unit": "score_0_10",
+            "measured_at": "2026-11-13T10:00:00.000Z", "logged_at": "2026-11-13T10:00:00.000Z",
+            "source": "form", "interpreted_by": null, "replaces": null, "external_id": null,
+            "note": null, "schema_version": 1, "app_version": "0.1.0", "seq": 7,
+            "received_at": "2026-11-13T10:01:00.000Z"
+        }),
+    };
+    let page = vec![
+        headache.clone(),
+        pulled_record("0193aaaa-0000-7000-8000-000000000008", 8, 72.0, None),
+    ];
+    assert_eq!(store.apply_pull_page(&page, "c1", now()).unwrap(), 1);
+    assert_eq!(store.apply_pull_page(&page, "c2", now()).unwrap(), 0);
+    assert_eq!(store.get_cursor().unwrap().as_deref(), Some("c2"));
+    let kept: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM pulled_changes WHERE entity_id = ?1",
+            [&headache.id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(kept, 1);
+    let recs = store.list_records(ListRecordsInput::default()).unwrap();
+    assert_eq!(recs.len(), 1);
+    // Un `headache` mal formado sigue rechazándose.
+    let mut bad = headache;
+    bad.seq = 9;
+    bad.payload["value"] = json!({"score": 11});
+    bad.payload["seq"] = json!(9);
+    assert!(store.apply_pull_page(&[bad], "c3", now()).is_err());
+    assert_eq!(store.get_cursor().unwrap().as_deref(), Some("c2"));
+}
+
+#[test]
+fn context_evaluations_are_never_queued() {
+    let mut store = Store::open_in_memory().unwrap();
+    log(
+        &mut store,
+        Indicator::Nutrition,
+        json!({"kcal": 2400}),
+        now(),
+    );
+    log(&mut store, Indicator::HeartRate, json!({"bpm": 72}), now());
+    let evals: Vec<_> = store
+        .pending_outbox(100)
+        .unwrap()
+        .into_iter()
+        .filter(|o| o.entity == "evaluation")
+        .collect();
+    assert!(!evals.is_empty());
+    assert!(
+        evals
+            .iter()
+            .all(|o| o.payload["reason"] != "not_applicable")
+    );
+    assert!(evals.iter().all(|o| o.payload["indicator"] != "nutrition"));
+}
+
+#[test]
+fn migration_v3_parks_pending_headache_outbox() {
+    let store = Store::open_in_memory().unwrap();
+    let Store { conn, .. } = store;
+    conn.execute(
+        "INSERT INTO outbox(entity, entity_id, payload_json, state, created_at)
+         VALUES ('record', 'h1', '{\"indicator\":\"headache\",\"value\":{\"score\":5}}', 'pending', 0),
+                ('record', 'r1', '{\"indicator\":\"heart_rate\",\"value\":{\"bpm\":70}}', 'pending', 0)",
+        [],
+    )
+    .unwrap();
+    conn.pragma_update(None, "user_version", 2).unwrap();
+    let store = Store::initialize(conn).unwrap();
+    let pending: Vec<String> = store
+        .pending_outbox(10)
+        .unwrap()
+        .into_iter()
+        .map(|o| o.entity_id)
+        .collect();
+    assert_eq!(pending, ["r1"]);
+    let (state, err): (String, String) = store
+        .conn
+        .query_row(
+            "SELECT state, last_error FROM outbox WHERE entity_id = 'h1'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(state, "failed");
+    assert!(err.starts_with("retired_indicator"));
 }

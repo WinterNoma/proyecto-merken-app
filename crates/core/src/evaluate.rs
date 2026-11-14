@@ -16,10 +16,12 @@ eval_enum!(Status {
     Change,
     Alarm
 });
+// `NotApplicable`: indicador de contexto (radiación, distancia, nutrición), sin estado.
 eval_enum!(NotEvaluatedReason {
     NoData,
     TooFewData,
-    Stale
+    Stale,
+    NotApplicable
 });
 eval_enum!(Direction { Up, Down });
 eval_enum!(Escalation {
@@ -138,6 +140,23 @@ fn base_eval(indicator: String, zone: Option<BodyZone>, now: Timestamp) -> Evalu
 pub fn evaluate_series(key: SeriesKey, series: &[&RecordView], now: Timestamp) -> Evaluation {
     let mut out = base_eval(key.indicator.as_str().into(), key.body_zone, now);
     out.rule_id = format!("{}.personal_change", key.indicator.as_str());
+    if !key.indicator.is_evaluated() {
+        out.reason = Some(NotEvaluatedReason::NotApplicable);
+        out.rule_id = "context.not_evaluated".into();
+        out.source_kind = SourceKind::ApprovedProtocol;
+        out.source_ref = Some(
+            "Merken catalog 2026-11-14: context indicator, no health status (RF-12 for radiation)"
+                .into(),
+        );
+        out.history_needed = 0;
+        out.summary = "Context only; health evaluation does not apply".into();
+        if let Some(latest) = series.last() {
+            out.latest_value = Some(latest.measurement.to_value());
+            out.latest_measured_at = Some(latest.measured_at);
+            out.input_record_ids.push(latest.record_id.clone());
+        }
+        return out;
+    }
     let Some((latest, earlier)) = series.split_last() else {
         return out;
     };
@@ -319,6 +338,10 @@ pub fn evaluate_events(events: &[EventView], now: Timestamp) -> Vec<Evaluation> 
 /// `stable` cuando **todas** las series presentes están evaluadas y estables.
 /// `worst` son las series que determinan el resultado.
 pub fn overall(evals: &[Evaluation]) -> Overall {
+    let evals: Vec<&Evaluation> = evals
+        .iter()
+        .filter(|e| e.reason != Some(NotEvaluatedReason::NotApplicable))
+        .collect();
     let max = evals.iter().map(|e| e.status).max();
     let status = match max {
         Some(s @ (Status::Alarm | Status::Change)) => s,
@@ -364,6 +387,11 @@ pub fn evaluate_all(
             .iter()
             .find(|(k, _)| *k == key)
             .map_or(&[] as &[&RecordView], |(_, v)| v.as_slice());
+        // Los indicadores de contexto solo aparecen si hay datos (para mostrar
+        // el último valor); nunca cuentan para `overall`.
+        if !indicator.is_evaluated() && data.is_empty() {
+            continue;
+        }
         out.push(evaluate_series(key, data, now));
     }
     for (key, data) in &series {

@@ -13,7 +13,10 @@ export type Indicator =
   | "glucose"
   | "sleep"
   | "mood"
-  | "headache"
+  | "oxygen_in_blood"
+  | "space_radiation"     // contexto: no se evalúa
+  | "distance_from_earth" // contexto: no se evalúa
+  | "nutrition"           // contexto: no se evalúa
   | "symptom";
 
 export type BodyZone =
@@ -32,13 +35,19 @@ export type RecordValue =
   | { celsius: number }                               // body_temperature, "°C"
   | { mg_dl: number }                                 // glucose, "mg/dL"
   | { hours: number; quality: SleepQuality | null; window_start: Iso; window_end: Iso } // sleep, "h" (ventana obligatoria, ≤ 24 h)
-  | { score: number }                                 // mood / headache, "score_0_10"
+  | { score: number }                                 // mood, "score_0_10"
+  | { percentage: number }                            // oxygen_in_blood, "%" (0 < x ≤ 100)
+  | { usv_h: number }                                 // space_radiation, "µSv/h" (≥ 0)
+  | { km: number }                                    // distance_from_earth, "km" (≥ 0)
+  | { kcal: number }                                  // nutrition, "kcal" (≥ 0)
   | { body_zone: BodyZone; score: number; description?: string | null }; // symptom, "score_0_10"
 
 // ---------- Evaluación ----------
 
 export type Status = "not_evaluated" | "stable" | "change" | "alarm";
-export type NotEvaluatedReason = "no_data" | "too_few_data" | "stale";
+/** `not_applicable`: indicador de contexto (radiación, distancia, nutrición).
+ *  Sale en `indicators` solo si hay datos, con `latest_value`; no cuenta para `overall`. */
+export type NotEvaluatedReason = "no_data" | "too_few_data" | "stale" | "not_applicable";
 export type Direction = "up" | "down";
 export type Escalation = "continue" | "self_care" | "flag_for_ground" | "urgent";
 export type SourceKind = "published" | "approved_protocol" | "demo_heuristic";
@@ -208,7 +217,9 @@ export interface StatusResponse {
   /** "T+12d 03:04:05" si hay misión en el perfil. */
   met: string | null;
   overall: { status: Status; escalation: Escalation; worst: string[] };
-  /** Siempre los 7 indicadores (sin symptom), aunque no haya datos. */
+  /** Siempre los 7 indicadores médicos (sin symptom), aunque no haya datos, más
+   *  hasta 3 de contexto (space_radiation, distance_from_earth, nutrition) solo si
+   *  tienen datos: esos llevan `reason: "not_applicable"` y no tienen color de estado. */
   indicators: Evaluation[];
   /** Una por zona del cuerpo con síntomas registrados. */
   symptoms: Evaluation[];
