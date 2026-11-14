@@ -1,18 +1,323 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Merken - Monitoreo de Astronauta</title>
     <link rel="stylesheet" href="/src/styles.css" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Merken</title>
     <script type="module" src="/src/main.ts" defer></script>
   </head>
 
   <body>
-    <main class="container">
-      <h1>Merken</h1>
-      <p>Astronaut health monitoring</p>
-      <p id="core-status">Connecting to the core…</p>
-    </main>
+    <div class="app-shell">
+      <!-- HEADER CON INFORMACIÓN DE MISIÓN Y FOTO DEL ASTRONAUTA ARRIBA A LA DERECHA -->
+      <header class="app-header">
+        <div class="mission-info">
+          <div class="brand">
+            <span class="status-dot pulsing"></span>
+            <span class="brand-name">MERKEN // BIO-MONITOR</span>
+          </div>
+          <div class="mission-id">MISIÓN: ARTEMIS · HAB-1</div>
+          <div id="core-status" class="core-tag">Core: Local Activo</div>
+        </div>
+
+        <!-- CUADRO CON LA FOTO DEL ASTRONAUTA ARRIBA A LA DERECHA -->
+        <div class="astronaut-card">
+          <div class="avatar-frame">
+            <!-- Avatar SVG de astronauta con casco y visor espacial -->
+            <svg class="astronaut-avatar" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <!-- Fondo del marco -->
+              <rect width="80" height="80" rx="12" fill="#0c1829" />
+              <rect x="1" y="1" width="78" height="78" rx="11" stroke="#00e5ff" stroke-opacity="0.3" stroke-width="1.5" />
+
+              <!-- Traje espacial - Hombros -->
+              <path d="M14 74C14 62 26 56 40 56C54 56 66 62 66 74V80H14V74Z" fill="#e2e8f0" />
+              <path d="M30 56V65M50 56V65" stroke="#00e5ff" stroke-width="1.5" stroke-linecap="round" />
+              <rect x="33" y="62" width="14" height="6" rx="2" fill="#00e5ff" fill-opacity="0.2" stroke="#00e5ff" stroke-width="1" />
+
+              <!-- Cuello del casco -->
+              <ellipse cx="40" cy="54" rx="20" ry="7" fill="#64748b" />
+              <ellipse cx="40" cy="53" rx="18" ry="5" fill="#334155" />
+
+              <!-- Casco exterior -->
+              <circle cx="40" cy="34" r="23" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" />
+
+              <!-- Visor dorado / oscuro con reflejo espacial -->
+              <ellipse cx="40" cy="35" rx="17" ry="14" fill="#0a192f" stroke="#f59e0b" stroke-width="1.8" />
+              <path d="M26 31C28 25 35 23 44 23C49 23 53 25 54 27C52 26 47 25 43 25C34 25 28 28 26 31Z" fill="#fbbf24" fill-opacity="0.8" />
+              <ellipse cx="40" cy="35" rx="15" ry="12" fill="url(#visor-gradient)" />
+              <!-- Reflejo blanco curvo -->
+              <path d="M28 32C30 27 36 26 42 26" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-opacity="0.7" />
+
+              <!-- Gradiente para el visor -->
+              <defs>
+                <linearGradient id="visor-gradient" x1="25" y1="23" x2="55" y2="47" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="#0284c7" stop-opacity="0.5" />
+                  <stop offset="60%" stop-color="#0f172a" stop-opacity="0.9" />
+                  <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.4" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <span class="badge-online"></span>
+          </div>
+          <div class="astronaut-meta">
+            <span class="astronaut-name">D. VÁSQUEZ</span>
+            <span class="astronaut-role">ESPECIALISTA EVA</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- ÁREA PRINCIPAL: SILUETA HUMANA A LA IZQUIERDA Y MÉTRICAS A LA DERECHA -->
+      <main class="biometrics-layout">
+        <!-- ZONA IZQUIERDA: SILUETA DEL CUERPO HUMANO -->
+        <section class="body-scan-section">
+          <div class="scan-header">
+            <span class="scan-label">MAPA BIOLÓGICO</span>
+            <span class="scan-coords">EVA-SYS 1.0</span>
+          </div>
+
+          <div class="silhouette-container">
+            <!-- Rayo / línea animada de escaneo HUD -->
+            <div class="scan-beam"></div>
+
+            <!-- Silueta vectorial de cuerpo humano detallada estilo telemetría médica -->
+            <svg class="human-body-svg" viewBox="0 0 220 440" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="body-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#00f0ff" stop-opacity="0.25" />
+                  <stop offset="50%" stop-color="#0077b6" stop-opacity="0.18" />
+                  <stop offset="100%" stop-color="#00f0ff" stop-opacity="0.28" />
+                </linearGradient>
+                <radialGradient id="node-glow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#00f0ff" stop-opacity="1" />
+                  <stop offset="100%" stop-color="#00f0ff" stop-opacity="0" />
+                </radialGradient>
+                <radialGradient id="heart-glow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#ff3366" stop-opacity="1" />
+                  <stop offset="100%" stop-color="#ff3366" stop-opacity="0" />
+                </radialGradient>
+              </defs>
+
+              <!-- Rejilla técnica de fondo -->
+              <g class="body-grid" opacity="0.15" stroke="#00f0ff" stroke-width="0.5">
+                <line x1="110" y1="10" x2="110" y2="430" stroke-dasharray="3 3" />
+                <line x1="20" y1="105" x2="200" y2="105" stroke-dasharray="2 4" />
+                <line x1="30" y1="185" x2="190" y2="185" stroke-dasharray="2 4" />
+                <line x1="40" y1="240" x2="180" y2="240" stroke-dasharray="2 4" />
+              </g>
+
+              <!-- Silueta del cuerpo humano anatómico completo -->
+              <path class="body-outline"
+                d="
+                  M 110 25
+                  C 119 25, 126 32, 126 43
+                  C 126 55, 120 62, 116 67
+                  C 121 72, 131 75, 142 80
+                  C 152 85, 160 95, 167 114
+                  C 174 133, 180 156, 183 182
+                  C 185 198, 184 212, 178 214
+                  C 172 216, 169 203, 167 186
+                  C 164 165, 158 140, 151 133
+                  C 147 148, 146 168, 145 185
+                  C 144 200, 147 215, 145 228
+                  C 143 238, 137 245, 132 254
+                  C 134 278, 137 312, 138 348
+                  C 139 375, 137 400, 134 416
+                  C 132 423, 128 426, 122 426
+                  C 116 426, 115 419, 115 410
+                  C 116 385, 116 335, 115 285
+                  C 113 273, 111 268, 110 268
+                  C 109 268, 107 273, 105 285
+                  C 104 335, 104 385, 105 410
+                  C 105 419, 104 426, 98 426
+                  C 92 426, 88 423, 86 416
+                  C 83 400, 81 375, 82 348
+                  C 83 312, 86 278, 88 254
+                  C 83 245, 77 238, 75 228
+                  C 73 215, 76 200, 75 185
+                  C 74 168, 73 148, 69 133
+                  C 62 140, 56 165, 53 186
+                  C 51 203, 48 216, 42 214
+                  C 36 212, 35 198, 37 182
+                  C 40 156, 46 133, 53 114
+                  C 60 95, 68 85, 78 80
+                  C 89 75, 99 72, 104 67
+                  C 100 62, 94 55, 94 43
+                  C 94 32, 101 25, 110 25
+                  Z
+                "
+                fill="url(#body-gradient)"
+                stroke="#00e5ff"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+
+              <!-- Puntos de monitoreo vital conectados al cuerpo -->
+              <!-- Punto 1: Ritmo Cardíaco (Pecho/Corazón) -->
+              <g class="hud-marker marker-heart" transform="translate(102, 115)">
+                <circle cx="0" cy="0" r="14" fill="url(#heart-glow)" opacity="0.6" class="pulse-ring" />
+                <circle cx="0" cy="0" r="4.5" fill="#ff3366" />
+                <line x1="0" y1="0" x2="35" y2="-12" stroke="#ff3366" stroke-width="1" stroke-dasharray="2 2" />
+                <circle cx="35" cy="-12" r="2" fill="#ff3366" />
+              </g>
+
+              <!-- Punto 2: Oxígeno / Pulmones -->
+              <g class="hud-marker marker-lungs" transform="translate(122, 130)">
+                <circle cx="0" cy="0" r="12" fill="url(#node-glow)" opacity="0.5" class="pulse-ring delay-1" />
+                <circle cx="0" cy="0" r="3.5" fill="#00e5ff" />
+                <line x1="0" y1="0" x2="25" y2="8" stroke="#00e5ff" stroke-width="1" stroke-dasharray="2 2" />
+                <circle cx="25" cy="8" r="2" fill="#00e5ff" />
+              </g>
+
+              <!-- Punto 3: Glucosa / Sensor Metabólico (Brazo/Abdomen) -->
+              <g class="hud-marker marker-glucose" transform="translate(94, 175)">
+                <circle cx="0" cy="0" r="12" fill="url(#node-glow)" opacity="0.4" class="pulse-ring delay-2" />
+                <circle cx="0" cy="0" r="3.5" fill="#10b981" />
+                <line x1="0" y1="0" x2="-22" y2="10" stroke="#10b981" stroke-width="1" stroke-dasharray="2 2" />
+                <circle cx="-22" cy="10" r="2" fill="#10b981" />
+              </g>
+
+              <!-- Círculos de enfoque biométrico HUD -->
+              <circle cx="110" cy="45" r="18" fill="none" stroke="#00e5ff" stroke-width="0.75" stroke-dasharray="4 4" opacity="0.4" />
+            </svg>
+          </div>
+
+          <div class="scan-footer">
+            <span class="status-pill ok">● ESTADO GENERAL: ESTABLE</span>
+          </div>
+        </section>
+
+        <!-- ZONA DERECHA: DATOS IMPORTANTES (RITMO CARDÍACO, OXÍGENO, GLUCOSA) -->
+        <section class="vitals-section">
+          <div class="vitals-header">
+            <span class="vitals-title">TELEMETRÍA VITAL</span>
+            <span class="live-tag">EN VIVO</span>
+          </div>
+
+          <div class="vitals-cards">
+            <!-- 1. TARJETA: RITMO CARDÍACO -->
+            <article class="vital-card heart-card">
+              <div class="card-top">
+                <div class="vital-label-wrap">
+                  <span class="vital-icon heart-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                    </svg>
+                  </span>
+                  <span class="vital-name">RITMO CARDÍACO</span>
+                </div>
+                <span class="vital-state ok">NORMAL</span>
+              </div>
+
+              <div class="card-main">
+                <span id="val-heart-rate" class="vital-number">72</span>
+                <span class="vital-unit">BPM</span>
+              </div>
+
+              <!-- Mini gráfico de electrocardiograma ECG animado -->
+              <div class="ecg-track">
+                <svg class="ecg-wave" viewBox="0 0 160 30" preserveAspectRatio="none">
+                  <path d="M 0 15 L 35 15 L 42 15 L 47 3 L 53 27 L 58 10 L 63 17 L 68 15 L 115 15 L 122 15 L 127 3 L 133 27 L 138 10 L 143 17 L 148 15 L 160 15" fill="none" stroke="#ff3366" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </div>
+
+              <div class="vital-footer">
+                <span>Ref: 60-100 BPM</span>
+                <span class="vital-trend">▲ +2 bpm</span>
+              </div>
+            </article>
+
+            <!-- 2. TARJETA: OXÍGENO EN SANGRE (SpO2) -->
+            <article class="vital-card oxygen-card">
+              <div class="card-top">
+                <div class="vital-label-wrap">
+                  <span class="vital-icon oxygen-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+                    </svg>
+                  </span>
+                  <span class="vital-name">OXÍGENO EN SANGRE</span>
+                </div>
+                <span class="vital-state ok">ÓPTIMO</span>
+              </div>
+
+              <div class="card-main">
+                <span id="val-oxygen" class="vital-number">98</span>
+                <span class="vital-unit">% SpO₂</span>
+              </div>
+
+              <!-- Barra de nivel visual de saturación -->
+              <div class="oxygen-meter">
+                <div class="meter-bar" style="width: 98%;"></div>
+              </div>
+
+              <div class="vital-footer">
+                <span>Ref: &gt; 95%</span>
+                <span class="vital-trend">● Estable</span>
+              </div>
+            </article>
+
+            <!-- 3. TARJETA: NIVEL DE GLUCOSA -->
+            <article class="vital-card glucose-card">
+              <div class="card-top">
+                <div class="vital-label-wrap">
+                  <span class="vital-icon glucose-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 7v5l3 3" />
+                    </svg>
+                  </span>
+                  <span class="vital-name">NIVEL DE GLUCOSA</span>
+                </div>
+                <span class="vital-state ok">NORMAL</span>
+              </div>
+
+              <div class="card-main">
+                <span id="val-glucose" class="vital-number">95</span>
+                <span class="vital-unit">mg/dL</span>
+              </div>
+
+              <!-- Indicador de rango metabólico -->
+              <div class="range-meter">
+                <span class="range-point" style="left: 45%;"></span>
+              </div>
+
+              <div class="vital-footer">
+                <span>Ayuno: 70-100 mg/dL</span>
+                <span class="vital-trend">▼ -3 mg/dL</span>
+              </div>
+            </article>
+          </div>
+
+          <!-- BOTÓN DE ACCIÓN RÁPIDA / PROTOCOLO EVA -->
+          <div class="quick-actions">
+            <button id="btn-simulate" class="action-btn secondary">
+              <span class="btn-icon">⚡</span> Simular Telemetría
+            </button>
+            <button id="btn-emergency" class="action-btn emergency">
+              <span class="btn-icon">🆘</span> Ayuda Médica
+            </button>
+          </div>
+        </section>
+      </main>
+
+      <!-- BARRA INFERIOR DE PROTOCOLO Y CONEXIÓN -->
+      <footer class="app-footer">
+        <div class="footer-item">
+          <span class="f-label">BATERÍA TRAJE</span>
+          <span class="f-val">94%</span>
+        </div>
+        <div class="footer-separator">|</div>
+        <div class="footer-item">
+          <span class="f-label">TRAJE O₂</span>
+          <span class="f-val">0.31 bar</span>
+        </div>
+        <div class="footer-separator">|</div>
+        <div class="footer-item">
+          <span class="f-label">ENLACE TIERRA</span>
+          <span class="f-val f-warn">+18m retardo</span>
+        </div>
+      </footer>
+    </div>
   </body>
 </html>

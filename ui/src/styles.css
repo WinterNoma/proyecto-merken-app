@@ -1,116 +1,612 @@
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
+/* ==========================================================================
+   MERKEN - ASTRONAUT BIO-MONITOR HUD THEME
+   Palette: Deep Space Navy, Electric Cyan, Vital Pink, Bio Emerald, Warning Amber
+   ========================================================================== */
 
-.logo.typescript:hover {
-  filter: drop-shadow(0 0 2em #2d79c7);
-}
 :root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
+  --bg-space-dark: #070c14;
+  --bg-card: rgba(13, 25, 43, 0.75);
+  --bg-card-hover: rgba(18, 35, 60, 0.85);
+  --border-hud: rgba(0, 229, 255, 0.22);
+  --border-hud-bright: rgba(0, 229, 255, 0.65);
 
-  color: #0f0f0f;
-  background-color: #f6f6f6;
+  --cyan-glow: #00e5ff;
+  --heart-pink: #ff3366;
+  --bio-green: #10b981;
+  --warn-amber: #f59e0b;
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--text-main);
+  background-color: var(--bg-space-dark);
 }
 
-.container {
+* {
+  box-sizing: border-box;
   margin: 0;
-  padding-top: 10vh;
+  padding: 0;
+}
+
+body {
+  background: radial-gradient(circle at 50% 10%, #0d2238 0%, #060c15 65%, #03060a 100%);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Contenedor principal ajustado a proporciones móviles / HUD */
+.app-shell {
+  width: 100%;
+  max-width: 500px;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
+  padding: 14px 16px;
+  gap: 14px;
+  background: rgba(8, 16, 28, 0.6);
+  border-left: 1px solid rgba(0, 229, 255, 0.1);
+  border-right: 1px solid rgba(0, 229, 255, 0.1);
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+}
+
+/* ==========================================================================
+   HEADER: MISIÓN Y FOTO DEL ASTRONAUTA ARRIBA A LA DERECHA
+   ========================================================================== */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-hud);
+}
+
+.mission-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-name {
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--cyan-glow);
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--bio-green);
+  box-shadow: 0 0 8px var(--bio-green);
+}
+
+.status-dot.pulsing {
+  animation: pulse-dot 2s infinite ease-in-out;
+}
+
+.mission-id {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.core-tag {
+  font-size: 0.68rem;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  align-self: flex-start;
+  font-family: monospace;
+}
+
+/* Cuadro de foto del astronauta arriba a la derecha */
+.astronaut-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(15, 27, 45, 0.8);
+  border: 1px solid var(--border-hud);
+  padding: 5px 8px 5px 6px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.astronaut-card:hover {
+  border-color: var(--cyan-glow);
+  transform: translateY(-1px);
+}
+
+.avatar-frame {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  text-align: center;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
+.astronaut-avatar {
+  width: 100%;
+  height: 100%;
 }
 
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
+.badge-online {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bio-green);
+  border: 1.5px solid #0c1829;
+  box-shadow: 0 0 6px var(--bio-green);
 }
 
-.row {
+.astronaut-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.astronaut-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #ffffff;
+}
+
+.astronaut-role {
+  font-size: 0.64rem;
+  font-weight: 600;
+  color: var(--cyan-glow);
+  letter-spacing: 0.04em;
+}
+
+/* ==========================================================================
+   LAYOUT BIOMÉTRICO: SILUETA HUMANA A LA IZQUIERDA Y MÉTRICAS A LA DERECHA
+   ========================================================================== */
+.biometrics-layout {
+  display: grid;
+  grid-template-columns: 1.05fr 1.35fr;
+  gap: 12px;
+  flex: 1;
+  align-items: start;
+}
+
+/* --- SECCIÓN IZQUIERDA: ESCÁNER CORPORAL --- */
+.body-scan-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-hud);
+  border-radius: 14px;
+  padding: 10px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+}
+
+.scan-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px 6px;
+  border-bottom: 1px dashed rgba(0, 229, 255, 0.15);
+  margin-bottom: 6px;
+}
+
+.scan-label {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--cyan-glow);
+  letter-spacing: 0.08em;
+}
+
+.scan-coords {
+  font-size: 0.6rem;
+  font-family: monospace;
+  color: var(--text-dim);
+}
+
+.silhouette-container {
+  position: relative;
+  width: 100%;
   display: flex;
   justify-content: center;
+  align-items: center;
+  padding: 8px 0;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+.human-body-svg {
+  width: 100%;
+  max-width: 175px;
+  height: auto;
+  filter: drop-shadow(0 0 12px rgba(0, 229, 255, 0.25));
 }
 
-a:hover {
-  color: #535bf2;
+/* Rayo de escaneo animado */
+.scan-beam {
+  position: absolute;
+  left: 5%;
+  width: 90%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #00e5ff, #ffffff, #00e5ff, transparent);
+  box-shadow: 0 0 10px #00e5ff;
+  opacity: 0.75;
+  animation: scan-move 4s ease-in-out infinite alternate;
+  pointer-events: none;
 }
 
-h1 {
+/* Animaciones de marcadores de pulso en el cuerpo */
+.pulse-ring {
+  animation: ripple 2s infinite ease-out;
+  transform-origin: center;
+}
+
+.pulse-ring.delay-1 {
+  animation-delay: 0.6s;
+}
+
+.pulse-ring.delay-2 {
+  animation-delay: 1.2s;
+}
+
+.scan-footer {
+  margin-top: 8px;
+  width: 100%;
   text-align: center;
 }
 
-input,
-button {
+.status-pill {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 4px 8px;
+  border-radius: 20px;
+  display: inline-block;
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+/* --- SECCIÓN DERECHA: TARJETAS DE DATOS IMPORTANTES --- */
+.vitals-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vitals-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 4px;
+}
+
+.vitals-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.live-tag {
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  animation: pulse-dot 1.5s infinite;
+}
+
+.vitals-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* Tarjeta individual de biométrica */
+.vital-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-hud);
+  border-radius: 12px;
+  padding: 9px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+  transition: border-color 0.25s, transform 0.2s;
+}
+
+.vital-card:hover {
+  transform: translateX(2px);
+}
+
+.heart-card {
+  border-left: 3px solid var(--heart-pink);
+}
+
+.oxygen-card {
+  border-left: 3px solid var(--cyan-glow);
+}
+
+.glucose-card {
+  border-left: 3px solid var(--bio-green);
+}
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vital-label-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vital-icon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vital-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.heart-icon { color: var(--heart-pink); }
+.oxygen-icon { color: var(--cyan-glow); }
+.glucose-icon { color: var(--bio-green); }
+
+.vital-name {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.vital-state {
+  font-size: 0.58rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.vital-state.ok {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.card-main {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.vital-number {
+  font-size: 1.85rem;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.heart-card .vital-number { color: #ff4d79; }
+.oxygen-card .vital-number { color: #38bdf8; }
+.glucose-card .vital-number { color: #34d399; }
+
+.vital-unit {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+/* Mini ECG track */
+.ecg-track {
+  width: 100%;
+  height: 18px;
+  overflow: hidden;
+  background: rgba(255, 51, 102, 0.06);
+  border-radius: 4px;
+  margin: 3px 0;
+}
+
+.ecg-wave {
+  width: 100%;
+  height: 100%;
+}
+
+/* Barra de saturación de oxígeno */
+.oxygen-meter {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 3px 0;
+}
+
+.meter-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #0284c7, #00e5ff);
+  box-shadow: 0 0 8px #00e5ff;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+/* Indicador de glucosa */
+.range-meter {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  background: linear-gradient(90deg, #f59e0b 0%, #10b981 30%, #10b981 70%, #ef4444 100%);
+  border-radius: 3px;
+  margin: 3px 0;
+}
+
+.range-point {
+  position: absolute;
+  top: -3px;
+  width: 12px;
+  height: 12px;
+  background: #ffffff;
+  border: 2px solid #10b981;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+  transition: left 0.5s ease;
+}
+
+.vital-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.58rem;
+  color: var(--text-dim);
+}
+
+.vital-trend {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+/* Botones de acción rápida */
+.quick-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
   cursor: pointer;
+  transition: all 0.2s;
 }
 
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
+.action-btn.secondary {
+  background: rgba(0, 229, 255, 0.1);
+  color: var(--cyan-glow);
+  border-color: rgba(0, 229, 255, 0.3);
 }
 
-input,
-button {
-  outline: none;
+.action-btn.secondary:hover {
+  background: rgba(0, 229, 255, 0.2);
+  border-color: var(--cyan-glow);
 }
 
-#greet-input {
-  margin-right: 5px;
+.action-btn.emergency {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.4);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+.action-btn.emergency:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+}
+
+/* ==========================================================================
+   FOOTER: ESTADO DEL TRAJE Y COMUNICACIONES
+   ========================================================================== */
+.app-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 229, 255, 0.15);
+  font-size: 0.65rem;
+}
+
+.footer-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.f-label {
+  color: var(--text-dim);
+  font-size: 0.58rem;
+  font-weight: 600;
+}
+
+.f-val {
+  color: #e2e8f0;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+.f-warn {
+  color: var(--warn-amber);
+}
+
+.footer-separator {
+  color: rgba(255, 255, 255, 0.1);
+}
+
+/* ==========================================================================
+   KEYFRAME ANIMATIONS
+   ========================================================================== */
+@keyframes scan-move {
+  0% { top: 8%; opacity: 0.3; }
+  50% { opacity: 0.9; }
+  100% { top: 92%; opacity: 0.3; }
+}
+
+@keyframes ripple {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+/* Adaptación responsive para pantallas pequeñas */
+@media (max-width: 380px) {
+  .biometrics-layout {
+    grid-template-columns: 1fr;
   }
-
-  a:hover {
-    color: #24c8db;
-  }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
+  .silhouette-container {
+    max-height: 250px;
   }
 }
