@@ -22,3 +22,4 @@ serde.workspace = true
 serde_json.workspace = true
 merken-core.workspace = true
 merken-store.workspace = true
+merken-seed.workspace = true
