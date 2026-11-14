@@ -1,6 +1,6 @@
 # Merken — Modelo de datos y API para el equipo de backend
 
-Versión 0.3 · 14-nov-2026 · Para: equipo de backend (MySQL + DynamoDB + servidor)
+Versión 0.3.1 · 14-nov-2026 · Para: equipo de backend (MySQL + DynamoDB + servidor)
 Revisado por Sol: [v0.1](../../reviews/modelo-datos-backend.md) y [v0.2](../../reviews/modelo-datos-backend-v0.2.md); la v0.3 aplica sus correcciones exactas. Los nombres de campos, tablas y endpoints van en **inglés**, igual que los textos que ve el usuario.
 
 ## 0. Resumen
@@ -11,9 +11,11 @@ Revisado por Sol: [v0.1](../../reviews/modelo-datos-backend.md) y [v0.2](../../r
 | **DynamoDB** | Historial clínico generado por la app, por Tierra y por Garmin, más un **diario de cambios** para sincronizar |
 | **Móvil (SQLite)** | Copia local del perfil y del historial de su astronauta; funciona sin conexión |
 
+**Cambios en v0.3.1:** las tablas de DynamoDB ya no llevan el prefijo `merken_` (`records`, `changes`, `sync_heads`…).
+
 **Cambios respecto a v0.1:**
 - La escritura condicional usa `attribute_not_exists(#pk)`, porque la v0.1 permitía sobrescribir.
-- Un único diario `merken_changes` con número de secuencia sustituye a los cinco cursores por fecha.
+- Un único diario `changes` con número de secuencia sustituye a los cinco cursores por fecha.
 - Se elimina `health_status` de MySQL: el estado actual se **calcula** a partir de los registros.
 - La revisión de una recomendación pasa a ser una entidad propia (`suggestion_review`).
 - Se añaden roles y permisos, tokens con rotación, límites de tamaño, paginación, misión y MET.
@@ -131,7 +133,7 @@ Revisado por Sol: [v0.1](../../reviews/modelo-datos-backend.md) y [v0.2](../../r
 | `schema_version` | N | origen | `1` |
 | `app_version` | S | móvil | Nulo si no viene del móvil |
 
-### `merken_records` — mediciones y síntomas
+### `records` — mediciones y síntomas
 | Atributo | Tipo | Nulo | Notas |
 |---|---|---|---|
 | `record_id` (SK) | S | no | |
@@ -146,7 +148,7 @@ Revisado por Sol: [v0.1](../../reviews/modelo-datos-backend.md) y [v0.2](../../r
 | `external_id` | S | sí | `"garmin:<id>"` |
 | `note` | S | sí | Máximo 2000 caracteres |
 
-### `merken_events` — "Need help", alarmas y "How I feel"
+### `events` — "Need help", alarmas y "How I feel"
 | Atributo | Tipo | Nulo | Notas |
 |---|---|---|---|
 | `event_id` (SK) | S | no | |
@@ -157,7 +159,7 @@ Revisado por Sol: [v0.1](../../reviews/modelo-datos-backend.md) y [v0.2](../../r
 | `priority` | S | no | `urgent` o `normal` |
 | `occurred_at`, `logged_at` | S | no | |
 
-### `merken_evaluations` — lo que decidió el núcleo de la app
+### `evaluations` — lo que decidió el núcleo de la app
 | Atributo | Tipo | Nulo | Notas |
 |---|---|---|---|
 | `evaluation_id` (SK) | S | no | |
@@ -175,7 +177,7 @@ Revisado por Sol: [v0.1](../../reviews/modelo-datos-backend.md) y [v0.2](../../r
 
 Como no hay referencia previa al vuelo, `change` significa "cambio respecto al historial reciente de la propia persona en la app". El último dato conocido **no** es una referencia ni prueba de normalidad, y la ausencia de datos nunca se convierte en `stable`.
 
-### `merken_suggestions` — recomendaciones del v5 en el móvil
+### `suggestions` — recomendaciones del v5 en el móvil
 | Atributo | Tipo | Nulo | Notas |
 |---|---|---|---|
 | `suggestion_id` (SK) | S | no | |
@@ -187,7 +189,7 @@ Como no hay referencia previa al vuelo, `change` significa "cambio respecto al h
 | `model` | M | no | `{ "name": "space-health-v5", "version": "…", "lora_sha256": "…" }` |
 | `generated_at` | S | no | |
 
-### `merken_suggestion_reviews` — Tierra aprueba, corrige o rechaza
+### `suggestion_reviews` — Tierra aprueba, corrige o rechaza
 | Atributo | Tipo | Nulo | Notas |
 |---|---|---|---|
 | `review_id` (SK) | S | no | Lo genera el servidor |
@@ -198,7 +200,7 @@ Como no hay referencia previa al vuelo, `change` significa "cambio respecto al h
 | `reviewed_at` | S | no | Lo pone el servidor |
 | `replaces` | S | sí | `review_id` anterior. La revisión vigente es la de mayor `seq` |
 
-### `merken_analyses` — análisis y mensajes de Tierra
+### `analyses` — análisis y mensajes de Tierra
 | Atributo | Tipo | Nulo | Notas |
 |---|---|---|---|
 | `analysis_id` (SK) | S | no | Lo genera el servidor |
@@ -213,7 +215,7 @@ Como no hay referencia previa al vuelo, `change` significa "cambio respecto al h
 
 **Regla:** un análisis se muestra **junto** al estado local y **nunca rebaja una alarma** de la app.
 
-### `merken_changes` — diario de cambios (lo que el móvil descarga)
+### `changes` — diario de cambios (lo que el móvil descarga)
 | Atributo | Tipo | Notas |
 |---|---|---|
 | `astronaut_id` | S | PK |
@@ -223,14 +225,14 @@ Como no hay referencia previa al vuelo, `change` significa "cambio respecto al h
 | `payload` | M | Copia completa de la entidad, incluidos `seq`, `received_at` y `created_by` |
 | `received_at` | S | |
 
-### `merken_sync_heads`
+### `sync_heads`
 | Atributo | Tipo | Notas |
 |---|---|---|
 | `astronaut_id` | S | PK |
 | `last_seq` | N | Último `seq` publicado |
 
 ### Índice opcional para el panel
-Si el panel necesita gráficas por indicador, añadir en `merken_records` el GSI `by_indicator`:
+Si el panel necesita gráficas por indicador, añadir en `records` el GSI `by_indicator`:
 - PK `indicator_pk` = `astronaut_id + "#" + indicator` (atributo que se escribe al guardar)
 - SK `measurement_key` = `measured_at + "#" + record_id`
 - Proyección: `ALL`
@@ -240,11 +242,11 @@ Los GSI son de consistencia eventual: sirven al panel, **no** a la sincronizaci�
 ## 4. Cómo se publica una entidad (idéntico para móvil, Tierra y Garmin)
 
 1. Validar el payload (§5) y los permisos (§8). Las referencias (`replaces`, `suggestion_id`, `record_ids`…) deben existir y ser **del mismo astronauta**. Si no existen todavía, se rechaza como reintentable (`unknown_reference`). El móvil sube en orden (cola FIFO), así que lo referenciado llega antes.
-2. Leer `merken_sync_heads` con `ConsistentRead: true` → `n` (`0` si no existe).
+2. Leer `sync_heads` con `ConsistentRead: true` → `n` (`0` si no existe).
 3. `TransactWriteItems` con tres operaciones:
    - `Put` de la entidad con `ConditionExpression: attribute_not_exists(#pk)` y `ExpressionAttributeNames: {"#pk": "astronaut_id"}`. Pedir `ReturnValuesOnConditionCheckFailure: ALL_OLD`.
-   - `Put` en `merken_changes` con `seq = n + 1`.
-   - `Update` de `merken_sync_heads`: calcular `next = n + 1` en el backend y usar `UpdateExpression: SET #last = :next` con `#last = last_seq`. Condición: `#last = :expected` si el contador existe, o `attribute_not_exists(#pk)` si no existe (`#pk = astronaut_id`). Los números van en `ExpressionAttributeValues`. **No** añadir un `ConditionCheck` aparte sobre el mismo contador: una transacción no admite dos acciones sobre el mismo elemento.
+   - `Put` en `changes` con `seq = n + 1`.
+   - `Update` de `sync_heads`: calcular `next = n + 1` en el backend y usar `UpdateExpression: SET #last = :next` con `#last = last_seq`. Condición: `#last = :expected` si el contador existe, o `attribute_not_exists(#pk)` si no existe (`#pk = astronaut_id`). Los números van en `ExpressionAttributeValues`. **No** añadir un `ConditionCheck` aparte sobre el mismo contador: una transacción no admite dos acciones sobre el mismo elemento.
 4. Si la transacción se cancela, distinguir la causa: condición fallida, conflicto concurrente, falta de capacidad o error de validación.
    - **La entidad ya existía:** comparar **solo el DTO de entrada permitido**, normalizado (claves ordenadas), excluyendo todos los campos que genera o deriva el servidor (`seq`, `received_at`, `created_by`, `reviewed_at`, `created_at`, `indicator_pk`…). Si es igual → `duplicate`; si es distinto → `id_conflict`. Se conservan los campos de servidor del primer guardado.
    - **Cambió el contador** (otro escritor publicó a la vez): repetir desde el paso 2, hasta 5 veces. Después → `internal_error` reintentable.
@@ -350,7 +352,7 @@ El móvil llama a `/v1/me` cada vez que recupera la conexión, con independencia
 - El cursor es opaco y va **firmado** por el servidor: `{ v, astronaut_id, last_seq, through_seq }`. `through_seq` fija dónde termina el recorrido actual y no cambia durante ese recorrido.
 - **Sin cursor:** `last_seq = 0` y `through_seq` = `last_seq` del contador leído con `ConsistentRead` (o `0` si no existe). Así **un móvil nuevo recupera todo el historial**, también lo que subió él mismo.
 - **Cursor de un recorrido terminado** (`last_seq = through_seq`): se conserva `last_seq` y se lee un `through_seq` nuevo del contador. Así llegan los cambios posteriores.
-- **Consulta:** tabla base `merken_changes`, `ConsistentRead=true`, `ScanIndexForward=true`, partición del astronauta autorizado y `seq BETWEEN :first AND :through`, con `first = last_seq + 1`. Si el intervalo está vacío, no se consulta.
+- **Consulta:** tabla base `changes`, `ConsistentRead=true`, `ScanIndexForward=true`, partición del astronauta autorizado y `seq BETWEEN :first AND :through`, con `first = last_seq + 1`. Si el intervalo está vacío, no se consulta.
 - **Entrega:** un prefijo de hasta 50 cambios cuya respuesta completa no pase de 512 KiB. El cursor avanza **solo hasta el último cambio entregado**, nunca más allá de algo consultado pero no entregado. `has_more = last_seq < through_seq`.
 - El móvil aplica cada página y guarda el cursor en **una sola transacción** de SQLite. Ignora los IDs que ya tiene.
 
