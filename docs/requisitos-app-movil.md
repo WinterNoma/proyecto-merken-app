@@ -1,6 +1,6 @@
 # Requisitos — App móvil de salud para astronautas
 
-Versión 1 · 14-nov-2026 · Repo: https://github.com/WinterNoma/proyecto-merken-app
+Versión 1.1 · 14-nov-2026 · Repo: https://github.com/WinterNoma/proyecto-merken-app
 Base: [reto](https://www.spaceappschallenge.org/2026/challenges/health-monitoring-software/), [investigación](investigacion/00-resumen.md), [revisión de Sol v0](../reviews/requisitos-app-movil.md), [decisión de interfaz](decisiones/001-interfaz-tauri.md).
 
 ## 0. Lo que sabemos y lo que falta
@@ -8,9 +8,9 @@ Base: [reto](https://www.spaceappschallenge.org/2026/challenges/health-monitorin
 | Decidido | Pendiente (§10) |
 |---|---|
 | App móvil Android hecha con **Tauri 2**, con la lógica en **Rust** | Fecha límite, equipo y experiencia en Rust |
-| **Funciona sin conexión**: el móvil es la fuente de verdad | Qué hará exactamente el SLM y qué modelo usamos |
-| Cuando hay conexión: **sube datos y recibe análisis** del servidor | Con qué tecnología se hace el servidor y qué análisis devuelve |
-| **SLM (modelo de lenguaje pequeño) dentro del móvil** | Si los jueces piden enlace web o aceptan APK y video |
+| **Funciona sin conexión**: el móvil es la fuente de verdad | Confirmar los modelos con la prueba en el móvil (§11) |
+| Cuando hay conexión: **sube datos y recibe análisis**; Tierra usa **MySQL** | Con qué tecnología se hace la API y qué análisis devuelve |
+| **Modelos en el móvil:** Whisper base (voz), Granite 350M (respaldo del intérprete) y SLM v5 (explicar) | Si los jueces piden enlace web o aceptan APK y video |
 
 ## 1. Objetivo
 
@@ -47,7 +47,7 @@ El astronauta registra sus indicadores en pocos segundos y ve cómo ha cambiado 
 Prioridad: **M** = imprescindible para la demo · **S** = debería estar · **C** = si sobra tiempo.
 
 ### 5.1 Registro
-- **RF-01 (M)** Registro parcial de **pulso, sueño (horas y calidad), ánimo y cefalea (0–10)**. Cada registro guarda la hora de la medición, la hora en que se anotó, su origen (manual, dispositivo, SLM confirmado) y una nota opcional.
+- **RF-01 (M)** Registro parcial de **pulso, sueño (horas y calidad), ánimo y cefalea (0–10)**. Cada registro guarda la hora de la medición, la hora en que se anotó, su origen (formulario, dispositivo, texto o voz) y qué lo interpretó (intérprete Rust o Granite, con la versión del modelo), además de una nota opcional.
 - **RF-02 (M)** Un flujo de **eventos de alarma** separado y con un acceso directo, "Necesito ayuda": desmayo, pérdida de campo visual y sospecha de trombo. Distingue entre síntoma, sospecha del usuario y hallazgo confirmado por personal médico.
 - **RF-03 (M)** Los registros no se borran ni se sobrescriben. Una corrección se guarda como una versión nueva que enlaza con la anterior.
 - **RF-04 (S)** El resto de constantes: presión, temperatura, SpO₂, frecuencia respiratoria, masa e ingesta.
@@ -102,7 +102,9 @@ Prioridad: **M** = imprescindible para la demo · **S** = debería estar · **C*
 
 - **RNF-07** Objetivos táctiles grandes, que se comprueban en el dispositivo. El registro frecuente (RF-01) se hace en ≤ 3 toques desde la pantalla de inicio.
 - **RNF-08** El SLM no bloquea nunca la interfaz: se puede cancelar, muestra el progreso y tiene un tiempo máximo. Para la demo funciona en modo determinista (temperatura 0 y semilla fija).
-- **RNF-09** El modelo cabe en la memoria del dispositivo de referencia junto con la app. El tamaño y la cuantización se deciden en la prueba técnica.
+- **RNF-09** **Memoria:** hay tres modelos (Whisper base ≈60 MB, Granite 350M ≈237 MB y SLM v5 ≈1,1 GB) y se cargan **de uno en uno**, nunca todos a la vez. Mientras se registra, el v5 no está en memoria. El pico de RAM con la app y la WebView se mide en el dispositivo de referencia (§11) y de ahí sale el límite.
+- **RNF-13** **Instalación de los modelos:** no van dentro del APK (≈1,4 GB en total). Se descargan o se copian **antes de quedarse sin conexión**, con una pantalla de "preparar para la misión". Se comprueba el **hash** de cada archivo y la versión del par base + LoRA del v5. Si falta un modelo o está incompleto, esa función se desactiva, la app lo indica y sigue funcionando con los formularios.
+- **RNF-14 (S)** **Interfaz bilingüe**, en español (por defecto) e inglés, el mismo par de idiomas que la voz. Los textos están en archivos de traducción, no dentro del código.
 - **RNF-10** Seguridad: la conexión usa HTTPS con un token por dispositivo, y los datos se cifran en reposo (S, p. ej., SQLCipher).
 - **RNF-11** El texto médico se contrasta con Sol y con Hydrogen, y cita fuentes de la NASA. La app muestra el aviso "herramienta de apoyo, no diagnóstico" (que **no sustituye** a tener reglas correctas).
 - **RNF-12** Cuando una sincronización falla o se interrumpe, no se pierde ni se duplica nada. Se prueba cortando la red a mitad de una subida.
@@ -125,11 +127,19 @@ proyecto-merken-app/
 
 **Base de datos** ([decisión 002](decisiones/002-base-de-datos.md), aceptada): SQLite en el móvil y **MySQL** en Tierra. Las credenciales solo las tiene la API. El móvil solo habla con la API de sincronización, nunca con la base de datos de Tierra, así que pasar a NoSQL no obligaría a tocar la app. `store` es un trait de repositorio.
 
-**SLM en Rust:** el motor de inferencia se esconde detrás de un trait, para poder cambiarlo. Candidatos que hay que probar en Android: `llama.cpp` mediante el crate `llama-cpp-2` (modelos GGUF cuantizados), `candle` (Rust puro) y ONNX Runtime con el crate `ort`. Modelos candidatos: familias pequeñas de 0,5 a 4 mil millones de parámetros que se puedan instalar en el móvil (p. ej., Gemma, Qwen, Phi o Llama en tamaños pequeños). **Antes de decidir hay que comprobar las versiones vigentes y sus licencias.**
+**Modelos en el móvil (crate `slm`, cada motor detrás de un trait para poder cambiarlo):**
+
+| Función | Modelo | Motor | Peso |
+|---|---|---|---|
+| Voz a texto (RF-18) | Whisper base multilingüe Q5_1 (alternativa: Moonshine Tiny) | whisper.cpp (`whisper-rs`) o sherpa-onnx | ≈60 MB |
+| Respaldo del intérprete (RF-14) | Granite 4.0 350M Q4_K_M (alternativa: Qwen3-0.6B) | llama.cpp (`llama-cpp-2`) con gramática GBNF | ≈237 MB |
+| Explicar la evaluación (RF-15) | SLM space-health v5: Qwen3-1.7B Q4_K_M + LoRA cargado en tiempo de ejecución, **sin fusionar** | llama.cpp (`llama-cpp-2`) | ≈1,1 GB |
+
+Las versiones exactas, las licencias y los hashes se fijan en la prueba técnica. La licencia del v5 la tiene que confirmar el compañero ([revisión](../reviews/slm-space-health-v5.md)).
 
 ## 8. Alcance de la demo (M)
 
-Android en un dispositivo acordado → registro manual y en lenguaje natural (SLM) de pulso, sueño, ánimo y cefalea → flujo de alarmas → figura SVG → evaluación explicada → una gráfica → informe en texto → sincronización con subida y descarga de análisis (se puede simular el servidor) → tres escenarios sintéticos. **Fuera de la demo:** 3D, fotos, farmacia, gamificación, iOS.
+Android en un dispositivo acordado → registro con formulario y en lenguaje natural (intérprete Rust + Granite; voz si la prueba sale bien) de pulso, sueño, ánimo y cefalea → flujo de alarmas → figura SVG → evaluación explicada → una gráfica → informe en texto → sincronización con subida y descarga de análisis (se puede simular el servidor) → tres escenarios sintéticos. **Fuera de la demo:** 3D, fotos, farmacia, gamificación, iOS.
 
 ## 9. Fuera de alcance
 
@@ -139,7 +149,7 @@ Android en un dispositivo acordado → registro manual y en lenguaje natural (SL
 
 ## 10. Decisiones pendientes
 
-1. **SLM:** ¿qué funciones entran en la demo (RF-14 a RF-18)? ¿Qué modelo y qué motor de inferencia usamos? Se decide con una prueba en el dispositivo.
+1. **Modelos:** la propuesta está en §7. Falta confirmarla con la prueba en el móvil (§11): que Whisper base y Granite rinden bien y que el v5 cabe en memoria. También falta que el compañero entregue la licencia y, si hace falta, un LoRA de extracción para Granite.
 2. **Servidor:** la base de datos será **MySQL** ([decisión 002](decisiones/002-base-de-datos.md)). ¿Con qué tecnología hacemos la API de sincronización (Rust/axum + sqlx…)? ¿Quién la construye? ¿Los "análisis" los hace un modelo más grande, un médico o ambos?
 3. **Entrega:** fecha límite, equipo y qué móvil Android usamos. ¿Hace falta un enlace web?
 4. **Contenido médico:** ¿quién revisa los protocolos? ¿Usamos ejemplos marcados como tales?
