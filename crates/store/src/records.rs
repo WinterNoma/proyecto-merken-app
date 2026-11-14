@@ -90,7 +90,7 @@ fn signature(e: &Evaluation) -> Value {
     ])
 }
 
-/// Payload de `merken_evaluations` (contrato §3), sin los campos solo de la interfaz.
+/// Payload de `evaluations` (contrato §3), sin los campos solo de la interfaz.
 fn evaluation_payload(id: &str, e: &Evaluation, app_version: &str) -> Value {
     serde_json::json!({
         "evaluation_id": id,
