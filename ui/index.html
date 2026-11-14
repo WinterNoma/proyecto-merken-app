@@ -1,432 +1,146 @@
 <!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Merken - Monitoreo Bio-Médico NASA</title>
-    <link rel="stylesheet" href="/src/styles.css" />
-    <script type="module" src="/src/main.ts" defer></script>
-  </head>
-
-  <body>
-    <div class="app-shell">
-      <!-- HEADER CON INFORMACIÓN DE MISIÓN Y FOTO DEL ASTRONAUTA SELECCIONABLE -->
-      <header class="app-header">
-        <div class="mission-info">
-          <div class="brand">
-            <span class="status-dot pulsing"></span>
-            <span class="brand-name">MERKEN // NASA BIO-MONITOR</span>
-          </div>
-          <div class="mission-id">MISIÓN: ARTEMIS // BASE HAB-1</div>
-          <div id="core-status" class="core-tag">Core: Local Activo</div>
-        </div>
-
-        <!-- CUADRO CON LA FOTO DEL ASTRONAUTA (CLICKEABLE CON INDICADOR PARA ABRIR CARRUSEL) -->
-        <button id="astronaut-header-btn" class="astronaut-card clickable-avatar" title="Cambiar Astronauta (Abrir Carrusel)">
-          <div class="avatar-frame">
-            <!-- Avatar SVG dinámico de astronauta con casco y visor -->
-            <svg id="header-avatar-svg" class="astronaut-avatar" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect width="80" height="80" rx="12" fill="#0c1829" />
-              <rect x="1" y="1" width="78" height="78" rx="11" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" />
-              <path d="M14 74C14 62 26 56 40 56C54 56 66 62 66 74V80H14V74Z" fill="#e2e8f0" />
-              <path d="M30 56V65M50 56V65" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-              <rect x="33" y="62" width="14" height="6" rx="2" fill="currentColor" fill-opacity="0.2" stroke="currentColor" stroke-width="1" />
-              <ellipse cx="40" cy="54" rx="20" ry="7" fill="#64748b" />
-              <ellipse cx="40" cy="53" rx="18" ry="5" fill="#334155" />
-              <circle cx="40" cy="34" r="23" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" />
-              <ellipse cx="40" cy="35" rx="17" ry="14" fill="#0a192f" stroke="#f59e0b" stroke-width="1.8" />
-              <path d="M26 31C28 25 35 23 44 23C49 23 53 25 54 27C52 26 47 25 43 25C34 25 28 28 26 31Z" fill="#fbbf24" fill-opacity="0.8" />
-              <ellipse cx="40" cy="35" rx="15" ry="12" fill="url(#visor-gradient-header)" />
-              <path d="M28 32C30 27 36 26 42 26" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-opacity="0.7" />
-              <defs>
-                <linearGradient id="visor-gradient-header" x1="25" y1="23" x2="55" y2="47" gradientUnits="userSpaceOnUse">
-                  <stop offset="0%" stop-color="#0284c7" stop-opacity="0.5" />
-                  <stop offset="60%" stop-color="#0f172a" stop-opacity="0.9" />
-                  <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.4" />
-                </linearGradient>
-              </defs>
-            </svg>
-            <span class="badge-online"></span>
-            <span class="avatar-switch-hint">⇄</span>
-          </div>
-          <div class="astronaut-meta">
-            <div class="meta-row">
-              <span id="header-astronaut-name" class="astronaut-name">D. VÁSQUEZ</span>
-              <span class="chevron-icon">▾</span>
-            </div>
-            <span id="header-astronaut-role" class="astronaut-role">ESPECIALISTA EVA</span>
-          </div>
-        </button>
-      </header>
-
-      <!-- ÁREA PRINCIPAL: SILUETA BIOLÓGICA + MÉTRICAS VITALES -->
-      <main class="biometrics-layout">
-        <!-- ZONA IZQUIERDA: SILUETA DEL CUERPO HUMANO HUD -->
-        <section class="body-scan-section">
-          <div class="scan-header">
-            <span class="scan-label">MAPA BIOLÓGICO</span>
-            <span class="scan-coords">EVA-SYS 1.0</span>
-          </div>
-
-          <div class="silhouette-container">
-            <div class="scan-beam"></div>
-
-            <svg class="human-body-svg" viewBox="0 0 220 440" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <linearGradient id="body-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#00f0ff" stop-opacity="0.25" />
-                  <stop offset="50%" stop-color="#0077b6" stop-opacity="0.18" />
-                  <stop offset="100%" stop-color="#00f0ff" stop-opacity="0.28" />
-                </linearGradient>
-                <radialGradient id="node-glow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stop-color="#00f0ff" stop-opacity="1" />
-                  <stop offset="100%" stop-color="#00f0ff" stop-opacity="0" />
-                </radialGradient>
-                <radialGradient id="heart-glow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stop-color="#ff3366" stop-opacity="1" />
-                  <stop offset="100%" stop-color="#ff3366" stop-opacity="0" />
-                </radialGradient>
-              </defs>
-
-              <g class="body-grid" opacity="0.15" stroke="#00f0ff" stroke-width="0.5">
-                <line x1="110" y1="10" x2="110" y2="430" stroke-dasharray="3 3" />
-                <line x1="20" y1="105" x2="200" y2="105" stroke-dasharray="2 4" />
-                <line x1="30" y1="185" x2="190" y2="185" stroke-dasharray="2 4" />
-                <line x1="40" y1="240" x2="180" y2="240" stroke-dasharray="2 4" />
-              </g>
-
-              <path class="body-outline"
-                d="
-                  M 110 25
-                  C 119 25, 126 32, 126 43
-                  C 126 55, 120 62, 116 67
-                  C 121 72, 131 75, 142 80
-                  C 152 85, 160 95, 167 114
-                  C 174 133, 180 156, 183 182
-                  C 185 198, 184 212, 178 214
-                  C 172 216, 169 203, 167 186
-                  C 164 165, 158 140, 151 133
-                  C 147 148, 146 168, 145 185
-                  C 144 200, 147 215, 145 228
-                  C 143 238, 137 245, 132 254
-                  C 134 278, 137 312, 138 348
-                  C 139 375, 137 400, 134 416
-                  C 132 423, 128 426, 122 426
-                  C 116 426, 115 419, 115 410
-                  C 116 385, 116 335, 115 285
-                  C 113 273, 111 268, 110 268
-                  C 109 268, 107 273, 105 285
-                  C 104 335, 104 385, 105 410
-                  C 105 419, 104 426, 98 426
-                  C 92 426, 88 423, 86 416
-                  C 83 400, 81 375, 82 348
-                  C 83 312, 86 278, 88 254
-                  C 83 245, 77 238, 75 228
-                  C 73 215, 76 200, 75 185
-                  C 74 168, 73 148, 69 133
-                  C 62 140, 56 165, 53 186
-                  C 51 203, 48 216, 42 214
-                  C 36 212, 35 198, 37 182
-                  C 40 156, 46 133, 53 114
-                  C 60 95, 68 85, 78 80
-                  C 89 75, 99 72, 104 67
-                  C 100 62, 94 55, 94 43
-                  C 94 32, 101 25, 110 25
-                  Z
-                "
-                fill="url(#body-gradient)"
-                stroke="#00e5ff"
-                stroke-width="1.8"
-                stroke-linejoin="round"
-              />
-
-              <!-- Puntos de monitoreo interactivos -->
-              <g class="hud-marker marker-heart" transform="translate(102, 115)">
-                <circle cx="0" cy="0" r="14" fill="url(#heart-glow)" opacity="0.6" class="pulse-ring" />
-                <circle cx="0" cy="0" r="4.5" fill="#ff3366" />
-                <line x1="0" y1="0" x2="35" y2="-12" stroke="#ff3366" stroke-width="1" stroke-dasharray="2 2" />
-                <circle cx="35" cy="-12" r="2" fill="#ff3366" />
-              </g>
-
-              <g class="hud-marker marker-lungs" transform="translate(122, 130)">
-                <circle cx="0" cy="0" r="12" fill="url(#node-glow)" opacity="0.5" class="pulse-ring delay-1" />
-                <circle cx="0" cy="0" r="3.5" fill="#00e5ff" />
-                <line x1="0" y1="0" x2="25" y2="8" stroke="#00e5ff" stroke-width="1" stroke-dasharray="2 2" />
-                <circle cx="25" cy="8" r="2" fill="#00e5ff" />
-              </g>
-
-              <g class="hud-marker marker-glucose" transform="translate(94, 175)">
-                <circle cx="0" cy="0" r="12" fill="url(#node-glow)" opacity="0.4" class="pulse-ring delay-2" />
-                <circle cx="0" cy="0" r="3.5" fill="#10b981" />
-                <line x1="0" y1="0" x2="-22" y2="10" stroke="#10b981" stroke-width="1" stroke-dasharray="2 2" />
-                <circle cx="-22" cy="10" r="2" fill="#10b981" />
-              </g>
-
-              <circle cx="110" cy="45" r="18" fill="none" stroke="#00e5ff" stroke-width="0.75" stroke-dasharray="4 4" opacity="0.4" />
-            </svg>
-          </div>
-
-          <div class="scan-footer">
-            <span id="scan-status-pill" class="status-pill">● ESTADO GENERAL: SIN DATOS</span>
-          </div>
-
-          <!-- RESUMEN DE CONTEXTO ESPACIAL (RADIACIÓN Y DISTANCIA) -->
-          <div class="space-env-box">
-            <div class="env-item">
-              <span class="env-label">RADIACIÓN ESPACIAL</span>
-              <span id="val-radiation" class="env-value">-- <small>µSv/h</small></span>
-            </div>
-            <div class="env-item">
-              <span class="env-label">DISTANCIA TIERRA</span>
-              <span id="val-distance" class="env-value">-- <small>km</small></span>
-            </div>
-          </div>
-        </section>
-
-        <!-- ZONA DERECHA: LOS 11 DATOS BIOMÉDICOS PRINCIPALES -->
-        <section class="vitals-section">
-          <div class="vitals-header">
-            <span class="vitals-title">TELEMETRÍA VITAL</span>
-            <span class="live-tag">EN VIVO</span>
-          </div>
-
-          <div class="vitals-cards">
-            <!-- 1. RITMO CARDÍACO (HeartRate) -->
-            <article class="vital-card heart-card">
-              <div class="card-top">
-                <div class="vital-label-wrap">
-                  <span class="vital-icon heart-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                    </svg>
-                  </span>
-                  <span class="vital-name">RITMO CARDÍACO</span>
-                </div>
-                <span id="badge-heart-rate" class="vital-state">SIN DATOS</span>
-              </div>
-              <div class="card-main">
-                <span id="val-heart-rate" class="vital-number">--</span>
-                <span class="vital-unit">BPM</span>
-              </div>
-              <div class="ecg-track">
-                <svg class="ecg-wave" viewBox="0 0 160 30" preserveAspectRatio="none">
-                  <path d="M 0 15 L 35 15 L 42 15 L 47 3 L 53 27 L 58 10 L 63 17 L 68 15 L 115 15 L 122 15 L 127 3 L 133 27 L 138 10 L 143 17 L 148 15 L 160 15" fill="none" stroke="#ff3366" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </div>
-              <div class="vital-footer">
-                <span>Ref: 50-100 BPM</span>
-                <span class="vital-trend">Sin datos</span>
-              </div>
-            </article>
-
-            <!-- 2. OXÍGENO EN SANGRE (OxygenInBlood - SpO2) -->
-            <article class="vital-card oxygen-card">
-              <div class="card-top">
-                <div class="vital-label-wrap">
-                  <span class="vital-icon oxygen-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
-                    </svg>
-                  </span>
-                  <span class="vital-name">OXÍGENO (SpO₂)</span>
-                </div>
-                <span id="badge-oxygen" class="vital-state">SIN DATOS</span>
-              </div>
-              <div class="card-main">
-                <span id="val-oxygen" class="vital-number">--</span>
-                <span class="vital-unit">% SpO₂</span>
-              </div>
-              <div class="oxygen-meter">
-                <div class="meter-bar" style="width: 98.2%;"></div>
-              </div>
-              <div class="vital-footer">
-                <span>Ref: &ge; 94%</span>
-                <span class="vital-trend">Sin datos</span>
-              </div>
-            </article>
-
-            <!-- 3. PRESIÓN ARTERIAL (BloodPressure: Sistólica / Diastólica) -->
-            <article class="vital-card bp-card">
-              <div class="card-top">
-                <div class="vital-label-wrap">
-                  <span class="vital-icon bp-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 12V7" />
-                      <path d="M12 12l3.5 2" />
-                    </svg>
-                  </span>
-                  <span class="vital-name">PRESIÓN ARTERIAL</span>
-                </div>
-                <span id="badge-bp" class="vital-state">SIN DATOS</span>
-              </div>
-              <div class="card-main">
-                <span id="val-bp-sys" class="vital-number">--</span>
-                <span class="bp-divider">/</span>
-                <span id="val-bp-dia" class="vital-number bp-dia">--</span>
-                <span class="vital-unit">mmHg</span>
-              </div>
-              <div class="vital-footer">
-                <span>Ref: 90-139 / 60-89</span>
-                <span class="vital-trend">Sin datos</span>
-              </div>
-            </article>
-
-            <!-- 4. GLUCOSA EN SANGRE (BloodSugar) -->
-            <article class="vital-card glucose-card">
-              <div class="card-top">
-                <div class="vital-label-wrap">
-                  <span class="vital-icon glucose-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 7v5l3 3" />
-                    </svg>
-                  </span>
-                  <span class="vital-name">GLUCOSA EN SANGRE</span>
-                </div>
-                <span id="badge-glucose" class="vital-state">SIN DATOS</span>
-              </div>
-              <div class="card-main">
-                <span id="val-glucose" class="vital-number">--</span>
-                <span class="vital-unit">mg/dL</span>
-              </div>
-              <div class="range-meter">
-                <span class="range-point" style="left: 45%;"></span>
-              </div>
-              <div class="vital-footer">
-                <span>Ref: 70-180 mg/dL</span>
-                <span class="vital-trend">Sin datos</span>
-              </div>
-            </article>
-
-            <!-- 5. TEMPERATURA CORPORAL (BodyTemperature) -->
-            <article class="vital-card temp-card">
-              <div class="card-top">
-                <div class="vital-label-wrap">
-                  <span class="vital-icon temp-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
-                    </svg>
-                  </span>
-                  <span class="vital-name">TEMPERATURA CORPORAL</span>
-                </div>
-                <span id="badge-temp" class="vital-state">SIN DATOS</span>
-              </div>
-              <div class="card-main">
-                <span id="val-temp" class="vital-number">--</span>
-                <span class="vital-unit">°C</span>
-              </div>
-              <div class="vital-footer">
-                <span>Ref: 36.1 - 38.0 °C</span>
-                <span class="vital-trend">Sin datos</span>
-              </div>
-            </article>
-          </div>
-
-          <!-- SECCIÓN CONDUCTA & BIENESTAR: SUEÑO, ÁNIMO Y NUTRICIÓN -->
-          <div class="lifestyle-grid">
-            <!-- 6. HORAS DE SUEÑO (SleepHours) -->
-            <div class="lifestyle-card">
-              <div class="lifestyle-header">
-                <span class="ls-icon">🌙</span>
-                <span class="ls-title">SUEÑO</span>
-              </div>
-              <div class="ls-body">
-                <span id="val-sleep" class="ls-number">--</span>
-                <span class="ls-unit">horas</span>
-              </div>
-              <span id="badge-sleep" class="ls-sub">Sin datos</span>
-            </div>
-
-            <!-- 7. ESTADO DE ÁNIMO (Mood) -->
-            <div class="lifestyle-card">
-              <div class="lifestyle-header">
-                <span class="ls-icon">🧠</span>
-                <span class="ls-title">ÁNIMO</span>
-              </div>
-              <div class="ls-body">
-                <span id="val-mood" class="ls-text">--</span>
-              </div>
-              <span class="ls-sub">Autoinforme</span>
-            </div>
-
-            <!-- 8. NUTRICIÓN (Nutrition) -->
-            <div class="lifestyle-card">
-              <div class="lifestyle-header">
-                <span class="ls-icon">🍎</span>
-                <span class="ls-title">NUTRICIÓN</span>
-              </div>
-              <div class="ls-body">
-                <span id="val-nutrition" class="ls-number">--</span>
-                <span class="ls-unit">kcal</span>
-              </div>
-              <span class="ls-sub">Ingesta del día</span>
-            </div>
-          </div>
-
-          <!-- BOTONES DE ACCIÓN RÁPIDA / PROTOCOLOS -->
-          <div class="quick-actions">
-            <button id="btn-simulate" class="action-btn secondary">
-              <span class="btn-icon">⚡</span> Simular Telemetría
-            </button>
-            <button id="btn-emergency" class="action-btn emergency">
-              <span class="btn-icon">🆘</span> Ayuda Médica Inmediata
-            </button>
-          </div>
-        </section>
-      </main>
-
-      <!-- BARRA INFERIOR DE PROTOCOLO Y CONEXIÓN -->
-      <footer class="app-footer">
-        <div class="footer-item">
-          <span class="f-label">BATERÍA TRAJE</span>
-          <span class="f-val">94%</span>
-        </div>
-        <div class="footer-separator">|</div>
-        <div class="footer-item">
-          <span class="f-label">RADIACIÓN TASA</span>
-          <span id="footer-radiation" class="f-val">12.5 µSv/h</span>
-        </div>
-        <div class="footer-separator">|</div>
-        <div class="footer-item">
-          <span class="f-label">ENLACE TIERRA</span>
-          <span id="footer-link" class="f-val f-warn">+18m retardo</span>
-        </div>
-      </footer>
-    </div>
-
-    <!-- =====================================================================
-         MODAL / CARRUSEL INTERACTIVO DE SELECCIÓN DE ASTRONAUTAS
-         ===================================================================== -->
-    <div id="astronaut-modal" class="modal-overlay" style="display: none;">
-      <div class="modal-card">
-        <!-- HEADER DEL CARRUSEL -->
-        <div class="modal-header">
-          <div class="modal-title-wrap">
-            <span class="modal-badge">CREW SELECTION</span>
-            <h2 class="modal-title">Tripulación Activa</h2>
-            <p class="modal-subtitle">Selecciona el astronauta para cargar su telemetría en vivo</p>
-          </div>
-          <button id="modal-close-btn" class="modal-close-icon" aria-label="Cerrar">✕</button>
-        </div>
-
-        <!-- CONTENEDOR DEL CARRUSEL CON FLECHAS DE NAVEGACIÓN -->
-        <div class="carousel-container">
-          <button id="carousel-prev-btn" class="carousel-arrow prev" aria-label="Anterior">‹</button>
-
-          <!-- TRACK HORIZONTAL DEL CARRUSEL -->
-          <div id="carousel-track" class="carousel-track">
-            <!-- Las tarjetas de los astronautas se renderizan dinámicamente o se hidratan desde TS -->
-          </div>
-
-          <button id="carousel-next-btn" class="carousel-arrow next" aria-label="Siguiente">›</button>
-        </div>
-
-        <!-- INDICADORES DE PUNTO DEL CARRUSEL -->
-        <div id="carousel-indicators" class="carousel-dots">
-          <!-- Dots generados dinámicamente -->
-        </div>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#171717" />
+  <meta name="description" content="Merken. Crew readings and on-device health observations." />
+  <title>Merken · Health observations</title>
+  <script type="module" src="/src/main.ts"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to observations</a>
+  <div class="app-shell">
+    <header class="app-header">
+      <a class="wordmark" href="#main" aria-label="Merken home">MERKEN</a>
+      <button id="crew-open" class="crew-trigger" type="button" aria-haspopup="dialog" aria-controls="crew-dialog">
+        <span class="crew-identity"><span class="caption">Crew member</span><span id="crew-name">Loading crew…</span></span>
+      </button>
+    </header>
+    <main id="main" tabindex="-1">
+      <div class="page-intro">
+        <div><p class="eyebrow">Crew health / Observation record</p><h1>Health observations</h1><p class="intro-copy">Readings, evaluations and what remains unknown.</p></div>
+        <div class="help-entry"><button id="help-open" class="button emergency" type="button" aria-haspopup="dialog" aria-controls="help-dialog">Need help</button><span class="caption">Record an urgent request on this device.</span></div>
       </div>
+      <div class="workspace">
+        <section class="telemetry-section" aria-labelledby="telemetry-title">
+          <div class="section-heading"><div><p class="eyebrow">01 / Crew feed</p><h2 id="telemetry-title">Latest readings</h2></div><span id="feed-status" class="feed-status" role="status">Connecting…</span></div>
+          <div class="crew-summary panel">
+            <div><p class="caption">Selected crew member</p><h3 id="selected-name">No crew available</h3><p id="selected-id" class="caption">--</p></div>
+            <div id="header-crew-status" class="status-chip" aria-live="polite" aria-atomic="true"></div>
+            <p class="caption summary-scope">MySQL · Reading-level assessment. This is separate from the on-device profile.</p>
+          </div>
+          <div id="feed-notice" class="notice" data-tone="neutral" hidden><p id="feed-message"></p><button id="feed-retry" class="button secondary" type="button">Retry connection</button></div>
+          <p id="feed-time" class="caption">No data received.</p>
+          <div class="vital-grid">
+            <article id="vital-heart" class="vital-card panel" data-tone="neutral">
+              <h3>Heart rate</h3><div class="vital-status"></div>
+              <p class="reading"><span class="reading-value">--</span> <span class="unit">bpm</span></p>
+              <p class="caption reference">Ref: 50-100 bpm</p>
+            </article>
+            <article id="vital-oxygen" class="vital-card panel" data-tone="neutral">
+              <h3>Blood oxygen · SpO₂</h3><div class="vital-status"></div>
+              <p class="reading"><span class="reading-value">--</span> <span class="unit">%</span></p>
+              <p class="caption reference">Ref: ≥ 94%</p>
+            </article>
+            <article id="vital-pressure" class="vital-card panel" data-tone="neutral">
+              <h3>Blood pressure</h3><div class="vital-status"></div>
+              <p class="reading"><span class="reading-value">--</span> <span class="unit">mmHg</span></p>
+              <p class="caption reference">Ref: 90-139 / 60-89</p>
+            </article>
+            <article id="vital-glucose" class="vital-card panel" data-tone="neutral">
+              <h3>Blood glucose</h3><div class="vital-status"></div>
+              <p class="reading"><span class="reading-value">--</span> <span class="unit">mg/dL</span></p>
+              <p class="caption reference">Ref: 70-180 mg/dL</p>
+            </article>
+            <article id="vital-temperature" class="vital-card panel" data-tone="neutral">
+              <h3>Body temperature</h3><div class="vital-status"></div>
+              <p class="reading"><span class="reading-value">--</span> <span class="unit">°C</span></p>
+              <p class="caption reference">Ref: 36.1 - 38.0 °C</p>
+            </article>
+            <article id="vital-sleep" class="vital-card panel" data-tone="neutral">
+              <h3>Sleep</h3><div class="vital-status"></div>
+              <p class="reading"><span class="reading-value">--</span> <span class="unit">h</span></p>
+              <p class="caption reference"></p>
+            </article>
+            <article id="vital-mood" class="vital-card panel" data-tone="neutral">
+              <h3>Mood</h3><div class="vital-status"></div>
+              <p class="reading"><span class="reading-value">--</span></p>
+              <p class="caption reference">Self-reported</p>
+            </article>
+            <article id="vital-nutrition" class="vital-card panel" data-tone="neutral">
+              <h3>Nutrition</h3><div class="vital-status"></div>
+              <p class="reading"><span class="reading-value">--</span> <span class="unit">kcal</span></p>
+              <p class="caption reference">Context only</p>
+            </article>
+            <article id="vital-radiation" class="vital-card panel" data-tone="neutral">
+              <h3>Space radiation</h3><div class="vital-status"></div>
+              <p class="reading"><span class="reading-value">--</span> <span class="unit">µSv/h</span></p>
+              <p class="caption reference">Context only</p>
+            </article>
+            <article id="vital-distance" class="vital-card panel" data-tone="neutral">
+              <h3>Distance from Earth</h3><div class="vital-status"></div>
+              <p class="reading"><span class="reading-value">--</span> <span class="unit">km</span></p>
+              <p class="caption reference">Context only</p>
+            </article>
+          </div>
+          <p class="section-note">Source: MySQL crew feed. Measurement timestamps are not provided by this feed; receipt time is shown above.</p>
+        </section>
+        <section id="core-panel" class="core-section" aria-labelledby="core-title">
+          <div class="section-heading"><div><p class="eyebrow">02 / Device record</p><h2 id="core-title">On-device record</h2></div><span id="demo-badge" class="status-chip" data-tone="neutral" hidden>DEMO</span></div>
+          <div id="core-availability" class="notice" data-tone="neutral" role="status">
+            <h3 id="core-availability-title">Connecting to local service…</h3><p id="core-availability-copy">Checking the on-device record.</p>
+            <button id="core-retry" class="button secondary" type="button" hidden>Try again</button>
+          </div>
+          <div id="core-alerts" class="alert-list"></div>
+          <p id="alarm-announcement" class="sr-only" role="alert" aria-atomic="true"></p>
+          <div id="core-record" hidden>
+            <div class="panel core-summary">
+              <p class="caption">On-device profile</p><h3 id="core-profile">No profile available</h3>
+              <p id="core-mission" class="caption"></p><p id="demo-copy" class="caption" hidden>Simulated records. Not uploaded to ground.</p>
+              <div id="core-overall" class="status-chip" aria-live="polite" aria-atomic="true"></div>
+              <dl class="record-list"><div><dt>Escalation</dt><dd id="core-escalation">--</dd></div><div><dt>Indicators to review</dt><dd id="core-worst">--</dd></div><div><dt>Mission elapsed time</dt><dd id="core-met" class="data">--</dd></div><div><dt>Synchronization</dt><dd id="core-sync">--</dd></div></dl>
+              <p id="core-evaluated" class="caption"></p>
+            </div>
+            <div id="demo-empty" class="notice" data-tone="neutral" hidden><h3>No on-device records</h3><p>Explore the app with clearly marked simulated records.</p><button id="load-demo" class="button secondary" type="button">Load demo data</button></div>
+            <p id="core-action-result" class="action-result" role="status"></p>
+            <section class="panel body-panel" aria-labelledby="body-title">
+              <div class="section-heading"><div><p class="eyebrow">Symptom locations</p><h3 id="body-title">Body overview</h3></div></div>
+              <div id="body-map"></div><div id="body-legend" class="legend"></div>
+              <p class="caption">Zone states come from recorded symptoms. An unevaluated zone does not indicate absence of symptoms.</p>
+              <details><summary>View all body zones</summary><ul id="body-zone-list" class="zone-list"></ul></details>
+            </section>
+            <div class="subsection-heading"><h3>Indicator evaluations</h3><p class="caption">Evaluated by the local core.</p></div>
+            <div id="core-indicators" class="evaluation-list"></div>
+            <div id="core-symptoms" class="evaluation-list"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+    <footer class="app-footer"><span>MERKEN / Health observation record</span><span>This application does not provide medical advice.</span></footer>
+  </div>
+  <dialog id="crew-dialog" role="dialog" aria-modal="true" aria-labelledby="crew-dialog-title" aria-describedby="crew-dialog-description" tabindex="-1">
+    <div class="dialog-heading"><div><p class="eyebrow">Crew selection</p><h2 id="crew-dialog-title">Choose a crew member</h2></div><button id="crew-close" class="button secondary icon-button" type="button" aria-label="Close crew selector"></button></div>
+    <p id="crew-dialog-description" class="caption">Browse the crew feed. The on-device profile stays separate.</p>
+    <p id="crew-availability" class="caption" role="status">Loading crew…</p>
+    <label for="crew-select">Crew member</label><select id="crew-select" disabled><option>Loading crew…</option></select>
+    <div class="crew-preview panel" role="group" aria-roledescription="slide" aria-label="Crew preview">
+      <p id="crew-preview-id" class="caption"></p><h3 id="crew-preview-name"></h3><div id="crew-preview-status" class="status-chip"></div><p id="crew-preview-values" class="caption"></p>
     </div>
-  </body>
+    <div class="carousel-navigation"><button id="crew-prev" class="button secondary icon-button" type="button" aria-label="Previous crew member"></button><span id="crew-position" class="caption" aria-live="polite" aria-atomic="true"></span><button id="crew-next" class="button secondary icon-button" type="button" aria-label="Next crew member"></button></div>
+    <div id="crew-dots" class="crew-dots" role="group" aria-label="Browse crew members"></div>
+    <div class="dialog-actions"><button id="crew-confirm" class="button primary" type="button" disabled>Select crew member</button></div>
+  </dialog>
+  <dialog id="help-dialog" role="dialog" aria-modal="true" aria-labelledby="help-title" aria-describedby="help-consequence" tabindex="-1">
+    <p class="eyebrow">Urgent request</p><h2 id="help-title">Record an urgent help request?</h2>
+    <p id="help-profile" class="profile-context"></p><div id="help-demo-badge" class="status-chip" data-tone="neutral" hidden>DEMO</div>
+    <p id="help-consequence">This will save an urgent event on this device. Ground receipt is not confirmed.</p>
+    <div id="help-demo-warning" class="notice" data-tone="neutral" hidden><h3>Demo data will be removed</h3><p>Saving real data will remove the demo data. This includes the help request.</p></div>
+    <label for="help-message">Message (optional)</label><textarea id="help-message" rows="4" maxlength="2000" placeholder="Describe what you are experiencing."></textarea>
+    <p class="caption">Up to 2,000 characters.</p>
+    <div id="help-result" class="notice" data-tone="neutral" role="status" hidden></div>
+    <div class="dialog-actions"><button id="help-cancel" class="button secondary" type="button">Cancel</button><button id="help-confirm" class="button emergency" type="button">Record help request</button></div>
+  </dialog>
+  <noscript><p class="notice">JavaScript is required to load crew readings and on-device records.</p></noscript>
+</body>
 </html>
