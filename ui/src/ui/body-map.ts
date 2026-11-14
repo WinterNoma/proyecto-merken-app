@@ -20,6 +20,7 @@ const shapes: Record<BodyZone, string | null> = {
   back: null, other: null,
 };
 export const bodyZones = Object.keys(shapes) as BodyZone[];
+const smallZones = new Set<BodyZone>(["neck", "right_hand", "left_hand", "right_foot", "left_foot"]);
 export function zoneName(zone: BodyZone): string {
   return zone.replace(/_/g, " ").replace(/^./, letter => letter.toUpperCase());
 }
@@ -52,6 +53,14 @@ export function createBodyMap(onSelect: (zone: BodyZone) => void) {
     node.dataset.tone = "neutral";
     if (node instanceof SVGElement) {
       node.setAttribute("d", geometry!); node.setAttribute("class", "body-zone"); svg.append(node);
+      if (smallZones.has(zone)) {
+        // Invisible, wider hit area behind every visible zone, so neighbours drawn
+        // on top keep their own taps; the anatomy stays unchanged.
+        const hit = document.createElementNS(ns, "path");
+        hit.setAttribute("d", geometry!); hit.setAttribute("class", "zone-hit"); hit.setAttribute("aria-hidden", "true");
+        hit.addEventListener("click", () => { select(zone); onSelect(zone); });
+        svg.insertBefore(hit, svg.firstChild);
+      }
       node.addEventListener("keydown", event => {
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); select(zone); onSelect(zone); }
       });
