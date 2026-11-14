@@ -4,7 +4,8 @@
  * Los cortes son los mismos que las reglas absolutas del núcleo Rust
  * (`crates/core/src/rules.rs`, `ABSOLUTE`), que ya tienen fuente y revisión:
  * NEWS2 (RCP 2017), AHA 2020, ACC/AHA 2017/2018, ADA 2026, BTS 2017, AASM/SRS.
- * Si cambia un umbral allí, hay que cambiarlo aquí también.
+ * Si cambia un umbral allí, hay que cambiarlo aquí también, y en los textos
+ * «Ref:» de `ui/index.html` (muestran el rango que da estado normal).
  *
  * Solo mira la lectura actual: no calcula tendencias (para eso hace falta
  * historial, que es lo que evalúa el núcleo).
