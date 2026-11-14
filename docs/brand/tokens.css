@@ -1,0 +1,136 @@
+/* MERKEN / Brand standard 01 / 2026-11-14
+ * Approved 2026-11-14: B / Basalt Standard + Flight Documentation.
+ * Import only in the brand preview until the application redesign is approved.
+ * All colors are opaque. Status meaning is invariant across palettes.
+ */
+:root {
+  --mk-bg: #171717;
+  --mk-surface: #222222;
+  --mk-surface-raised: #2d2d2d;
+  --mk-text: #eeece8;
+  --mk-text-muted: #c0bbb3;
+  --mk-border: #95918b;
+  --mk-divider: #47443f; /* Decorative only; never the sole control boundary. */
+  --mk-accent: #c2cde0;
+  --mk-accent-hover: #d4dcec;
+  --mk-accent-pressed: #abbad2;
+  --mk-on-accent: #171717;
+  --mk-focus: #c2cde0;
+  --mk-ok: #a5ccb3;
+  --mk-ok-bg: #1c3028;
+  --mk-warn: #e8c27d;
+  --mk-warn-bg: #352c1d;
+  --mk-alarm: #f0a2a2;
+  --mk-alarm-bg: #382226;
+  --mk-neutral: #b2bdc8;
+  --mk-neutral-bg: #252e38;
+  --mk-emergency: #f0a2a2;
+  --mk-emergency-hover: #f5b7b7;
+  --mk-emergency-pressed: #df9090;
+  --mk-on-emergency: #171717;
+  --mk-font-heading: "Barlow Semi Condensed", "Arial Narrow", sans-serif;
+  --mk-font-body: "Public Sans", Arial, sans-serif;
+  --mk-font-data: "Roboto Mono", Consolas, monospace;
+  --mk-font-wordmark: "Barlow Semi Condensed", "Arial Narrow", sans-serif;
+  --mk-weight-regular: 400;
+  --mk-weight-semibold: 600;
+  --mk-text-xs: 0.75rem;
+  --mk-text-sm: 0.875rem;
+  --mk-text-base: 1rem;
+  --mk-text-lg: 1.25rem;
+  --mk-text-xl: 1.5rem;
+  --mk-text-2xl: 2rem;
+  --mk-text-3xl: 3rem;
+  --mk-text-display: clamp(3rem, 6vw, 5rem);
+  --mk-leading-tight: 1.1;
+  --mk-leading-heading: 1.2;
+  --mk-leading-body: 1.6;
+  --mk-tracking-label: 0.08em;
+  --mk-tracking-wordmark: 0.06em;
+  --mk-space-0: 0;
+  --mk-space-1: 0.25rem;
+  --mk-space-2: 0.5rem;
+  --mk-space-3: 0.75rem;
+  --mk-space-4: 1rem;
+  --mk-space-5: 1.5rem;
+  --mk-space-6: 2rem;
+  --mk-space-7: 3rem;
+  --mk-space-8: 4rem;
+  --mk-space-9: 6rem;
+  --mk-radius-none: 0;
+  --mk-radius-sm: 0.125rem;
+  --mk-radius-md: 0.25rem;
+  --mk-radius-lg: 0.5rem;
+  --mk-border-width: 1px;
+  --mk-status-width: 3px;
+  --mk-focus-width: 2px;
+  --mk-focus-offset: 3px;
+  --mk-control-height: 2.75rem;
+  --mk-icon-size: 1.25rem;
+  --mk-icon-stroke: 1.75;
+  --mk-shadow-none: none;
+  --mk-shadow-dialog: 0 16px 48px rgb(0 0 0 / 0.35);
+  --mk-scrim: rgb(0 0 0 / 0.65);
+  --mk-duration-instant: 0ms;
+  --mk-duration-fast: 120ms;
+  --mk-duration-normal: 180ms;
+  --mk-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --mk-duration-fast: 0ms;
+    --mk-duration-normal: 0ms;
+  }
+}
+
+/* ALTERNATIVE A / Flight Graphite. Recommended originally; kept as an alternative.
+:root {
+  --mk-bg: #10151b;
+  --mk-surface: #192129;
+  --mk-surface-raised: #222d37;
+  --mk-text: #e8edf2;
+  --mk-text-muted: #b2bdc8;
+  --mk-border: #81909f;
+  --mk-divider: #36424f;
+  --mk-accent: #a6c4e0;
+  --mk-accent-hover: #bdd3e8;
+  --mk-accent-pressed: #90b3d2;
+  --mk-on-accent: #10151b;
+  --mk-focus: #a6c4e0;
+}
+*/
+
+/* ALTERNATIVE C / Archive Navy. Shared semantic tokens remain unchanged.
+:root {
+  --mk-bg: #101827;
+  --mk-surface: #1a2638;
+  --mk-surface-raised: #26354a;
+  --mk-text: #e8edf5;
+  --mk-text-muted: #b6c2d3;
+  --mk-border: #8a9ab2;
+  --mk-divider: #3a4c65;
+  --mk-accent: #b8c7e5;
+  --mk-accent-hover: #cfd9ed;
+  --mk-accent-pressed: #a5b8dc;
+  --mk-on-accent: #101827;
+  --mk-focus: #b8c7e5;
+}
+*/
+
+/* TYPE ALTERNATIVE B / Technical Record
+:root {
+  --mk-font-heading: "Archivo", Arial, sans-serif;
+  --mk-font-body: "Source Sans 3", Arial, sans-serif;
+  --mk-font-data: "Source Code Pro", Consolas, monospace;
+}
+*/
+
+/* TYPE ALTERNATIVE C / Institutional Standard
+:root {
+  --mk-font-heading: "Libre Franklin", Arial, sans-serif;
+  --mk-font-body: "Libre Franklin", Arial, sans-serif;
+  --mk-font-data: "Roboto Mono", Consolas, monospace;
+}
+The approved wordmark stays Barlow Semi Condensed 600 in either preview.
+*/

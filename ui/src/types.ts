@@ -1,32 +1,23 @@
-/**
- * Modelo canónico de telemetría médica para astronautas (11 indicadores).
- * Excluye headache/cefalea y cabinCO2.
- */
-
+/** MySQL readings are nullable: absence must never become a plausible value. */
 export interface BloodPressure {
-  systolic: number; // mmHg
-  diastolic: number; // mmHg
+  systolic: number | null;
+  diastolic: number | null;
 }
-
 export interface AstronautTelemetry {
   astronaut_name: string;
-  space_radiation: number; // µSv/h
-  distance_from_earth: number; // km
-  blood_pressure: BloodPressure; // mmHg
-  heart_rate: number; // bpm
-  blood_sugar: number; // mg/dL
-  body_temperature: number; // °C
-  sleep_hours: number; // h (0.0 - 24.0)
-  mood: string;
-  nutrition: number; // kcal
-  oxygen_in_blood: number; // SpO2 %
+  space_radiation: number | null;
+  distance_from_earth: number | null;
+  blood_pressure: BloodPressure;
+  heart_rate: number | null;
+  blood_sugar: number | null;
+  body_temperature: number | null;
+  sleep_hours: number | null;
+  mood: string | null;
+  nutrition: number | null;
+  oxygen_in_blood: number | null;
 }
-
 export interface AstronautProfile {
   id: string;
   name: string;
-  role: string;
-  badge: string;
-  color: string;
   telemetry: AstronautTelemetry;
 }

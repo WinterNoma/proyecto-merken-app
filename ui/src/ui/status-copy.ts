@@ -1,0 +1,88 @@
+import {
+  bloodPressureStatus, glucoseStatus, heartRateStatus, oxygenStatus,
+  sleepStatus, temperatureStatus, worstLevel, type Level, type VitalStatus,
+} from "../vital-status";
+import type { AstronautTelemetry } from "../types";
+import type { Evaluation, Status, Escalation } from "../core-api";
+import { el } from "./dom";
+import { icon, type IconName } from "./icons";
+
+export type Tone = Level | "neutral";
+export interface StatusCopy { tone: Tone; label: string; icon: IconName }
+export type VitalKey = "heart" | "oxygen" | "pressure" | "glucose" | "temperature" | "sleep";
+const noData = (): StatusCopy => ({ tone: "neutral", label: "No data", icon: "no_data" });
+
+// Translate the function result, never its numeric thresholds. The source detail
+// encodes direction; sleep has its own wording and no directional glyph.
+function translate(source: VitalStatus, kind: VitalKey): StatusCopy {
+  if (source.level === "alarm") return { tone: source.level, label: "Notify flight surgeons", icon: "alarm" };
+  if (source.level === "ok") return { tone: source.level, label: kind === "sleep" ? "Adequate rest" : "In range", icon: "ok" };
+  const label = kind === "sleep"
+    ? (source.detail === "Descanso muy insuficiente" ? "Very insufficient rest" : "Insufficient rest")
+    : source.detail.startsWith("▼") ? "Below range"
+    : source.detail.startsWith("▲") ? "Above range" : "Outside range";
+  return { tone: source.level, label, icon: "warn" };
+}
+export function mysqlStatuses(t: AstronautTelemetry): Record<VitalKey, StatusCopy> {
+  const bp = t.blood_pressure;
+  return {
+    heart: t.heart_rate === null ? noData() : translate(heartRateStatus(t.heart_rate), "heart"),
+    oxygen: t.oxygen_in_blood === null ? noData() : translate(oxygenStatus(t.oxygen_in_blood), "oxygen"),
+    pressure: bp.systolic === null || bp.diastolic === null ? noData() : translate(bloodPressureStatus(bp.systolic, bp.diastolic), "pressure"),
+    glucose: t.blood_sugar === null ? noData() : translate(glucoseStatus(t.blood_sugar), "glucose"),
+    temperature: t.body_temperature === null ? noData() : translate(temperatureStatus(t.body_temperature), "temperature"),
+    sleep: t.sleep_hours === null ? noData() : translate(sleepStatus(t.sleep_hours), "sleep"),
+  };
+}
+export function crewStatus(t: AstronautTelemetry): StatusCopy {
+  const states = Object.values(mysqlStatuses(t));
+  const levels = states.map(s => s.tone).filter((level): level is Level => level !== "neutral");
+  if (!levels.length) return noData();
+  const worst = worstLevel(levels);
+  const partial = levels.length !== states.length;
+  return {
+    tone: worst === "ok" && partial ? "neutral" : worst,
+    icon: worst === "ok" && partial ? "neutral" : worst,
+    label: (worst === "alarm" ? "Notify flight surgeons" : worst === "warn" ? "Outside range" : partial ? "Incomplete readings" : "In range")
+      + (partial && worst !== "ok" ? " · Some readings missing" : ""),
+  };
+}
+export function statusCopy(status: Status): StatusCopy {
+  switch (status) {
+    case "stable": return { tone: "ok", label: "Stable", icon: "ok" };
+    case "change": return { tone: "warn", label: "Change detected", icon: "warn" };
+    case "alarm": return { tone: "alarm", label: "Alarm", icon: "alarm" };
+    default: return { tone: "neutral", label: "Not evaluated", icon: "neutral" };
+  }
+}
+export function evaluationCopy(evaluation: Evaluation): StatusCopy {
+  const copy = statusCopy(evaluation.status);
+  if (evaluation.status === "not_evaluated") {
+    switch (evaluation.reason) {
+      case "no_data": return noData();
+      case "stale": return { tone: "neutral", label: "Stale reading", icon: "stale" };
+      case "too_few_data": return { tone: "neutral", label: "Insufficient history (" + evaluation.history_count + "/" + evaluation.history_needed + ")", icon: "history" };
+      case "not_applicable": return { tone: "neutral", label: "Context only", icon: "info" };
+    }
+  }
+  if (evaluation.status === "change") {
+    if (evaluation.direction) copy.label += evaluation.direction === "up" ? " · ↑ Increasing" : " · ↓ Decreasing";
+    if (evaluation.persistent) copy.label += " · Persistent";
+  }
+  return copy;
+}
+export function escalationCopy(value: Escalation): string {
+  return { continue: "No additional escalation", self_care: "Core guidance", flag_for_ground: "Flagged for ground review", urgent: "Urgent" }[value];
+}
+export function badge(copy: StatusCopy): HTMLElement {
+  const node = el("span", "status-chip");
+  paintBadge(node, copy);
+  return node;
+}
+export function paintBadge(node: HTMLElement, copy: StatusCopy): void {
+  if (node.dataset.tone === copy.tone && node.dataset.label === copy.label && node.dataset.icon === copy.icon) return;
+  node.dataset.tone = copy.tone;
+  node.dataset.label = copy.label;
+  node.dataset.icon = copy.icon;
+  node.replaceChildren(icon(copy.icon), el("span", "", copy.label));
+}
