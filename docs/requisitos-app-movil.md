@@ -47,7 +47,7 @@ El astronauta registra sus indicadores en pocos segundos y ve cómo ha cambiado 
 Prioridad: **M** = imprescindible para la demo · **S** = debería estar · **C** = si sobra tiempo.
 
 ### 5.1 Registro
-- **RF-01 (M)** Registro parcial de **pulso, sueño (horas y calidad), ánimo y cefalea (0–10)**. Cada registro guarda la hora de la medición, la hora en que se anotó, su origen (formulario, dispositivo, texto o voz) y qué lo interpretó (intérprete Rust o Granite, con la versión del modelo), además de una nota opcional.
+- **RF-01 (M)** Registro parcial de **pulso, sueño (horas y calidad) y ánimo**. Cada registro guarda la hora de la medición, la hora en que se anotó, su origen (formulario, dispositivo, texto o voz) y qué lo interpretó (intérprete Rust o Granite, con la versión del modelo), además de una nota opcional.
 - **RF-02 (M)** Un flujo de **eventos de alarma** separado y con un acceso directo, "Necesito ayuda": desmayo, pérdida de campo visual y sospecha de trombo. Distingue entre síntoma, sospecha del usuario y hallazgo confirmado por personal médico.
 - **RF-03 (M)** Los registros no se borran ni se sobrescriben. Una corrección se guarda como una versión nueva que enlaza con la anterior.
 - **RF-04 (S)** El resto de constantes: presión, temperatura, SpO₂, frecuencia respiratoria, masa e ingesta.
@@ -65,7 +65,7 @@ Prioridad: **M** = imprescindible para la demo · **S** = debería estar · **C*
 - **RF-10 (M)** Toda alarma por evento (RF-02) produce **alarma**. La acción es "avisar al CMO a bordo, abrir el protocolo sin conexión y además enviar a Tierra".
 - **RF-11 (M)** Cada evaluación indica sus datos, su referencia, la regla con su versión y la fuente con el apartado exacto. El tipo de fuente es uno de estos: evidencia publicada, protocolo aprobado o heurística de demo.
 - **RF-12 (S)** Exposición ambiental aparte, cada una con su norma y su ámbito: CO₂ como **promedio horario** de la cabina y radiación como **dosis efectiva acumulada de carrera**. No se usan para poner color a los síntomas.
-- **RF-13 (C)** Mostrar coincidencias en el tiempo (p. ej., CO₂ alto y cefalea) sin decir que una cosa causa la otra.
+- **RF-13 (C)** Mostrar coincidencias en el tiempo (p. ej., radiación y alteración de sueño) sin decir que una cosa causa la otra.
 - **RF-32 (M)** **Escalado según el estado**, decidido por el núcleo:
   - **Estable** → seguir igual.
   - **Cambio** → sugerencias del v5 en el móvil (RF-15).
@@ -162,7 +162,7 @@ Las versiones exactas, las licencias y los hashes se fijan en la prueba técnica
 
 ## 8. Alcance de la demo (M)
 
-Android en un dispositivo acordado → registro con formulario y en lenguaje natural (intérprete Rust + Granite; voz si la prueba sale bien) de pulso, sueño, ánimo y cefalea → flujo de alarmas → figura SVG → evaluación explicada → una gráfica → informe en texto → sincronización con subida y descarga de análisis (se puede simular el servidor) → tres escenarios sintéticos. **Fuera de la demo:** 3D, fotos, farmacia, gamificación, iOS.
+Android en un dispositivo acordado → registro con formulario y en lenguaje natural (intérprete Rust + Granite; voz si la prueba sale bien) de pulso, sueño y ánimo → flujo de alarmas → figura SVG → evaluación explicada → una gráfica → informe en texto → sincronización con subida y descarga de análisis (se puede simular el servidor) → tres escenarios sintéticos. **Fuera de la demo:** 3D, fotos, farmacia, gamificación, iOS.
 
 ## 9. Fuera de alcance
 
