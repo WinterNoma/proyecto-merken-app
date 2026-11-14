@@ -9,9 +9,13 @@ use merken_core::time::Timestamp;
 use merken_store::{
     Scenario, Store, StoreError,
     api::{
-        CorrectRecordInput, EventItem, ListRecordsInput, LogRecordInput, LogResult,
+        CorrectRecordInput, EventItem, ImportResult, ListRecordsInput, LogRecordInput, LogResult,
         ProfileResponse, RaiseEventInput, RaiseEventResult, RecordItem, StatusResponse,
     },
+};
+use merken_sync::{
+    SyncError,
+    simulation::{DEFAULT_BASE_URL, SimAstronaut, SimClient},
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -63,7 +67,63 @@ pub struct LoadDemoInput {
     pub scenario: String,
 }
 
+#[derive(Deserialize, Default)]
+pub struct SimListInput {
+    /// Token de la API de simulación. Si falta, se usa `MERKEN_SIM_TOKEN`.
+    pub token: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct SimImportInput {
+    pub astronaut_id: String,
+    /// Días hacia atrás que se descargan (1–31, por defecto 14: la ventana de historial del núcleo).
+    pub days: Option<u32>,
+    pub token: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct SimAstronautsResponse {
+    pub astronauts: Vec<SimAstronaut>,
+}
+
 // ---------- Lógica sin Tauri (se puede probar) ----------
+
+fn sync_err(e: SyncError) -> StoreError {
+    StoreError {
+        code: e.code,
+        field: None,
+        message: e.message,
+    }
+}
+
+/// Token del comando o, si falta, de la variable de entorno `MERKEN_SIM_TOKEN`.
+/// Nunca se guarda ni se escribe en registros.
+fn sim_client(token: Option<String>) -> Result<SimClient, StoreError> {
+    let token = token
+        .filter(|t| !t.trim().is_empty())
+        .or_else(|| std::env::var("MERKEN_SIM_TOKEN").ok())
+        .unwrap_or_default();
+    let base = std::env::var("MERKEN_SIM_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_owned());
+    SimClient::new(&base, &token).map_err(sync_err)
+}
+
+/// Desde cuándo se importa: `now − days` (1–31 días, por defecto 14).
+pub fn sim_from(now: Timestamp, days: Option<u32>) -> String {
+    let days = i64::from(days.unwrap_or(14).clamp(1, 31));
+    now.saturating_add_ms(-days * 86_400_000).to_rfc3339()
+}
+
+async fn blocking<T: Send + 'static>(
+    f: impl FnOnce() -> Result<T, StoreError> + Send + 'static,
+) -> Result<T, StoreError> {
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|_| StoreError {
+            code: "network".into(),
+            field: None,
+            message: "The simulation download was interrupted".into(),
+        })?
+}
 
 pub fn handle_list_events(
     store: &Store,
@@ -167,6 +227,59 @@ fn clear_demo(state: tauri::State<'_, AppState>) -> Result<(), StoreError> {
     with_store(&state, |s| s.clear_demo())
 }
 
+/// Lista los astronautas de la API de simulación (datos inventados).
+#[tauri::command]
+async fn sim_list_astronauts(
+    input: Option<SimListInput>,
+) -> Result<SimAstronautsResponse, StoreError> {
+    let token = input.unwrap_or_default().token;
+    blocking(move || {
+        let client = sim_client(token)?;
+        Ok(SimAstronautsResponse {
+            astronauts: client.list_astronauts().map_err(sync_err)?,
+        })
+    })
+    .await
+}
+
+/// Descarga los registros de un astronauta simulado y los guarda como DEMO
+/// (sustituye la DEMO anterior; nunca se suben a Tierra). Después, `get_status`.
+#[tauri::command]
+async fn sim_import(
+    state: tauri::State<'_, AppState>,
+    input: SimImportInput,
+) -> Result<ImportResult, StoreError> {
+    let SimImportInput {
+        astronaut_id,
+        days,
+        token,
+    } = input;
+    let from = sim_from(now(), days);
+    let id = astronaut_id.clone();
+    let (name, downloaded) = blocking(move || {
+        let client = sim_client(token)?;
+        let name = client
+            .list_astronauts()
+            .map_err(sync_err)?
+            .into_iter()
+            .find(|a| a.astronaut_id == id)
+            .map(|a| a.display_name)
+            .ok_or_else(|| StoreError {
+                code: "not_found".into(),
+                field: Some("astronaut_id".into()),
+                message: "Astronaut not found in the simulation".into(),
+            })?;
+        let records = client.records_since(&id, &from).map_err(sync_err)?;
+        Ok((name, records))
+    })
+    .await?;
+    // Si la descarga falla (red, límites, paginación incoherente) no se llega
+    // aquí y la DEMO anterior queda como estaba.
+    with_store(&state, |s| {
+        s.import_synthetic(&astronaut_id, &name, &downloaded, now())
+    })
+}
+
 fn open_store(app: &tauri::App) -> Result<Store, Box<dyn std::error::Error>> {
     let dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&dir)?;
@@ -192,7 +305,9 @@ pub fn run() {
             raise_event,
             list_events,
             load_demo,
-            clear_demo
+            clear_demo,
+            sim_list_astronauts,
+            sim_import
         ])
         .run(tauri::generate_context!());
     if let Err(e) = result {
@@ -217,6 +332,16 @@ mod tests {
         );
         assert!(r.is_err_and(|e| e.code == "invalid_value"));
         Ok(())
+    }
+
+    #[test]
+    fn sim_window_defaults_to_14_days_and_is_clamped() {
+        let now = Timestamp::from_millis(1_800_000_000_000);
+        let day: i64 = 86_400_000;
+        let at = |d: i64| Timestamp::from_millis(1_800_000_000_000 - d * day).to_rfc3339();
+        assert_eq!(sim_from(now, None), at(14));
+        assert_eq!(sim_from(now, Some(0)), at(1));
+        assert_eq!(sim_from(now, Some(400)), at(31));
     }
 
     #[test]

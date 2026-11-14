@@ -876,3 +876,173 @@ fn migration_v3_parks_pending_headache_outbox() {
     assert_eq!(state, "failed");
     assert!(err.starts_with("retired_indicator"));
 }
+
+const SIM: &str = "a9c7929e-f810-5b0f-ae07-7aeb92e4252c";
+
+fn sim_record(id: &str, astronaut: &str, minutes_ago: i64, bpm: f64) -> Value {
+    let at = Timestamp::from_millis(now().millis() - minutes_ago * 60_000).to_rfc3339();
+    json!({
+        "astronaut_id": astronaut, "record_id": id, "indicator": "heart_rate",
+        "value": {"bpm": bpm}, "unit": "bpm", "measured_at": at, "logged_at": at,
+        "source": "garmin", "external_id": format!("garmin:{id}"), "schema_version": 1,
+        "app_version": null, "interpreted_by": null, "replaces": null,
+        "note": "Synthetic simulated data; not a medical measurement."
+    })
+}
+
+#[test]
+fn import_synthetic_stores_demo_only_and_counts_rejections() {
+    let mut store = Store::open_in_memory().unwrap();
+    let mut records: Vec<Value> = (0..5)
+        .map(|i| sim_record(&format!("rec-{i}"), SIM, 60 * (5 - i), 72.0 + i as f64))
+        .collect();
+    records.push(sim_record("rec-0", SIM, 10, 80.0)); // duplicado
+    records.push(sim_record("other", "otro-astronauta", 10, 80.0)); // otro astronauta
+    let mut bad = sim_record("bad", SIM, 10, 80.0);
+    bad["unit"] = json!("mmHg");
+    records.push(bad);
+    let r = store
+        .import_synthetic(SIM, "Alex Morgan", &records, now())
+        .unwrap();
+    assert_eq!((r.imported, r.rejected), (5, 3));
+    assert!(r.first_measured_at < r.last_measured_at);
+    assert!(store.pending_outbox(100).unwrap().is_empty());
+    let status = store.status(now(), V).unwrap();
+    assert!(status.is_demo);
+    let hr = status
+        .indicators
+        .iter()
+        .find(|e| e.indicator == "heart_rate")
+        .unwrap();
+    assert_ne!(hr.reason, Some(NotEvaluatedReason::NoData));
+    // Las evaluaciones de datos sintéticos tampoco se suben.
+    assert!(store.pending_outbox(100).unwrap().is_empty());
+    let profile = serde_json::to_value(store.get_profile().unwrap()).unwrap();
+    assert!(profile.to_string().contains("SIMULATION Alex Morgan"));
+    // Reimportar sustituye, no duplica.
+    let again = store
+        .import_synthetic(SIM, "Alex Morgan", &records, now())
+        .unwrap();
+    assert_eq!(again.imported, 5);
+    assert_eq!(
+        store
+            .list_records(ListRecordsInput::default())
+            .unwrap()
+            .len(),
+        5
+    );
+}
+
+#[test]
+fn import_synthetic_refuses_when_real_data_exists_and_real_write_clears_it() {
+    let mut store = Store::open_in_memory().unwrap();
+    let records = vec![sim_record("rec-1", SIM, 30, 70.0)];
+    store
+        .import_synthetic(SIM, "Alex Morgan", &records, now())
+        .unwrap();
+    log(&mut store, Indicator::HeartRate, json!({"bpm": 66}), now());
+    let recs = store.list_records(ListRecordsInput::default()).unwrap();
+    assert_eq!(recs.len(), 1);
+    let err = store
+        .import_synthetic(SIM, "Alex Morgan", &records, now())
+        .unwrap_err();
+    assert_eq!(err.code, "real_data_present");
+    let mut fresh = Store::open_in_memory().unwrap();
+    let blank = fresh
+        .import_synthetic(SIM, "  ", &records, now())
+        .unwrap_err();
+    assert_eq!(blank.field.as_deref(), Some("display_name"));
+}
+
+#[test]
+fn import_synthetic_accepts_api_shapes() {
+    // Misma forma que la respuesta de la API de simulación (°C, sueño con
+    // ventana), con fechas del día de `now()` en las pruebas (15-ene-2027).
+    let records = vec![
+        json!({"astronaut_id": SIM, "record_id": "35746106-96c2-5579-b77a-f0b511d31f6b",
+            "indicator": "body_temperature", "value": {"celsius": 36.4}, "unit": "°C",
+            "measured_at": "2027-01-15T07:00:00.000Z", "logged_at": "2027-01-15T07:00:00.000Z",
+            "source": "garmin", "external_id": "garmin:sim-01-body_temperature-2027-01-15T07:00:00.000Z",
+            "schema_version": 1, "app_version": null, "interpreted_by": null, "replaces": null,
+            "note": "Synthetic simulated data; not a medical measurement."}),
+        json!({"astronaut_id": SIM, "record_id": "f0d1c1a2-0000-5000-8000-000000000001",
+            "indicator": "sleep", "value": {"hours": 7.4, "quality": "good",
+                "window_start": "2027-01-15T00:00:00.000Z", "window_end": "2027-01-15T08:00:00.000Z"},
+            "unit": "h", "measured_at": "2027-01-15T08:00:00.000Z", "logged_at": "2027-01-15T08:00:00.000Z",
+            "source": "garmin", "external_id": "garmin:sim-01-sleep-2027-01-15T08:00:00.000Z",
+            "schema_version": 1, "app_version": null, "interpreted_by": null, "replaces": null,
+            "note": "Synthetic simulated data; not a medical measurement."}),
+    ];
+    let r = store_with_import(&records);
+    assert_eq!((r.imported, r.rejected), (2, 0));
+    // Con el reloj real del 14-nov-2026 esas mismas lecturas serían futuras:
+    // no se cargan, para que el núcleo no las evalúe como recientes (Sol, I2).
+    let nov_14 = Timestamp::parse_rfc3339("2026-11-14T12:00:00.000Z").unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    let r = store
+        .import_synthetic(SIM, "Alex Morgan", &records, nov_14)
+        .unwrap();
+    assert_eq!((r.imported, r.rejected), (0, 2));
+}
+
+#[test]
+fn import_synthetic_rejects_records_outside_the_contract() {
+    let mut records = vec![sim_record("ok", SIM, 10, 70.0)];
+    let mut v99 = sim_record("v99", SIM, 10, 70.0);
+    v99["schema_version"] = json!(99);
+    let mut no_id = sim_record("x", SIM, 10, 70.0);
+    no_id["record_id"] = json!(" ");
+    let mut long_note = sim_record("note", SIM, 10, 70.0);
+    long_note["note"] = json!("a".repeat(2001));
+    let future = sim_record("future", SIM, -11, 70.0);
+    records.extend([v99, no_id, long_note, future]);
+    let r = store_with_import(&records);
+    assert_eq!((r.imported, r.rejected), (1, 4));
+}
+
+#[test]
+fn import_synthetic_failure_keeps_the_previous_demo() {
+    // B1 de Sol: si falla una inserción, ni la DEMO anterior ni el perfil
+    // cambian (todo va en una sola transacción).
+    let mut store = Store::open_in_memory().unwrap();
+    let first = vec![
+        sim_record("old-1", SIM, 30, 70.0),
+        sim_record("old-2", SIM, 20, 71.0),
+    ];
+    store
+        .import_synthetic(SIM, "Alex Morgan", &first, now())
+        .unwrap();
+    store
+        .conn
+        .execute_batch(
+            "CREATE TRIGGER fail BEFORE INSERT ON records WHEN NEW.record_id = 'boom'              BEGIN SELECT RAISE(ABORT, 'boom'); END;",
+        )
+        .unwrap();
+    let second = vec![
+        sim_record("new-1", SIM, 15, 72.0),
+        sim_record("boom", SIM, 10, 73.0),
+    ];
+    assert!(
+        store
+            .import_synthetic(SIM, "Jordan Lee", &second, now())
+            .is_err()
+    );
+    let ids: Vec<String> = store
+        .list_records(ListRecordsInput::default())
+        .unwrap()
+        .into_iter()
+        .map(|r| r.record_id)
+        .collect();
+    assert_eq!(ids.len(), 2);
+    assert!(ids.iter().all(|id| id.starts_with("old-")));
+    let profile = serde_json::to_value(store.get_profile().unwrap()).unwrap();
+    assert!(profile.to_string().contains("SIMULATION Alex Morgan"));
+    assert!(store.status(now(), V).unwrap().is_demo);
+}
+
+fn store_with_import(records: &[Value]) -> crate::api::ImportResult {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .import_synthetic(SIM, "Alex Morgan", records, now())
+        .unwrap()
+}

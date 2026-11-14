@@ -30,6 +30,8 @@ const status = await core.getStatus();
 | `listEvents({ limit })` | Historial de eventos | `{ events }` |
 | `loadDemo(scenario)` | Cargar datos **DEMO** (`routine`, `persistent_change`, `alarm_event`) | `StatusResponse` |
 | `clearDemo()` | Borrar solo los datos DEMO | — |
+| `simListAstronauts(token?)` | Astronautas de la **API de simulación** (datos inventados) | `{ astronauts: [{ astronaut_id, display_name }] }` |
+| `simImport({ astronaut_id, days?, token? })` | Descargar los registros de un astronauta simulado y guardarlos como DEMO | `{ astronaut_id, display_name, imported, rejected, first_measured_at, last_measured_at }` |
 
 ## Registrar un dato (con confirmación de valores raros)
 
@@ -92,6 +94,25 @@ await core.raiseEvent({ kind: "feeling_report", message: "Tired but OK" });
 ## Datos DEMO
 
 `loadDemo` solo funciona si en el móvil **no** hay datos reales (si los hay, falla con `real_data_present`). Todo lo DEMO lleva `is_demo: true` y **nunca se sube a Tierra**. **El primer dato real (un registro, un `need_help`, el perfil descargado) borra todo lo DEMO**, para que nunca se mezclen: avisa al usuario antes ("Logging real data will remove the demo data"). Muestra un distintivo `DEMO` mientras `is_demo` sea `true`.
+
+## Datos de la API de simulación
+
+La API de simulación (`http://98.95.196.77:8001`, aparte del backend real) tiene 7 astronautas con datos inventados de pulso (cada 15 min), temperatura (cada hora) y sueño (cada noche). Alex Morgan tiene un escenario de pulso alto, y Jordan Lee uno de temperatura y sueño.
+
+```ts
+const { astronauts } = await core.simListAstronauts(token);
+const r = await core.simImport({ astronaut_id: astronauts[0].astronaut_id, token }); // últimos 14 días
+const status = await core.getStatus(); // el núcleo ya los evalúa
+```
+
+- Se guardan como **DEMO**: mismas reglas que `loadDemo` (fallan con `real_data_present` si hay datos reales, nunca se suben y el primer dato real los borra). Cada importación **sustituye** la DEMO anterior: no se mezclan astronautas.
+- El perfil queda como `SIMULATION <nombre>`, con `is_demo: true`.
+- **Token:** nunca en el código. En el PC, la variable de entorno `MERKEN_SIM_TOKEN` antes de `npm run tauri dev`; en el móvil, un campo en la pantalla que lo pase como `token`. La URL se puede cambiar con `MERKEN_SIM_URL`.
+- La petición sale desde Rust, no desde la WebView, así que no hay CORS. La API es HTTP sin cifrar: solo para la demo.
+- `rejected` cuenta los registros descartados: duplicados, de otro astronauta, con fecha posterior a ahora + 10 min, con `schema_version` distinto de 1, sin `record_id` o con textos demasiado largos, y los que no pasan la validación del núcleo.
+- Todo o nada: si la descarga falla o pasa de 20 000 registros, la DEMO anterior queda intacta.
+- Errores nuevos: `missing_token`, `unauthorized` (token rechazado), `network`, `not_found` (astronauta), `http_error`, `bad_response` (respuesta incoherente), `too_much_data` (más de 20 000 registros o respuestas demasiado grandes: importar menos días).
+- Tarda unos segundos: unas 18 páginas de 100 registros para 14 días.
 
 ## Lo que aún no hay
 

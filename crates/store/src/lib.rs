@@ -149,29 +149,8 @@ PRAGMA user_version=1;")?;
         is_demo: bool,
         now: Timestamp,
     ) -> Result<(), StoreError> {
-        let field = |name: &str| {
-            profile.get(name).ok_or_else(|| StoreError {
-                code: "invalid_schema".into(),
-                field: Some(name.into()),
-                message: "Required profile field is missing".into(),
-            })
-        };
-        let a = field("astronaut")?;
-        let m = field("medical_profile")?;
-        let c = field("medical_conditions")?;
-        let version = m
-            .get("profile_version")
-            .and_then(Value::as_i64)
-            .ok_or_else(|| StoreError {
-                code: "invalid_schema".into(),
-                field: Some("profile_version".into()),
-                message: "Profile version is required".into(),
-            })?;
         let tx = self.conn.transaction()?;
-        if !is_demo {
-            clear_demo_in(&tx)?;
-        }
-        tx.execute("INSERT INTO profile(id,astronaut_json,medical_profile_json,medical_conditions_json,profile_version,is_demo,updated_at) VALUES(1,?1,?2,?3,?4,?5,?6) ON CONFLICT(id) DO UPDATE SET astronaut_json=excluded.astronaut_json, medical_profile_json=excluded.medical_profile_json, medical_conditions_json=excluded.medical_conditions_json, profile_version=excluded.profile_version, is_demo=excluded.is_demo, updated_at=excluded.updated_at", params![serde_json::to_string(a)?,serde_json::to_string(m)?,serde_json::to_string(c)?,version,is_demo,now.millis()])?;
+        upsert_profile_in(&tx, profile, is_demo, now)?;
         tx.commit()?;
         Ok(())
     }
@@ -191,6 +170,39 @@ PRAGMA user_version=1;")?;
             )
             .optional()?)
     }
+}
+
+/// Guarda el perfil dentro de una transacción ya abierta. Un perfil real
+/// borra antes todo lo DEMO.
+pub(crate) fn upsert_profile_in(
+    tx: &rusqlite::Transaction<'_>,
+    profile: &Value,
+    is_demo: bool,
+    now: Timestamp,
+) -> Result<(), StoreError> {
+    let field = |name: &str| {
+        profile.get(name).ok_or_else(|| StoreError {
+            code: "invalid_schema".into(),
+            field: Some(name.into()),
+            message: "Required profile field is missing".into(),
+        })
+    };
+    let a = field("astronaut")?;
+    let m = field("medical_profile")?;
+    let c = field("medical_conditions")?;
+    let version = m
+        .get("profile_version")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| StoreError {
+            code: "invalid_schema".into(),
+            field: Some("profile_version".into()),
+            message: "Profile version is required".into(),
+        })?;
+    if !is_demo {
+        clear_demo_in(tx)?;
+    }
+    tx.execute("INSERT INTO profile(id,astronaut_json,medical_profile_json,medical_conditions_json,profile_version,is_demo,updated_at) VALUES(1,?1,?2,?3,?4,?5,?6) ON CONFLICT(id) DO UPDATE SET astronaut_json=excluded.astronaut_json, medical_profile_json=excluded.medical_profile_json, medical_conditions_json=excluded.medical_conditions_json, profile_version=excluded.profile_version, is_demo=excluded.is_demo, updated_at=excluded.updated_at", params![serde_json::to_string(a)?,serde_json::to_string(m)?,serde_json::to_string(c)?,version,is_demo,now.millis()])?;
+    Ok(())
 }
 
 /// Borra todo lo DEMO dentro de una transacción ya abierta. Se llama en la

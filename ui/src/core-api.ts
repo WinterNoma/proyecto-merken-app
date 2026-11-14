@@ -88,7 +88,14 @@ export type ErrorCode =
   | "not_found"
   | "conflict"
   | "real_data_present"
-  | "storage_error";
+  | "storage_error"
+  // Solo en simListAstronauts/simImport (API de simulación):
+  | "missing_token"
+  | "unauthorized"
+  | "network"
+  | "http_error"
+  | "bad_response"
+  | "too_much_data";
 
 /** Lo que rechaza la promesa de `invoke` cuando el comando falla. */
 export interface CoreError {
@@ -269,6 +276,29 @@ export type DemoScenario = "routine" | "persistent_change" | "alarm_event";
 
 // ---------- Comandos ----------
 
+// ---------- API de simulación (datos inventados) ----------
+
+export interface SimAstronaut { astronaut_id: string; display_name: string }
+
+export interface SimImportInput {
+  astronaut_id: string;
+  /** Días hacia atrás (1–31). Por defecto 14, la ventana de historial del núcleo. */
+  days?: number;
+  /** Token de la API de simulación. Si falta, Rust usa la variable MERKEN_SIM_TOKEN. */
+  token?: string;
+}
+
+export interface SimImportResult {
+  astronaut_id: string;
+  display_name: string;
+  imported: number;
+  /** Registros descartados: duplicados, de otro astronauta, con fecha futura
+   *  o que no pasan la validación del contrato o del núcleo. */
+  rejected: number;
+  first_measured_at: Iso | null;
+  last_measured_at: Iso | null;
+}
+
 export const core = {
   getProfile: () => invoke<ProfileResponse>("get_profile"),
   logRecord: (input: LogRecordInput) => invoke<LogResult>("log_record", { input }),
@@ -283,4 +313,10 @@ export const core = {
   loadDemo: (scenario: DemoScenario) => invoke<StatusResponse>("load_demo", { input: { scenario } }),
   /** Borra solo los datos DEMO. */
   clearDemo: () => invoke<void>("clear_demo"),
+  /** Astronautas de la API de simulación. */
+  simListAstronauts: (token?: string) =>
+    invoke<{ astronauts: SimAstronaut[] }>("sim_list_astronauts", { input: { token } }),
+  /** Descarga los registros de un astronauta simulado y los guarda como DEMO
+   *  (sustituye la DEMO anterior, nunca se suben). Después llama a getStatus(). */
+  simImport: (input: SimImportInput) => invoke<SimImportResult>("sim_import", { input }),
 };
