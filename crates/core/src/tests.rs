@@ -82,7 +82,10 @@ fn validation_contract() {
             json!({"hours":5,"quality":null,"window_start":"2026-01-01T00:00:00Z","window_end":"2026-01-01T08:00:00Z"}),
         ),
         (Indicator::Mood, json!({"score":0})),
-        (Indicator::Headache, json!({"score":10})),
+        (Indicator::OxygenInBlood, json!({"percentage":62})),
+        (Indicator::SpaceRadiation, json!({"usv_h":0})),
+        (Indicator::DistanceFromEarth, json!({"km":401_000_000.0})),
+        (Indicator::Nutrition, json!({"kcal":0})),
         (
             Indicator::Symptom,
             json!({"body_zone":"left_foot","score":4,"description":"pain"}),
@@ -264,9 +267,9 @@ fn arbitrary_json() -> impl Strategy<Value = Value> {
     })
 }
 proptest! {
- #[test] fn arbitrary_value_never_panics(v in arbitrary_json(), index in 0usize..8) { let _ = Measurement::validate(Indicator::ALL[index],&v,None); }
+ #[test] fn arbitrary_value_never_panics(v in arbitrary_json(), index in 0usize..Indicator::ALL.len()) { let _ = Measurement::validate(Indicator::ALL[index],&v,None); }
  #[test] fn positive_values_accepted(x in any::<f64>().prop_filter("positive finite", |x| x.is_finite() && *x > 0.0)) { for (i,key) in [(Indicator::HeartRate,"bpm"),(Indicator::BodyTemperature,"celsius"),(Indicator::Glucose,"mg_dl")] { let mut o=serde_json::Map::new(); o.insert(key.into(),json!(x)); prop_assert!(Measurement::validate(i,&Value::Object(o),None).is_ok()); } let bp=json!({"systolic":x,"diastolic":x}); let ok=Measurement::validate(Indicator::BloodPressure,&bp,None).is_ok(); prop_assert!(ok); }
- #[test] fn round_trip(x in 0.01f64..1000.0, score in 0u8..=10) { for (i,v) in [(Indicator::HeartRate,json!({"bpm":x})),(Indicator::BloodPressure,json!({"systolic":x,"diastolic":x})),(Indicator::BodyTemperature,json!({"celsius":x})),(Indicator::Glucose,json!({"mg_dl":x})),(Indicator::Sleep,json!({"hours":x.min(24.0),"quality":"good","window_start":"2026-11-13T22:00:00.000Z","window_end":"2026-11-14T22:00:00.000Z"})),(Indicator::Mood,json!({"score":score})),(Indicator::Headache,json!({"score":score})),(Indicator::Symptom,json!({"body_zone":"head","score":score}))] { let m=Measurement::validate(i,&v,None).unwrap(); prop_assert_eq!(Measurement::validate(i,&m.to_value(),None).unwrap(),m); } }
+ #[test] fn round_trip(x in 0.01f64..1000.0, score in 0u8..=10) { for (i,v) in [(Indicator::HeartRate,json!({"bpm":x})),(Indicator::BloodPressure,json!({"systolic":x,"diastolic":x})),(Indicator::BodyTemperature,json!({"celsius":x})),(Indicator::Glucose,json!({"mg_dl":x})),(Indicator::Sleep,json!({"hours":x.min(24.0),"quality":"good","window_start":"2026-11-13T22:00:00.000Z","window_end":"2026-11-14T22:00:00.000Z"})),(Indicator::Mood,json!({"score":score})),(Indicator::OxygenInBlood,json!({"percentage":x.min(100.0)})),(Indicator::SpaceRadiation,json!({"usv_h":x})),(Indicator::DistanceFromEarth,json!({"km":x})),(Indicator::Nutrition,json!({"kcal":x})),(Indicator::Symptom,json!({"body_zone":"head","score":score}))] { let m=Measurement::validate(i,&v,None).unwrap(); prop_assert_eq!(Measurement::validate(i,&m.to_value(),None).unwrap(),m); } }
  #[test] fn scores(n in any::<u8>()) { prop_assert_eq!(Score::try_from(n).is_ok(),n<=10); let mood=json!({"score":n}); let ok=Measurement::validate(Indicator::Mood,&mood,None).is_ok(); prop_assert_eq!(ok,n<=10); }
  #[test] fn stable_requires_history(values in prop::collection::vec(1.0f64..200.0,0..4)) { let result=eval(&values); prop_assert!(result.status != Status::Stable || result.history_count >= 3); }
 }
@@ -317,10 +320,16 @@ fn thresholds_and_floors() {
             Escalation::FlagForGround,
         ),
         (
-            Indicator::Headache,
-            json!({"score":7}),
+            Indicator::OxygenInBlood,
+            json!({"percentage":91}),
+            Status::Alarm,
+            Escalation::Urgent,
+        ),
+        (
+            Indicator::OxygenInBlood,
+            json!({"percentage":93}),
             Status::Change,
-            Escalation::FlagForGround,
+            Escalation::SelfCare,
         ),
         (
             Indicator::Symptom,
@@ -504,4 +513,68 @@ fn sleep_requires_window() {
     let too_long = json!({"hours": 9, "quality": null,
         "window_start": "2026-11-13T22:00:00Z", "window_end": "2026-11-14T06:00:00Z"});
     assert!(Measurement::validate(Indicator::Sleep, &too_long, None).is_err());
+}
+
+#[test]
+fn new_indicator_bounds_and_plausibility_edges() {
+    use crate::plausibility::check;
+    let now = Timestamp::from_millis(1_800_000_000_000);
+    for (i, v) in [
+        (Indicator::OxygenInBlood, json!({"percentage": 0})),
+        (Indicator::OxygenInBlood, json!({"percentage": -1})),
+        (Indicator::OxygenInBlood, json!({"percentage": 100.1})),
+        (Indicator::SpaceRadiation, json!({"usv_h": -0.1})),
+        (Indicator::DistanceFromEarth, json!({"km": -1})),
+        (Indicator::Nutrition, json!({"kcal": -5})),
+    ] {
+        assert!(Measurement::validate(i, &v, None).is_err(), "{i:?} {v}");
+    }
+    let warned = |i, v: serde_json::Value| {
+        let m = Measurement::validate(i, &v, None).unwrap();
+        check(&m, now, now)
+            .iter()
+            .any(|w| w.code == "unusual_value")
+    };
+    assert!(!warned(
+        Indicator::OxygenInBlood,
+        json!({"percentage": 100})
+    ));
+    assert!(!warned(Indicator::OxygenInBlood, json!({"percentage": 80})));
+    assert!(warned(
+        Indicator::OxygenInBlood,
+        json!({"percentage": 79.9})
+    ));
+    assert!(!warned(Indicator::Nutrition, json!({"kcal": 6000})));
+    assert!(warned(Indicator::Nutrition, json!({"kcal": 6000.1})));
+    assert!(!warned(Indicator::SpaceRadiation, json!({"usv_h": 10_000})));
+    assert!(warned(
+        Indicator::SpaceRadiation,
+        json!({"usv_h": 10_000.1})
+    ));
+    assert!(!warned(
+        Indicator::DistanceFromEarth,
+        json!({"km": 401_000_000})
+    ));
+}
+
+#[test]
+fn overall_with_only_context_is_not_evaluated_without_worst() {
+    use crate::evaluate::{evaluate_series, overall};
+    let now = Timestamp::from_millis(1_800_000_000_000);
+    let ctx = evaluate_series(
+        crate::effective::SeriesKey {
+            indicator: Indicator::Nutrition,
+            body_zone: None,
+        },
+        &[],
+        now,
+    );
+    assert_eq!(
+        ctx.reason,
+        Some(crate::evaluate::NotEvaluatedReason::NotApplicable)
+    );
+    assert_eq!(ctx.history_needed, 0);
+    let o = overall(&[ctx]);
+    assert_eq!(o.status, Status::NotEvaluated);
+    assert!(o.worst.is_empty());
 }

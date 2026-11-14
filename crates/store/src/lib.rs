@@ -76,7 +76,7 @@ impl Store {
     }
     fn initialize(mut conn: Connection) -> Result<Self, StoreError> {
         let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if version > 2 {
+        if version > 3 {
             return Err(StoreError {
                 code: "invalid_schema".into(),
                 field: None,
@@ -104,6 +104,19 @@ PRAGMA user_version=1;")?;
                 "CREATE TABLE pulled_changes (seq INTEGER PRIMARY KEY, entity TEXT NOT NULL,
                      entity_id TEXT NOT NULL, payload_json TEXT NOT NULL, applied_at INTEGER NOT NULL);
                  PRAGMA user_version=2;",
+            )?;
+            tx.commit()?;
+        }
+        if version <= 2 {
+            // v3 (revisión de Sol, I1): `headache` salió del catálogo el 14-nov.
+            // Lo pendiente de subir con ese indicador se conserva, pero no se envía.
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "UPDATE outbox SET state = 'failed',
+                     last_error = 'retired_indicator: headache (catalog 2026-11-14); kept locally, not sent'
+                 WHERE state = 'pending' AND entity IN ('record', 'evaluation')
+                   AND json_extract(payload_json, '$.indicator') = 'headache';
+                 PRAGMA user_version=3;",
             )?;
             tx.commit()?;
         }

@@ -1,6 +1,6 @@
 # Umbrales del núcleo (merken-core)
 
-Versión de reglas: **`rules-2026.11.14`** · Estado: **contrastado con Hydrogen** ([informe](../../reviews/umbrales-hydrogen.md), 14-nov-2026). Las citas las aportó Hydrogen; Sol las revisa en [core-v1](../../reviews/core-v1.md).
+Versión de reglas: **`rules-2026.11.14`** · Estado: **contrastado con Hydrogen** ([informe](../../reviews/umbrales-hydrogen.md) y [v2 del catálogo](../../reviews/umbrales-hydrogen-v2.md), 14-nov-2026). Las citas las aportó Hydrogen; Sol las revisa en [core-v1](../../reviews/core-v1.md).
 Fuente de verdad en código: `crates/core/src/rules.rs`. Los `source_ref` van en inglés porque la app los muestra.
 Diseño: [decisión 003](../decisiones/003-nucleo-rust.md). Unidades del catálogo §5 de [`modelo-datos-backend.md`](modelo-datos-backend.md).
 
@@ -17,6 +17,9 @@ Diseño: [decisión 003](../decisiones/003-nucleo-rust.md). Unidades del catálo
 | `plaus.body_temperature` | `celsius < 34.0` o `> 41.5` | `demo_heuristic` | — |
 | `plaus.glucose` | `mg_dl < 40` o `> 450` | `demo_heuristic` | — |
 | `plaus.sleep` | `hours > 14` | `demo_heuristic` | — |
+| `plaus.oxygen_in_blood` | `percentage < 80` | `demo_heuristic` | Corte de confirmación elegido por Merken, sin validación publicada específica. Referencia técnica: la guía FDA 510(k) de pulsioxímetros (2013) especifica la precisión en el rango 70–100 % (corregido tras Sol) |
+| `plaus.nutrition` | `kcal > 6000` | `demo_heuristic` | Atrapa `kJ` anotados como `kcal`; NASA-STD-3001 Vol. 2 [V2 7003]: 3035 kcal/día nominales |
+| `plaus.space_radiation` | `usv_h > 10000` | `demo_heuristic` | Fondo ISS 17–42 µSv/h (Cucinotta 2014), SAA hasta ~1500 µGy/h (Dachev 2011), Marte en tránsito ~77 µSv/h (Zeitlin 2013) |
 | `plaus.future_timestamp` | `measured_at > now + 10 min` | `approved_protocol` | Contrato §6 |
 | `plaus.old_measurement` | `measured_at < now − 7 d` | `demo_heuristic` | — |
 
@@ -44,8 +47,8 @@ Diseño: [decisión 003](../decisiones/003-nucleo-rust.md). Unidades del catálo
 | sleep | `sleep.severe_low` | `hours < 5` | change ↓ | flag_for_ground | demo_heuristic | ISS: < 5 h asociado a síntomas somáticos (Jones et al., *Sleep* 2022) |
 | mood | `mood.attention_low` | `score ≤ 3` | change ↓ | self_care | demo_heuristic | — |
 | mood | `mood.severe_low` | `score ≤ 1` | change ↓ | flag_for_ground | demo_heuristic | — |
-| headache | `headache.attention_high` | `score ≥ 4` | change ↑ | self_care | published | NRS 0–10, 4–6 moderado (Krebs et al., JGIM 2007) |
-| headache | `headache.severe_high` | `score ≥ 7` | change ↑ | flag_for_ground | published | NRS 0–10, 7–10 grave (Serlin et al., *Pain* 1995) |
+| oxygen_in_blood | `oxygen_in_blood.alarm_low` | `percentage ≤ 91` | alarm | urgent | published | RCP NEWS2 (2017), escala SpO₂ 1: ≤ 91 % puntúa 3 |
+| oxygen_in_blood | `oxygen_in_blood.attention_low` | `percentage < 94` | change ↓ | self_care | published | BTS Guideline for oxygen use in adults, *Thorax* 2017;72(Suppl 1): objetivo 94–98 % |
 | symptom | `symptom.attention_high` | `score ≥ 4` | change ↑ | self_care | demo_heuristic | — |
 | symptom | `symptom.severe_high` | `score ≥ 7` | change ↑ | flag_for_ground | demo_heuristic | — |
 | events | `event.alarm` | `need_help`, `syncope`, `visual_field_loss`, `suspected_clot`, **sin caducidad** | alarm | urgent | approved_protocol | RF-10 (requisitos) |
@@ -68,7 +71,15 @@ Ventana de 14 días, mínimo 3 registros previos, mediana. Diferencias que cuent
 | glucose | 30 mg/dL | ↑ ↓ |
 | sleep | 1.5 h | ↓ |
 | mood | 3 puntos | ↓ |
-| headache, symptom | 3 puntos | ↑ |
+| oxygen_in_blood | 3 puntos de % | ↓ |
+| symptom | 3 puntos | ↑ |
 
 ### Datos caducados (`stale_after`, `demo_heuristic`)
-heart_rate, blood_pressure, body_temperature, sleep, mood, headache: 48 h · glucose, symptom: 72 h.
+heart_rate, blood_pressure, body_temperature, sleep, mood, oxygen_in_blood: 48 h · glucose, symptom: 72 h.
+
+### Indicadores de contexto (no se evalúan)
+`space_radiation` (µSv/h), `distance_from_earth` (km) y `nutrition` (kcal) se validan (≥ 0) y se guardan, pero no tienen reglas de estado (Hydrogen v2: OK).
+- **Radiación:** los límites de NASA-STD-3001 Vol. 1 Rev. C son de **dosis efectiva acumulada**, no de tasa: carrera `< 600 mSv` (§4.8.2 [V1 4030]) y evento solar `< 250 mSv` (§4.8.3 [V1 4031]). La app todavía no integra la tasa en dosis acumulada (RF-12, pendiente), así que no compara contra esos límites.
+- **Nutrición:** referencia informativa NASA-STD-3001 Vol. 2 [V2 7003] (3035 kcal/día o EER, Tabla 7.1-1) y [V2 7004] (+200 kcal por hora de EVA). El riesgo real en órbita es la subingesta crónica (~80 % de lo recomendado, Smith et al. 2005), que hoy no se vigila.
+- **SpO₂:** medir en el dedo y en reposo. Los sensores en la frente dan lecturas falsamente bajas por la congestión venosa cefálica (Shelley 2005); el frío y el movimiento también. En hábitats de exploración (8,2 psia / 34 % O₂) la SpO₂ normal puede bajar a 94–95 %, por eso `attention_low` es `< 94` y no `≤ 95`.
+- **Cefalea:** al pasar a `symptom` en `head` pierde la cita publicada de la escala NRS (≥ 4 moderado, ≥ 7 grave), porque `symptom.*` es `demo_heuristic`. Los cortes numéricos son los mismos. `headache` salió del catálogo el 14-nov: el dolor de cabeza va como `symptom` en `head`.

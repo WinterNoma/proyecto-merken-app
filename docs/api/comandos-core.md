@@ -52,8 +52,15 @@ Formato de `value` por indicador (unidad fija del catálogo, no hace falta envia
 | `glucose` | `{ mg_dl: 95 }` | > 0 |
 | `sleep` | `{ hours: 5.5, quality: "poor", window_start: "…Z", window_end: "…Z" }` | `quality`: `poor`, `fair`, `good` o `null`. **Ventana obligatoria** (contrato §5): fin posterior al inicio, ≤ 24 h, y `hours` no mayor que la ventana. Pide "Went to bed" / "Woke up" |
 | `mood` | `{ score: 6 }` | Entero 0–10. **0 = very bad, 10 = very good** |
-| `headache` | `{ score: 6 }` | Entero 0–10. **0 = none, 10 = worst** |
-| `symptom` | `{ body_zone: "left_foot", score: 4, description: "My foot hurts" }` | Igual que `headache`; `description` ≤ 2000 caracteres |
+| `oxygen_in_blood` | `{ percentage: 98.2 }` | SpO₂ en %, mayor que 0 y ≤ 100. Pedir medir **en el dedo y en reposo** |
+| `space_radiation` | `{ usv_h: 12.5 }` | µSv/h, ≥ 0. **Contexto**: no se evalúa |
+| `distance_from_earth` | `{ km: 384400 }` | km desde la superficie de la Tierra (en órbita baja, la altitud: ISS ≈ 400), ≥ 0. **Contexto**: no se evalúa |
+| `nutrition` | `{ kcal: 2400 }` | kcal, ≥ 0. **Contexto**: no se evalúa |
+| `symptom` | `{ body_zone: "left_foot", score: 4, description: "My foot hurts" }` | Entero 0–10. **0 = none, 10 = worst**; `description` ≤ 2000 caracteres |
+
+`headache` ya no existe (el catálogo lo quitó el 14-nov). Un dolor de cabeza se registra como `symptom` con `body_zone: "head"`.
+
+**Indicadores de contexto** (`space_radiation`, `distance_from_earth`, `nutrition`): se guardan y se suben igual que los demás, pero no tienen estado de salud. En `get_status` salen dentro de `indicators` solo si hay datos, con `status: "not_evaluated"`, `reason: "not_applicable"` y `latest_value`; nunca cambian `overall`. Píntalos como dato, sin color de estado.
 
 Opcionales: `measured_at` (por defecto, ahora), `note` (≤ 2000 caracteres), `source` (`form` por defecto; `text`/`voice` para el intérprete).
 
@@ -63,7 +70,7 @@ Se **rechaza** solo lo que no tiene sentido (texto en vez de número, 0 o negati
 
 | `status` | Texto sugerido | Notas |
 |---|---|---|
-| `not_evaluated` | `Not evaluated` | `reason`: `no_data` → "No data"; `too_few_data` → "Need {history_needed} previous readings ({history_count}/{history_needed})" (`history_count` no cuenta la última); `stale` → "Last reading too old" |
+| `not_evaluated` | `Not evaluated` | `reason`: `no_data` → "No data"; `too_few_data` → "Need {history_needed} previous readings ({history_count}/{history_needed})" (`history_count` no cuenta la última); `stale` → "Last reading too old"; `not_applicable` → sin estado, mostrar solo el valor |
 | `stable` | `Stable` | Dentro de su historial reciente |
 | `change` | `Change` | Respecto a su historial reciente o fuera del rango habitual. **No es una alarma clínica.** `direction` ↑/↓ y `persistent` |
 | `alarm` | `Alarm` | Siempre con icono y texto, no solo color |

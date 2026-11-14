@@ -529,8 +529,13 @@ impl Store {
     ) -> Result<(), StoreError> {
         let mut pending = Vec::new();
         for e in evals {
-            // "No hay datos" no es un hallazgo: no se guarda ni se sube.
-            if e.reason == Some(NotEvaluatedReason::NoData) {
+            // "No hay datos" no es un hallazgo: no se guarda ni se sube. Los
+            // indicadores de contexto tampoco: el contrato §3 no admite
+            // `not_applicable` (revisión de Sol, B2). Sus registros sí se suben.
+            if matches!(
+                e.reason,
+                Some(NotEvaluatedReason::NoData | NotEvaluatedReason::NotApplicable)
+            ) {
                 continue;
             }
             let key = match e.input_event_ids.first() {
@@ -808,11 +813,33 @@ fn reconcile_outbox(tx: &Transaction<'_>, entity: &str, id: &str) -> Result<(), 
     Ok(())
 }
 
+/// `headache` salió del catálogo el 14-nov (revisión de Sol, B1). Un registro
+/// histórico bien formado no bloquea el `pull`: queda íntegro en
+/// `pulled_changes`, pero no se convierte en un indicador vigente.
+fn pull_retired_headache(c: &PulledChange) -> Result<usize, StoreError> {
+    let p = &c.payload;
+    let score_ok = p
+        .get("value")
+        .and_then(Value::as_object)
+        .filter(|v| v.len() == 1)
+        .and_then(|v| v.get("score"))
+        .and_then(Value::as_u64)
+        .is_some_and(|s| s <= 10);
+    let ok = p.get("record_id").and_then(Value::as_str) == Some(c.id.as_str())
+        && p.get("unit").and_then(Value::as_str) == Some("score_0_10")
+        && p.get("measured_at").and_then(Value::as_str).is_some()
+        && score_ok;
+    if ok { Ok(0) } else { Err(bad_payload(c)) }
+}
+
 fn pull_record(
     tx: &Transaction<'_>,
     c: &PulledChange,
     received_at: Timestamp,
 ) -> Result<usize, StoreError> {
+    if c.payload.get("indicator").and_then(Value::as_str) == Some("headache") {
+        return pull_retired_headache(c);
+    }
     let dto: RecordDto = serde_json::from_value(c.payload.clone()).map_err(|_| bad_payload(c))?;
     if dto.record_id != c.id {
         return Err(bad_payload(c));
