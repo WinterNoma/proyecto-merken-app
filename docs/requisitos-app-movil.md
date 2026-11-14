@@ -1,6 +1,6 @@
 # Requisitos — App móvil de salud para astronautas
 
-Versión 1.1 · 14-nov-2026 · Repo: https://github.com/WinterNoma/proyecto-merken-app
+Versión 1.2 · 14-nov-2026 · Repo: https://github.com/WinterNoma/proyecto-merken-app
 Base: [reto](https://www.spaceappschallenge.org/2026/challenges/health-monitoring-software/), [investigación](investigacion/00-resumen.md), [revisión de Sol v0](../reviews/requisitos-app-movil.md), [decisión de interfaz](decisiones/001-interfaz-tauri.md).
 
 ## 0. Lo que sabemos y lo que falta
@@ -20,7 +20,7 @@ El astronauta registra sus indicadores en pocos segundos y ve cómo ha cambiado 
 
 1. **Primero sin conexión.** Todas las funciones de la demo van sin red. La red solo añade dos cosas: copia de seguridad y análisis de Tierra.
 2. **Las decisiones de salud las toma el núcleo determinista en Rust.** No las toman ni la interfaz, ni el SLM, ni el servidor. El servidor aporta análisis, pero nunca rebaja una alarma local.
-3. **El SLM ayuda, no decide.** Estructura lo que escribe el usuario, explica y redacta. Nunca clasifica la gravedad ni recomienda tratamientos.
+3. **El SLM ayuda, no decide.** Estructura lo que escribe el usuario, explica y **sugiere mejoras y prevención** a partir de las fichas de la app (RF-31), citándolas. Nunca asigna estados ni gravedad, y nunca da fármacos, dosis ni diagnósticos.
 4. **Que falte información no es estar sano.** Sin datos suficientes, el estado es "sin evaluación", nunca verde.
 5. **Todo se puede explicar.** Cada estado indica qué datos, qué referencia, qué regla (con su versión) y qué fuente lo produjeron.
 
@@ -53,9 +53,11 @@ Prioridad: **M** = imprescindible para la demo · **S** = debería estar · **C*
 - **RF-04 (S)** El resto de constantes: presión, temperatura, SpO₂, frecuencia respiratoria, masa e ingesta.
 - **RF-05 (S)** Contexto ambiental: CO₂ de cabina y dosis de radiación, separados de la evaluación de síntomas (§5.3).
 - **RF-06 (S)** Recordatorios de medición.
+- **RF-29 (M)** **Catálogo de indicadores ampliable con entrada manual.** Cualquier indicador se puede introducir a mano, incluidos los que normalmente dan sensores o pruebas más complejas: **glucosa (mg/dL)**, resultados de una prueba (p. ej., la conclusión de una ecografía como texto o categoría) y valores leídos en un aparato. Cada indicador del catálogo define su unidad, su rango válido (para rechazar valores imposibles, RNF-02), la zona del cuerpo y si tiene referencia personal. Añadir un indicador no exige cambiar el esquema de la base de datos (columna `datos` en JSON, [decisión 002](decisiones/002-base-de-datos.md)).
 
 ### 5.2 Figura humana
 - **RF-07 (M)** Figura en SVG con zonas que se pueden tocar. Cada zona muestra el peor estado de sus indicadores, y una alarma pesa más que cualquier estado favorable. Hay una alternativa en forma de lista, y el color siempre va acompañado de un icono y un texto.
+- **RF-30 (M)** **Ficha de cada zona** al tocarla. Muestra su **función** (qué hace esa parte del cuerpo), su estado actual, qué peligro del vuelo la afecta (radiación, aislamiento, distancia, gravedad o ambiente hostil, según el HRP), qué se mide a bordo y por qué. Los textos son estáticos y cada uno cita su fuente.
 
 ### 5.3 Evaluación (núcleo en Rust)
 - **RF-08 (M)** **Referencia personal previa al vuelo**, ficticia y fija para la demo. Se define su origen, su ventana y qué pasa cuando hay pocos datos o la dispersión es cero.
@@ -64,6 +66,11 @@ Prioridad: **M** = imprescindible para la demo · **S** = debería estar · **C*
 - **RF-11 (M)** Cada evaluación indica sus datos, su referencia, la regla con su versión y la fuente con el apartado exacto. El tipo de fuente es uno de estos: evidencia publicada, protocolo aprobado o heurística de demo.
 - **RF-12 (S)** Exposición ambiental aparte, cada una con su norma y su ámbito: CO₂ como **promedio horario** de la cabina y radiación como **dosis efectiva acumulada de carrera**. No se usan para poner color a los síntomas.
 - **RF-13 (C)** Mostrar coincidencias en el tiempo (p. ej., CO₂ alto y cefalea) sin decir que una cosa causa la otra.
+- **RF-32 (M)** **Escalado según el estado**, decidido por el núcleo:
+  - **Estable** → seguir igual.
+  - **Cambio** → sugerencias del v5 en el móvil (RF-15).
+  - **Cambio persistente** → se marca "para revisión de Tierra" y sale en el siguiente envío. La respuesta (del modelo de Tierra o de un médico real) llega por la API cuando haya conexión (RF-33).
+  - **Alarma** → RF-10, sin esperar a Tierra.
 
 ### 5.4 Asistente con SLM (en el móvil, sin conexión)
 - **RF-14 (M)** **Registro en lenguaje natural:** el usuario escribe, por ejemplo, "me duele la cabeza un 6 desde esta mañana y dormí mal". La app propone campos estructurados, el núcleo los valida y el usuario los **confirma** antes de guardarlos. No se guarda nada sin esa confirmación. El intérprete tiene dos capas:
@@ -71,7 +78,12 @@ Prioridad: **M** = imprescindible para la demo · **S** = debería estar · **C*
   2. **SLM como respaldo** para lo que la capa 1 no entienda, con la salida **restringida por gramática** (GBNF/JSON Schema de llama.cpp). Así solo puede devolver un JSON con el esquema de `registro`, y los campos dudosos los marca como "sin interpretar".
      **Qué aporta frente a la capa 1:** entiende expresiones coloquiales ("no pegué ojo", "la cabeza me explota"), frases mezcladas en español e inglés y frases largas con varios datos, negaciones y tiempos ("ayer dormí mal pero hoy ya no me duele"). Solo se carga cuando la capa 1 falla. Si tampoco entiende la frase, se abre el **formulario manual** con lo que ya se haya entendido rellenado. Que entre en la demo se decide con la prueba de voz.
   **Modelo de extracción aparte, muy pequeño y bilingüe (español/inglés)** ([investigación 07](investigacion/07-voz-interprete.md)): candidato principal **Granite 4.0 350M Q4_K_M** (237 MB, Apache 2.0) y alternativa **Qwen3-0.6B Q4_K_M** (484 MB, Apache 2.0, sin thinking). FunctionGemma 270M solo si el compañero entrena una tarea específica (licencia Gemma Terms). La gramática garantiza el formato, **no que la extracción sea correcta**: hay que evaluarlo con frases nuestras y probablemente ajustar un LoRA. Contrato de salida: claves y enums cerrados, `null` si falta un valor, el fragmento de texto que respalda cada campo y la lista de partes sin interpretar. El modelo no inventa horas: "desde esta mañana" queda ambiguo hasta que el usuario lo confirma. El v5 actual no extrae ([revisión](../reviews/slm-space-health-v5.md)).
-- **RF-15 (S)** **Explicar la evaluación** con lenguaje sencillo. El SLM solo recibe los motivos y las fuentes que ha dado el núcleo, y su respuesta no puede contradecir el estado. **Candidato: SLM space-health v5** (Qwen3-1.7B + LoRA), que ya hace esto con hallazgos sintéticos. La salida de `core` debe alinearse con su contrato de entrada (`motor`).
+- **RF-15 (M)** **Explicar y sugerir en el móvil, en tiempo real y sin conexión.** Lo hace el **SLM space-health v5** (Qwen3-1.7B + LoRA).
+  - **Explicar** la evaluación con lenguaje sencillo. El v5 ya lo hace (40/40 con hallazgos sintéticos).
+  - **Sugerir mejoras de salud y prevención** según el estado, por ejemplo sueño, ejercicio, hidratación o descanso. El núcleo elige las fichas aplicables (RF-31) y se las pasa en `documents`. El v5 redacta la sugerencia **citando esas fichas** y no puede añadir nada que no esté en ellas.
+  - La salida no puede contradecir el estado, se marca como "sugerencia generada por IA" y se descarta si no pasa la validación.
+  - **Pendiente con el compañero:** entrenar y evaluar la tarea de *sugerir*, porque hoy solo está probada la de explicar ([revisión](../reviews/slm-space-health-v5.md)). La salida de `core` debe alinearse con su contrato de entrada (`motor`).
+- **RF-31 (M)** **Biblioteca local de fichas de contramedidas**, que es lo que alimenta al v5. Son fichas cortas por indicador y estado (qué hacer, por qué y cuándo pedir ayuda), cada una con su fuente NASA/HRP y contrastadas por Sol y Hydrogen. Van dentro de la app y tienen versión.
 - **RF-16 (S)** **Redactar el resumen** del informe para los médicos a partir de los datos estructurados, marcado como "borrador generado por IA" y editable.
 - **RF-17 (C)** Preguntas sobre los protocolos y documentos cargados en la app (búsqueda local sobre ellos), citando el fragmento de donde sale la respuesta.
 - **RF-18 (S)** **Entrada por voz sin conexión**, que alimenta RF-14 ([investigación 07](investigacion/07-voz-interprete.md)):
@@ -93,10 +105,18 @@ Prioridad: **M** = imprescindible para la demo · **S** = debería estar · **C*
 - **RF-24 (S)** Retraso de comunicación simulado (Tierra, Luna o Marte) y modo "sin enlace", para la demo.
 - **RF-25 (C)** Actualizar las reglas o los protocolos desde el servidor, con versiones y sin borrar las anteriores.
 
+### 5.5b Análisis en Tierra (backend)
+- **RF-33 (M)** **La API de Tierra recibe los datos e interpreta con un modelo propio**, que va aparte y es más pesado que el del móvil.
+  - **Flujo:** la API recibe los lotes (RF-20) → los guarda en MySQL → el modelo de Tierra los analiza (sobre todo lo marcado "para revisión", RF-32) → un **médico de vuelo real puede revisar, corregir o escribir** el análisis → el móvil lo descarga (RF-21).
+  - **Cada análisis lleva:** autor (`modelo` o `médico`), versión del modelo, datos analizados, resumen, sugerencias y nivel de atención sugerido. En el móvil se muestra junto al estado local y **nunca rebaja una alarma local**.
+  - **Pendiente:** el contrato de entrada y salida (OpenAPI), qué modelo usa Tierra y quién lo construye.
+- **RF-34 (C, solo concepto)** **Imágenes:** foto de un síntoma (piel, ojo) o imagen de una prueba (ecografía) → se guarda en el móvil → se sube a Tierra cuando hay conexión → se almacena → se analiza después → vuelve una recomendación por RF-21. Fuera de la demo por ahora; solo queda diseñado.
+
 ### 5.6 Historial e informe
 - **RF-26 (M)** Una gráfica reutilizable por indicador, con la banda de la referencia y los eventos marcados.
 - **RF-27 (M)** Informe en texto con vista previa: datos, evaluaciones, alarmas y análisis recibidos.
 - **RF-28 (M)** Datos sintéticos que se pueden reiniciar, con tres escenarios: **seguimiento habitual**, **cambio persistente** y **evento de alarma**.
+- **RF-35 (C, para después)** **Animaciones** (transiciones de estado en la figura, pulso animado, gráficas que se dibujan progresivamente). Ahora la prioridad es lo funcional; lo visual va después.
 
 ## 6. Requisitos no funcionales
 
@@ -104,7 +124,10 @@ Prioridad: **M** = imprescindible para la demo · **S** = debería estar · **C*
 - **RNF-08** El SLM no bloquea nunca la interfaz: se puede cancelar, muestra el progreso y tiene un tiempo máximo. Para la demo funciona en modo determinista (temperatura 0 y semilla fija).
 - **RNF-09** **Memoria:** hay tres modelos (Whisper base ≈60 MB, Granite 350M ≈237 MB y SLM v5 ≈1,1 GB) y se cargan **de uno en uno**, nunca todos a la vez. Mientras se registra, el v5 no está en memoria. El pico de RAM con la app y la WebView se mide en el dispositivo de referencia (§11) y de ahí sale el límite.
 - **RNF-13** **Instalación de los modelos:** no van dentro del APK (≈1,4 GB en total). Se descargan o se copian **antes de quedarse sin conexión**, con una pantalla de "preparar para la misión". Se comprueba el **hash** de cada archivo y la versión del par base + LoRA del v5. Si falta un modelo o está incompleto, esa función se desactiva, la app lo indica y sigue funcionando con los formularios.
-- **RNF-14 (S)** **Interfaz bilingüe**, en español (por defecto) e inglés, el mismo par de idiomas que la voz. Los textos están en archivos de traducción, no dentro del código.
+- **RNF-14 (M)** **Todo lo que se ve en la app está en inglés** (requisito de la NASA): pantallas, botones, fichas (RF-30, RF-31), mensajes de error, estados, informe y la salida de los modelos. Los textos van en un archivo de cadenas (`en`), no repartidos por el código. La documentación interna del equipo puede seguir en español.
+  - **Voz e intérprete:** el **inglés es el idioma principal** (M). Entender también español es un extra (S), pero la app responde siempre en inglés.
+  - **Consecuencia para el v5:** hoy responde en español (`system.txt`), así que **hay que adaptarlo al inglés** (prompt de sistema y reentrenamiento o evaluación del LoRA). Es una tarea para el compañero del SLM. Whisper y Granite ya funcionan en inglés.
+  - El intérprete en Rust empieza por los patrones en inglés.
 - **RNF-10** Seguridad: la conexión usa HTTPS con un token por dispositivo, y los datos se cifran en reposo (S, p. ej., SQLCipher).
 - **RNF-11** El texto médico se contrasta con Sol y con Hydrogen, y cita fuentes de la NASA. La app muestra el aviso "herramienta de apoyo, no diagnóstico" (que **no sustituye** a tener reglas correctas).
 - **RNF-12** Cuando una sincronización falla o se interrumpe, no se pierde ni se duplica nada. Se prueba cortando la red a mitad de una subida.
@@ -144,7 +167,7 @@ Android en un dispositivo acordado → registro con formulario y en lenguaje nat
 ## 9. Fuera de alcance
 
 - Sensores o wearables reales (se simulan).
-- Diagnóstico automático o recomendación de fármacos.
+- Diagnóstico automático, fármacos y dosis (ni el v5 ni el modelo de Tierra los dan en la app).
 - Validación clínica real: las reglas son de demostración y van marcadas como tales.
 
 ## 10. Decisiones pendientes
