@@ -6,8 +6,8 @@
 use crate::{
     Store, StoreError,
     api::{
-        BodyZoneStatus, CorrectRecordInput, ListRecordsInput, LogRecordInput, LogResult,
-        RecordItem, StatusResponse, SyncStatus,
+        BodyZoneStatus, CorrectRecordInput, ImportResult, ListRecordsInput, LogRecordInput,
+        LogResult, RecordItem, StatusResponse, SyncStatus,
     },
 };
 use merken_core::{
@@ -709,6 +709,92 @@ impl Store {
         self.status(now, app_version)
     }
 
+    /// `import_synthetic`: carga registros **sintéticos** de la API de simulación
+    /// (formato `RecordDto` del contrato). Se guardan como DEMO: nunca entran en
+    /// la outbox y la primera escritura real los borra. Sustituye cualquier DEMO
+    /// anterior (no se mezclan astronautas). Un registro inválido se cuenta en
+    /// `rejected` y no detiene la carga.
+    pub fn import_synthetic(
+        &mut self,
+        astronaut_id: &str,
+        display_name: &str,
+        records: &[Value],
+        now: Timestamp,
+    ) -> Result<ImportResult, StoreError> {
+        if self.has_real_data()? {
+            return Err(err(
+                "real_data_present",
+                "astronaut_id",
+                "Simulated data cannot be loaded while real data is stored on this device",
+            ));
+        }
+        merken_core::validate_text("display_name", display_name, 200)?;
+        if display_name.trim().is_empty() {
+            return Err(err(
+                "invalid_value",
+                "display_name",
+                "Display name is empty",
+            ));
+        }
+        // Un registro con fecha posterior a `now + FUTURE` no se carga: el núcleo
+        // lo evaluaría como reciente aunque el reloj de la simulación vaya
+        // adelantado (revisión de Sol, I2).
+        let latest = now.saturating_add_ms(merken_core::rules::FUTURE);
+        let mut seen = std::collections::HashSet::new();
+        let mut prepared = Vec::new();
+        let mut rejected = 0_usize;
+        for raw in records {
+            let parsed = serde_json::from_value::<RecordDto>(raw.clone())
+                .ok()
+                .filter(|dto| {
+                    raw.get("astronaut_id").and_then(Value::as_str) == Some(astronaut_id)
+                        && synthetic_dto_ok(dto, latest)
+                })
+                .and_then(|dto| {
+                    Measurement::validate(dto.indicator, &dto.value, Some(&dto.unit))
+                        .ok()
+                        .map(|m| (dto, m))
+                });
+            match parsed {
+                Some((mut dto, m)) if seen.insert(dto.record_id.clone()) => {
+                    // Una corrección de la simulación no se encadena: cada lectura va sola.
+                    dto.replaces = None;
+                    dto.value = m.to_value();
+                    prepared.push((dto, m.body_zone()));
+                }
+                _ => rejected += 1,
+            }
+        }
+        let mut profile = merken_seed::demo_profile(now);
+        if let Some(a) = profile.get_mut("astronaut").and_then(Value::as_object_mut) {
+            a.insert("astronaut_id".into(), Value::from(astronaut_id));
+            a.insert("username".into(), Value::from("simulation"));
+            a.insert(
+                "display_name".into(),
+                Value::from(format!("SIMULATION {display_name}")),
+            );
+        }
+        let first = prepared.iter().map(|(d, _)| d.measured_at).min();
+        let last = prepared.iter().map(|(d, _)| d.measured_at).max();
+        // Borrar la DEMO anterior, guardar el perfil y los registros va en una
+        // sola transacción: si algo falla, la DEMO anterior queda intacta (Sol, B1).
+        let tx = self.conn.transaction()?;
+        crate::clear_demo_in(&tx)?;
+        crate::upsert_profile_in(&tx, &profile, true, now)?;
+        for (dto, zone) in &prepared {
+            insert_record(&tx, dto, *zone, &dto.record_id, true)?;
+        }
+        tx.commit()?;
+        Ok(ImportResult {
+            astronaut_id: astronaut_id.to_owned(),
+            display_name: display_name.to_owned(),
+            imported: prepared.len(),
+            rejected,
+            first_measured_at: first,
+            last_measured_at: last,
+        })
+    }
+
     /// Aplica una página de `pull` y guarda el cursor en una sola transacción
     /// (revisión de Sol, B4 y B5):
     /// - Todo cambio se conserva íntegro en `pulled_changes`, sea del tipo que sea.
@@ -1095,4 +1181,22 @@ fn enqueue(
         params![entity, id, serde_json::to_string(payload)?, now.millis()],
     )?;
     Ok(())
+}
+
+/// Comprobaciones del contrato que `Measurement::validate` no cubre (revisión
+/// de Sol, I3): versión de esquema conocida, identificador razonable, textos
+/// dentro de sus límites y fecha no futura.
+fn synthetic_dto_ok(dto: &RecordDto, latest: Timestamp) -> bool {
+    let id_ok = |id: &str| !id.trim().is_empty() && id.chars().count() <= 64;
+    let text_ok = |t: &Option<String>, max: usize| {
+        t.as_deref()
+            .is_none_or(|t| merken_core::validate_text("text", t, max).is_ok())
+    };
+    dto.schema_version == 1
+        && id_ok(&dto.record_id)
+        && dto.external_id.as_deref().is_none_or(id_ok)
+        && text_ok(&dto.note, 2000)
+        && text_ok(&dto.app_version, 64)
+        && dto.measured_at <= latest
+        && dto.logged_at <= latest
 }

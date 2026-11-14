@@ -125,3 +125,14 @@ pub struct RaiseEventInput {
     pub body_zone: Option<BodyZone>,
     pub occurred_at: Option<Timestamp>,
 }
+
+/// Resultado de `import_synthetic` (datos de la API de simulación, guardados como DEMO).
+#[derive(Clone, Debug, Serialize)]
+pub struct ImportResult {
+    pub astronaut_id: String,
+    pub display_name: String,
+    pub imported: usize,
+    pub rejected: usize,
+    pub first_measured_at: Option<Timestamp>,
+    pub last_measured_at: Option<Timestamp>,
+}
