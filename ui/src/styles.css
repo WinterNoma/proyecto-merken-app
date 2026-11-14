@@ -127,7 +127,7 @@ textarea::placeholder { color: var(--mk-text-muted); opacity: 1; }
 .crew-dot[aria-pressed="true"] { border-color: var(--mk-accent); }
 .crew-dot[aria-pressed="true"] .dot-mark { background: var(--mk-accent); border-color: var(--mk-accent); }
 .crew-dot:hover { background: var(--mk-surface-raised); }
-h1, h2, h3, h4, p, dd, td, th, .status-chip, .caption, .feed-status { overflow-wrap: anywhere; }
+h1, h2, h3, h4, p, dd, td, th, .status-chip, .caption, .feed-status { overflow-wrap: break-word; hyphens: none; }
 .skip-link { position: fixed; top: var(--mk-space-2); left: var(--mk-space-4); transform: translateY(-200%); z-index: 10; padding: var(--mk-space-3); background: var(--mk-surface); border: 1px solid var(--mk-border); }
 .skip-link:focus { transform: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
@@ -135,8 +135,8 @@ h1, h2, h3, h4, p, dd, td, th, .status-chip, .caption, .feed-status { overflow-w
 /* Single-screen composition. Compact dimensions are deliberate for 375 px. */
 :focus-visible { outline: 2px solid var(--mk-focus); outline-offset: 3px; }
 .app-shell { width: min(100% - 2rem, 1040px); }
-.app-header { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; gap: 12px; padding-block: 16px; background: var(--mk-bg); position: sticky; top: 0; z-index: 2; }
-.wordmark { font-size: 36px; padding: 0; margin: 0; letter-spacing: .06em; }
+.app-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; padding-block: 16px; background: var(--mk-bg); position: sticky; top: 0; z-index: 2; }
+.wordmark { font-size: clamp(24px, 7.5vw, 36px); padding: 0; margin: 0; letter-spacing: .06em; white-space: nowrap; align-self: center; }
 .crew-trigger { width: 100%; min-height: 44px; padding: 6px 8px; gap: 4px; }
 .crew-trigger > .icon:first-child, .crew-trigger .caption { display: none; }
 .crew-trigger > .icon:last-child { width: 14px; flex-basis: 14px; }
@@ -152,7 +152,7 @@ h1, h2, h3, h4, p, dd, td, th, .status-chip, .caption, .feed-status { overflow-w
 .feed-status { padding: 0; border: 0; background: none; color: var(--mk-text-muted); font-size: 12px; min-height: 0; }
 .demo-tag { color: var(--mk-neutral); border: 1px solid var(--mk-border); padding: 0 4px; font-size: 12px; }
 .body-stage { display: grid; grid-template-columns: minmax(0, 1fr) clamp(92px, 26vw, 170px) minmax(0, 1fr); gap: 8px; align-items: stretch; }
-.reading-column { display: grid; grid-template-rows: repeat(4, minmax(86px, auto)); gap: 8px; min-width: 0; }
+.reading-column { display: grid; grid-template-rows: repeat(4, minmax(86px, 1fr)); gap: 8px; min-width: 0; }
 .vital-card { width: 100%; min-width: 0; padding: 7px; color: var(--mk-text); text-align: left; border: 1px solid var(--mk-border); border-left: 3px solid var(--mk-state-ink); border-radius: 4px; gap: 5px; cursor: pointer; justify-content: center; }
 #vital-mood, #vital-nutrition { border: 1px solid var(--mk-border); border-left: 3px solid var(--mk-neutral); }
 .card-label { font-size: 12px; font-weight: 600; line-height: 1.25; color: var(--mk-text-muted); }
@@ -167,6 +167,7 @@ h1, h2, h3, h4, p, dd, td, th, .status-chip, .caption, .feed-status { overflow-w
 .body-map { width: 100%; max-height: none; overflow: visible; }
 .body-zone { fill: var(--mk-state-fill); stroke: var(--mk-state-ink); stroke-width: 1.25; vector-effect: non-scaling-stroke; cursor: pointer; }
 .body-zone[data-tone="neutral"] { fill: var(--mk-surface-raised); stroke: var(--mk-border); }
+.zone-hit { fill: none; stroke: transparent; stroke-width: 36; stroke-linejoin: round; pointer-events: stroke; cursor: pointer; }
 .body-zone[aria-pressed="true"] { stroke: var(--mk-accent); stroke-width: 3; stroke-dasharray: 3 2; }
 .body-zone:focus-visible { outline: none; stroke: var(--mk-focus); stroke-width: 4; stroke-dasharray: 2 2; }
 .body-extra { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }

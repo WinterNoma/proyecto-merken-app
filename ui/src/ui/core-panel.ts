@@ -137,6 +137,9 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
     // Remove only on a successful authoritative status response (e.g. demo
     // replacement). Refresh failures never call this function or hide alarms.
     for (const [key, notice] of alertViews) if (!liveKeys.has(key)) { notice.remove(); alertViews.delete(key); alertSignatures.delete(key); }
+    for (const key of announced) if (!liveKeys.has(key)) announced.delete(key);
+    const referenced = new Set(alerts.flatMap(alert => alert.input_event_ids));
+    for (const id of knownEvents.keys()) if (!referenced.has(id)) knownEvents.delete(id);
     if (newNames.length) setText(element("#alarm-announcement"), "Alarm. " + newNames.join(". ") + ". Review the on-device record.");
   }
   function renderEvaluations(evaluations: Evaluation[], views: Map<string, EvaluationView>, container: HTMLElement, demo: boolean): void {
@@ -223,8 +226,9 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
     try { return await request; } finally { if (pending === request) pending = null; }
   }
   retry.addEventListener("click", () => { void refresh(true); });
+  demoButton.disabled = !available;
   demoButton.addEventListener("click", async () => {
-    if (actionBusy) return;
+    if (!available || stopped || actionBusy) return;
     actionBusy = true; demoButton.disabled = true;
     demoButton.setAttribute("aria-busy", "true"); setText(demoButton, "Loading demo data…");
     setText(element("#core-action-result"), "");
@@ -265,8 +269,28 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
         indicatorViews.forEach(view => view.node.remove()); indicatorViews.clear();
         symptomViews.forEach(view => view.node.remove()); symptomViews.clear();
         alertViews.forEach(view => view.remove()); alertViews.clear(); alertSignatures.clear();
+        announced.clear(); knownEvents.clear();
+        setText(element("#core-profile"), "Refreshing profile…");
+        paintBadge(element("#core-overall"), statusCopy("not_evaluated"));
       }
-      onChange(current, profile, false);
+      // Show the evaluation the core confirmed with this save right away, so a
+      // failed refresh never leaves an older status on screen. The aggregate
+      // summary is not recomputed here: it waits for the next getStatus().
+      const evaluation = result.evaluation;
+      const symptom = evaluation.indicator === "symptom";
+      const views = symptom ? symptomViews : indicatorViews;
+      const key = evaluation.indicator + ":" + (evaluation.body_zone ?? "");
+      let view = views.get(key);
+      if (!view) {
+        view = evaluationView(chartIndicators.includes(evaluation.indicator as Indicator));
+        views.set(key, view);
+        element(symptom ? "#core-symptoms" : "#core-indicators").append(view.node);
+      }
+      view.update(evaluation, result.record.is_demo);
+      record.hidden = false;
+      setText(element("#core-evaluated"), "Latest saved evaluation shown. Summary update pending.");
+      if (evaluation.status === "alarm") setText(element("#alarm-announcement"), "Alarm. " + indicatorName(evaluation.indicator) + ". Review the on-device record.");
+      onChange(current, profile, false, evaluation.status === "alarm" ? evaluation : undefined);
     },
     acceptHelp(result): void {
       revision += 1;

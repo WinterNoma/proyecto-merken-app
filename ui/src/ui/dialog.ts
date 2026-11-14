@@ -19,8 +19,10 @@ export function modal(dialog: HTMLDialogElement, canClose: () => boolean = () =>
   dialog.addEventListener("keydown", event => {
     if (event.key !== "Tab") return;
     const controls = Array.from(dialog.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), select:not(:disabled), textarea:not(:disabled), input:not(:disabled), a[href], [tabindex="0"]',
-    )).filter(node => !node.hidden && node.getClientRects().length > 0);
+      'button:not(:disabled), select:not(:disabled), textarea:not(:disabled), input:not(:disabled), a[href], summary, [tabindex="0"]',
+    )).filter(node => !node.hidden && !node.closest("[hidden]") && node.getClientRects().length > 0
+      // A control inside a closed <details> (other than its summary) is not reachable.
+      && (node.tagName === "SUMMARY" || !node.closest("details:not([open])")));
     const first = controls[0];
     const last = controls[controls.length - 1];
     if (!first || !last) { event.preventDefault(); dialog.focus(); return; }

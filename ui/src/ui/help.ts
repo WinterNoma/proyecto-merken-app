@@ -1,4 +1,4 @@
-import { core, type StatusResponse } from "../core-api";
+import { core, isCoreError, type StatusResponse } from "../core-api";
 import type { CorePanel } from "./core-panel";
 import { element, el, setText, utc } from "./dom";
 import { icon } from "./icons";
@@ -49,6 +49,8 @@ export function setupHelp(available: boolean, panel: CorePanel): void {
     setText(element("#help-consequence"), available
       ? "This will save an urgent event on this device. Ground receipt is not confirmed."
       : "Local service unavailable. Requests cannot be recorded in browser mode. Open the Merken app to use on-device records.");
+    // In browser mode the request cannot be recorded: keep the explanation, disable the action.
+    confirm.disabled = !available;
     controls.open(cancel);
     if (!available) return;
     confirm.disabled = true;
@@ -107,10 +109,15 @@ export function setupHelp(available: boolean, panel: CorePanel): void {
       element("#help-demo-badge").hidden = !response.event.is_demo;
       message.value = "";
       confirm.hidden = true; setText(cancel, "Close");
-    } catch {
-      feedback(attemptedSave ? "Help request not saved" : "Local service unavailable",
-        attemptedSave ? "The request could not be saved. Try again. Your message has been kept."
-          : "The local service could not be reached. This request was not recorded. Your message has been kept.");
+    } catch (error) {
+      if (isCoreError(error)) {
+        feedback("Help request not saved", error.message + " Your message has been kept.");
+        if (error.field === "message") message.focus();
+      } else {
+        feedback(attemptedSave ? "Help request not saved" : "Local service unavailable",
+          attemptedSave ? "The request could not be saved. Try again. Your message has been kept."
+            : "The local service could not be reached. This request was not recorded. Your message has been kept.");
+      }
     } finally {
       setBusy(false);
       if (!saved) setText(confirm, "Record help request");
