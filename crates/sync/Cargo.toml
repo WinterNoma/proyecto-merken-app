@@ -1,0 +1,12 @@
+[package]
+name = "merken-sync"
+description = "Cliente de la API de sincronización con Tierra"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+merken-core.workspace = true
+
+[lints]
+workspace = true
