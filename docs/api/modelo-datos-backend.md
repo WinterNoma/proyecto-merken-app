@@ -268,7 +268,10 @@ La idempotencia la dan la clave y la condición, **no** el `ClientRequestToken` 
 | `glucose` | `{ "mg_dl": 95 }` | `mg/dL` |
 | `sleep` | `{ "hours": 5.5, "quality": "poor", "window_start": "…Z", "window_end": "…Z" }` | `h` |
 | `mood` | `{ "score": 6 }` | `score_0_10` |
-| `headache` | `{ "score": 6 }` | `score_0_10` |
+| `oxygen_in_blood` | `{ "percentage": 98.2 }` | `%` |
+| `space_radiation` | `{ "usv_h": 12.5 }` | `µSv/h` |
+| `distance_from_earth` | `{ "km": 384400.0 }` | `km` |
+| `nutrition` | `{ "kcal": 2400.0 }` | `kcal` |
 | `symptom` | `{ "body_zone": "left_foot", "score": 4, "description": "My foot hurts" }` | `score_0_10` |
 
 **El backend rechaza solo lo que no tiene sentido** (`invalid_value`):
