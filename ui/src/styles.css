@@ -561,6 +561,54 @@ body {
   font-weight: 600;
 }
 
+/* Estado calculado de cada lectura (vital-status.ts): ok / warn / alarm */
+.vital-state.warn {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.18);
+}
+
+.vital-state.alarm {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.35);
+  animation: alarm-pulse 1.2s ease-in-out infinite;
+}
+
+.vital-trend.warn,
+.ls-sub.warn {
+  color: #fbbf24;
+}
+
+.vital-trend.alarm,
+.ls-sub.alarm {
+  color: #f87171;
+}
+
+.status-pill.warn {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.status-pill.alarm {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.55);
+  animation: alarm-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes alarm-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vital-state.alarm,
+  .status-pill.alarm {
+    animation: none;
+  }
+}
+
 /* Botones de acción rápida */
 .quick-actions {
   display: flex;

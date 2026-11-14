@@ -1,4 +1,26 @@
 import type { AstronautProfile } from "./types";
+import {
+  OVERALL_LABEL,
+  bloodPressureStatus,
+  glucoseStatus,
+  heartRateStatus,
+  oxygenStatus,
+  sleepStatus,
+  temperatureStatus,
+  worstLevel,
+  type Level,
+  type VitalStatus,
+} from "./vital-status";
+
+const LEVELS: Level[] = ["ok", "warn", "alarm"];
+
+/** Pone el texto y el color (clase ok / warn / alarm) de un elemento. */
+function paint(el: Element | null, text: string, level: Level) {
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove(...LEVELS);
+  el.classList.add(level);
+}
 
 // ============================================================================
 // ESTRUCTURA DE FILA RETORNADA POR MYSQL
@@ -44,6 +66,13 @@ function parseBloodPressure(bpStr: string): { systolic: number; diastolic: numbe
 }
 
 // Helper para convertir fila de MySQL a perfil de nuestra aplicación
+// Número de MySQL: conserva el 0 (un sueño de 0 h no es "sin dato") y solo
+// usa el valor por defecto si no es un número finito.
+function num(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return value !== null && value !== undefined && value !== "" && Number.isFinite(n) ? n : fallback;
+}
+
 function mapRowToProfile(row: MysqlAstronautRow, index: number): AstronautProfile {
   const bp = parseBloodPressure(row.blood_pressure);
   const color = ASTRONAUT_COLORS[index % ASTRONAUT_COLORS.length] || "#00e5ff";
@@ -57,16 +86,16 @@ function mapRowToProfile(row: MysqlAstronautRow, index: number): AstronautProfil
     color: color,
     telemetry: {
       astronaut_name: row.astronaut_name,
-      space_radiation: Number(row.space_radiation) || 0,
-      distance_from_earth: Number(row.distance_from_earth) || 384400,
+      space_radiation: num(row.space_radiation, 0),
+      distance_from_earth: num(row.distance_from_earth, 384400),
       blood_pressure: bp,
-      heart_rate: Number(row.heart_rate) || 75,
-      blood_sugar: Number(row.blood_sugar) || 90,
-      body_temperature: Number(row.body_temperature) || 36.8,
-      sleep_hours: Number(row.sleep_hours) || 6.5,
+      heart_rate: num(row.heart_rate, 75),
+      blood_sugar: num(row.blood_sugar, 90),
+      body_temperature: num(row.body_temperature, 36.8),
+      sleep_hours: num(row.sleep_hours, 6.5),
       mood: row.mood || "NEUTRAL",
-      nutrition: Number(row.nutrition) || 2000,
-      oxygen_in_blood: Number(row.oxygen_in_blood) || 98.0,
+      nutrition: num(row.nutrition, 2000),
+      oxygen_in_blood: num(row.oxygen_in_blood, 98.0),
     },
   };
 }
@@ -181,6 +210,24 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     // 6. Horas de Sueño (SleepHours de MySQL)
     if (sleepEl) sleepEl.textContent = t.sleep_hours.toFixed(1);
+
+    // Etiquetas, color y línea inferior de cada tarjeta según la lectura
+    // (mismos umbrales que el núcleo; ver vital-status.ts).
+    const cards: Array<[string, string, VitalStatus]> = [
+      ["#badge-heart-rate", ".heart-card", heartRateStatus(t.heart_rate)],
+      ["#badge-oxygen", ".oxygen-card", oxygenStatus(t.oxygen_in_blood)],
+      ["#badge-bp", ".bp-card", bloodPressureStatus(t.blood_pressure.systolic, t.blood_pressure.diastolic)],
+      ["#badge-glucose", ".glucose-card", glucoseStatus(t.blood_sugar)],
+      ["#badge-temp", ".temp-card", temperatureStatus(t.body_temperature)],
+    ];
+    for (const [badgeSel, cardSel, s] of cards) {
+      paint(document.querySelector(badgeSel), s.label, s.level);
+      paint(document.querySelector(`${cardSel} .vital-trend`), s.detail, s.level);
+    }
+    const sleep = sleepStatus(t.sleep_hours);
+    paint(document.querySelector("#badge-sleep"), sleep.detail, sleep.level);
+    const overall = worstLevel([...cards.map(([, , s]) => s.level), sleep.level]);
+    paint(document.querySelector("#scan-status-pill"), OVERALL_LABEL[overall], overall);
 
     // 7. Estado de Ánimo (Mood de MySQL)
     if (moodEl) moodEl.textContent = t.mood;
