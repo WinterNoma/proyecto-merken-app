@@ -1,93 +1,48 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#171717" />
-  <meta name="description" content="Merken. Crew readings and on-device health observations." />
-  <title>Merken · Health observations</title>
-  <script type="module" src="/src/main.ts"></script>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#171717" /><meta name="description" content="Merken. Crew readings and on-device health observations." />
+<title>Merken · Health observations</title><script type="module" src="/src/main.ts"></script>
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to observations</a>
-  <div class="app-shell">
-    <header class="app-header">
-      <a class="wordmark" href="#main" aria-label="Merken home">MERKEN</a>
-      <button id="crew-open" class="crew-trigger" type="button" aria-haspopup="dialog" aria-controls="crew-dialog">
-        <span class="crew-identity"><span class="caption">Crew member</span><span id="crew-name">Loading crew…</span></span>
-      </button>
-    </header>
-    <main id="main" tabindex="-1">
-      <div class="page-intro">
-        <div><p class="eyebrow">Crew health / Observation record</p><h1>Health observations</h1><p class="intro-copy">Readings, evaluations and what remains unknown.</p></div>
-        <div class="help-entry"><button id="help-open" class="button emergency" type="button" aria-haspopup="dialog" aria-controls="help-dialog">Need help</button><span class="caption">Record an urgent request on this device.</span></div>
-      </div>
-      <div class="workspace">
-        <section class="telemetry-section" aria-labelledby="telemetry-title">
-          <div class="section-heading"><div><p class="eyebrow">01 / Crew feed</p><h2 id="telemetry-title">Latest readings</h2></div><span id="feed-status" class="feed-status" role="status">Connecting…</span></div>
-          <div class="crew-summary panel">
-            <div><p class="caption">Selected crew member</p><h3 id="selected-name">No crew available</h3><p id="selected-id" class="caption">--</p></div>
-            <div id="header-crew-status" class="status-chip" aria-live="polite" aria-atomic="true"></div>
-            <p class="caption summary-scope">MySQL · Reading-level assessment. This is separate from the on-device profile.</p>
-          </div>
-          <div id="feed-notice" class="notice" data-tone="neutral" hidden><p id="feed-message"></p><button id="feed-retry" class="button secondary" type="button">Retry connection</button></div>
-          <p id="feed-time" class="caption">No data received.</p>
-          <div class="vital-grid">
-            <article id="vital-heart" class="vital-card panel" data-tone="neutral">
-              <h3>Heart rate</h3><div class="vital-status"></div>
-              <p class="reading"><span class="reading-value">--</span> <span class="unit">bpm</span></p>
-              <p class="caption reference">Ref: 50-100 bpm</p>
-            </article>
-            <article id="vital-oxygen" class="vital-card panel" data-tone="neutral">
-              <h3>Blood oxygen · SpO₂</h3><div class="vital-status"></div>
-              <p class="reading"><span class="reading-value">--</span> <span class="unit">%</span></p>
-              <p class="caption reference">Ref: ≥ 94%</p>
-            </article>
-            <article id="vital-pressure" class="vital-card panel" data-tone="neutral">
-              <h3>Blood pressure</h3><div class="vital-status"></div>
-              <p class="reading"><span class="reading-value">--</span> <span class="unit">mmHg</span></p>
-              <p class="caption reference">Ref: 90-139 / 60-89</p>
-            </article>
-            <article id="vital-glucose" class="vital-card panel" data-tone="neutral">
-              <h3>Blood glucose</h3><div class="vital-status"></div>
-              <p class="reading"><span class="reading-value">--</span> <span class="unit">mg/dL</span></p>
-              <p class="caption reference">Ref: 70-180 mg/dL</p>
-            </article>
-            <article id="vital-temperature" class="vital-card panel" data-tone="neutral">
-              <h3>Body temperature</h3><div class="vital-status"></div>
-              <p class="reading"><span class="reading-value">--</span> <span class="unit">°C</span></p>
-              <p class="caption reference">Ref: 36.1 - 38.0 °C</p>
-            </article>
-            <article id="vital-sleep" class="vital-card panel" data-tone="neutral">
-              <h3>Sleep</h3><div class="vital-status"></div>
-              <p class="reading"><span class="reading-value">--</span> <span class="unit">h</span></p>
-              <p class="caption reference"></p>
-            </article>
-            <article id="vital-mood" class="vital-card panel" data-tone="neutral">
-              <h3>Mood</h3><div class="vital-status"></div>
-              <p class="reading"><span class="reading-value">--</span></p>
-              <p class="caption reference">Self-reported</p>
-            </article>
-            <article id="vital-nutrition" class="vital-card panel" data-tone="neutral">
-              <h3>Nutrition</h3><div class="vital-status"></div>
-              <p class="reading"><span class="reading-value">--</span> <span class="unit">kcal</span></p>
-              <p class="caption reference">Context only</p>
-            </article>
-            <article id="vital-radiation" class="vital-card panel" data-tone="neutral">
-              <h3>Space radiation</h3><div class="vital-status"></div>
-              <p class="reading"><span class="reading-value">--</span> <span class="unit">µSv/h</span></p>
-              <p class="caption reference">Context only</p>
-            </article>
-            <article id="vital-distance" class="vital-card panel" data-tone="neutral">
-              <h3>Distance from Earth</h3><div class="vital-status"></div>
-              <p class="reading"><span class="reading-value">--</span> <span class="unit">km</span></p>
-              <p class="caption reference">Context only</p>
-            </article>
-          </div>
-          <p class="section-note">Source: MySQL crew feed. Measurement timestamps are not provided by this feed; receipt time is shown above.</p>
-        </section>
-        <section id="core-panel" class="core-section" aria-labelledby="core-title">
-          <div class="section-heading"><div><p class="eyebrow">02 / Device record</p><h2 id="core-title">On-device record</h2></div><span id="demo-badge" class="status-chip" data-tone="neutral" hidden>DEMO</span></div>
+<a class="skip-link" href="#main">Skip to observations</a>
+<div class="app-shell">
+<header class="app-header">
+<a class="wordmark" href="#main" aria-label="Merken home">MERKEN</a>
+<button id="crew-open" class="crew-trigger" type="button" aria-haspopup="dialog" aria-controls="crew-dialog"><span class="crew-identity"><span class="caption">Crew member</span><span id="crew-name">Loading crew…</span></span></button>
+<button id="help-open" class="button emergency" type="button" aria-haspopup="dialog" aria-controls="help-dialog">Need help</button>
+</header>
+<main id="main" tabindex="-1">
+<h1 class="sr-only">Health observations</h1>
+<div id="screens" class="workspace">
+<section id="overview" class="screen overview" aria-label="Health overview" tabindex="-1">
+<div id="overall-box" class="overall-box panel" data-tone="neutral">
+<div class="overall-line"><span id="overall-status" class="status-chip" role="status" aria-atomic="true"></span><span id="overview-demo" class="demo-tag" hidden>DEMO</span><span id="feed-status" class="feed-status">Connecting…</span></div>
+<p id="overall-scope" class="caption">MySQL · Reading-level assessment</p>
+<p id="overall-extra" class="caption" hidden></p>
+<button id="overview-alerts" class="text-button" type="button" hidden>View persistent alerts</button>
+</div>
+<div id="feed-notice" class="notice" data-tone="neutral" hidden><p id="feed-message"></p><button id="feed-retry" class="button secondary" type="button">Retry connection</button></div>
+<div class="sr-only"><span id="selected-name"></span><span id="selected-id"></span><span id="header-crew-status"></span><span id="feed-time"></span></div>
+<div class="body-stage" aria-label="Crew readings and body navigation">
+<div class="reading-column"><button type="button" id="vital-heart" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Pulse</span><span class="reading"><span class="reading-value">--</span> <span class="unit">bpm</span></span><span class="vital-status"></span><span class="reference" hidden>Ref: 50-100 bpm</span></button>
+<button type="button" id="vital-pressure" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Pressure</span><span class="reading"><span class="reading-value">--</span> <span class="unit">mmHg</span></span><span class="vital-status"></span><span class="reference" hidden>Ref: 90-139 / 60-89</span></button>
+<button type="button" id="vital-oxygen" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">SpO₂</span><span class="reading"><span class="reading-value">--</span> <span class="unit">%</span></span><span class="vital-status"></span><span class="reference" hidden>Ref: ≥ 94%</span></button>
+<button type="button" id="vital-mood" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Mood</span><span class="reading"><span class="reading-value">--</span> <span class="unit"></span></span><span class="vital-status"></span><span class="reference" hidden>Self-reported</span></button></div>
+<div class="body-center"><div id="body-map"></div><div id="body-extra" class="body-extra"></div><p id="zone-selection" class="zone-selection" role="status">Select a zone</p><button id="zones-open" class="text-button" type="button" aria-haspopup="dialog" aria-controls="zones-dialog">All zones</button></div>
+<div class="reading-column"><button type="button" id="vital-temperature" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Temperature</span><span class="reading"><span class="reading-value">--</span> <span class="unit">°C</span></span><span class="vital-status"></span><span class="reference" hidden>Ref: 36.1 - 38.0 °C</span></button>
+<button type="button" id="vital-glucose" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Glucose</span><span class="reading"><span class="reading-value">--</span> <span class="unit">mg/dL</span></span><span class="vital-status"></span><span class="reference" hidden>Ref: 70-180 mg/dL</span></button>
+<button type="button" id="vital-sleep" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Sleep</span><span class="reading"><span class="reading-value">--</span> <span class="unit">h</span></span><span class="vital-status"></span><span class="reference" hidden>No reference supplied</span></button>
+<button type="button" id="vital-nutrition" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Nutrition</span><span class="reading"><span class="reading-value">--</span> <span class="unit">kcal</span></span><span class="vital-status"></span><span class="reference" hidden>Context only</span></button></div>
+</div>
+<p id="body-source" class="source-line">Body zones · Not evaluated in browser</p>
+<div class="context-grid"><button type="button" id="vital-radiation" class="context-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Radiation</span><span class="reading"><span class="reading-value">--</span> <span class="unit">µSv/h</span></span><span class="vital-status"></span><span class="reference" hidden>Context only</span></button>
+<button type="button" id="vital-distance" class="context-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Distance</span><span class="reading"><span class="reading-value">--</span> <span class="unit">km</span></span><span class="vital-status"></span><span class="reference" hidden>Context only</span></button><button id="sync-open" class="context-card panel" type="button"><span class="card-label">Sync</span><span id="overview-sync">Unavailable</span></button></div>
+<div class="voice-entry"><button id="talk-hold" class="talk-button" type="button" aria-label="Hold to talk" aria-haspopup="dialog" aria-controls="voice-dialog"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></button><span class="caption">Hold to talk</span><button id="manual-open" class="text-button" type="button" aria-haspopup="dialog" aria-controls="voice-dialog">Type a reading</button></div>
+</section>
+        <section id="core-panel" class="core-section screen" hidden tabindex="-1" aria-labelledby="core-title">
+          <div class="section-heading"><div><p class="eyebrow">02 / Device record</p><h2 id="core-title">History / On-device record</h2></div><span id="demo-badge" class="status-chip" data-tone="neutral" hidden>DEMO</span></div>
           <div id="core-availability" class="notice" data-tone="neutral" role="status">
             <h3 id="core-availability-title">Connecting to local service…</h3><p id="core-availability-copy">Checking the on-device record.</p>
             <button id="core-retry" class="button secondary" type="button" hidden>Try again</button>
@@ -104,21 +59,15 @@
             </div>
             <div id="demo-empty" class="notice" data-tone="neutral" hidden><h3>No on-device records</h3><p>Explore the app with clearly marked simulated records.</p><button id="load-demo" class="button secondary" type="button">Load demo data</button></div>
             <p id="core-action-result" class="action-result" role="status"></p>
-            <section class="panel body-panel" aria-labelledby="body-title">
-              <div class="section-heading"><div><p class="eyebrow">Symptom locations</p><h3 id="body-title">Body overview</h3></div></div>
-              <div id="body-map"></div><div id="body-legend" class="legend"></div>
-              <p class="caption">Zone states come from recorded symptoms. An unevaluated zone does not indicate absence of symptoms.</p>
-              <details><summary>View all body zones</summary><ul id="body-zone-list" class="zone-list"></ul></details>
-            </section>
             <div class="subsection-heading"><h3>Indicator evaluations</h3><p class="caption">Evaluated by the local core.</p></div>
             <div id="core-indicators" class="evaluation-list"></div>
             <div id="core-symptoms" class="evaluation-list"></div>
           </div>
         </section>
-      </div>
-    </main>
-    <footer class="app-footer"><span>MERKEN / Health observation record</span><span>This application does not provide medical advice.</span></footer>
-  </div>
+</div>
+<nav class="screen-pagination" aria-label="Observation screens"><button class="page-dot" type="button" data-page="0" aria-controls="overview" aria-label="Health overview" aria-current="page"><span class="dot-mark"></span></button><button class="page-dot" type="button" data-page="1" aria-controls="core-panel" aria-label="History / On-device record"><span class="dot-mark"></span></button><span id="page-name" class="caption">Overview</span></nav>
+</main>
+</div>
   <dialog id="crew-dialog" role="dialog" aria-modal="true" aria-labelledby="crew-dialog-title" aria-describedby="crew-dialog-description" tabindex="-1">
     <div class="dialog-heading"><div><p class="eyebrow">Crew selection</p><h2 id="crew-dialog-title">Choose a crew member</h2></div><button id="crew-close" class="button secondary icon-button" type="button" aria-label="Close crew selector"></button></div>
     <p id="crew-dialog-description" class="caption">Browse the crew feed. The on-device profile stays separate.</p>
@@ -141,6 +90,19 @@
     <div id="help-result" class="notice" data-tone="neutral" role="status" hidden></div>
     <div class="dialog-actions"><button id="help-cancel" class="button secondary" type="button">Cancel</button><button id="help-confirm" class="button emergency" type="button">Record help request</button></div>
   </dialog>
-  <noscript><p class="notice">JavaScript is required to load crew readings and on-device records.</p></noscript>
-</body>
-</html>
+
+<dialog id="zones-dialog" aria-labelledby="zones-title" tabindex="-1"><div class="dialog-heading"><h2 id="zones-title">Body zones</h2><button id="zones-close" class="button secondary" type="button">Close</button></div><p class="caption">Left and right refer to the person's body. Zone states come only from recorded symptoms on this device. Navigation links are not medical associations.</p><div id="body-legend" class="legend"></div><div id="body-zone-list" class="zone-list"></div></dialog>
+<dialog id="reading-dialog" class="sheet" aria-labelledby="reading-title" tabindex="-1"><div class="dialog-heading"><h2 id="reading-title">Reading details</h2><button id="reading-close" class="button secondary" type="button">Close</button></div><div id="reading-content"></div><div class="assistant-slot"><span>Explain (assistant not loaded)</span></div></dialog>
+<dialog id="voice-dialog" class="sheet voice-sheet" aria-labelledby="voice-title" tabindex="-1">
+<div class="sheet-handle" aria-hidden="true"></div><div class="dialog-heading"><h2 id="voice-title">Hold to talk</h2><button id="voice-close" class="button secondary" type="button">Discard</button></div>
+<div id="voice-held"><div class="voice-wave" aria-hidden="true"><i style="--bar:0"></i><i style="--bar:1"></i><i style="--bar:2"></i><i style="--bar:3"></i><i style="--bar:4"></i><i style="--bar:5"></i><i style="--bar:6"></i><i style="--bar:7"></i><i style="--bar:8"></i></div><p>Release to continue.</p><p class="caption">Button activity only. No audio is being captured.</p></div>
+<div id="voice-review" hidden><p>Voice input is not available in this build</p><button id="type-instead" class="button primary" type="button">Type instead</button></div>
+<form id="manual-form" hidden>
+<p id="manual-profile" class="profile-context"></p><p id="manual-availability" class="caption"></p>
+<div id="manual-demo" class="notice" data-tone="neutral" hidden><strong>DEMO · Demo data will be removed</strong><p>Saving real data will remove the demo data.</p></div>
+<fieldset id="manual-fields"><legend class="sr-only">Manual reading</legend><label for="manual-indicator">Reading</label><select id="manual-indicator"></select><div id="manual-values"></div><label for="manual-time">Measured at (UTC)</label><input id="manual-time" type="datetime-local" step="1" required /><label for="manual-note">Note (optional)</label><textarea id="manual-note" rows="2" maxlength="2000"></textarea></fieldset>
+<div id="manual-result" role="status" class="action-result"></div><button id="manual-save" class="button primary" type="submit">Save reading</button>
+</form>
+</dialog>
+<noscript><p class="notice">JavaScript is required to load crew readings and on-device records.</p></noscript>
+</body></html>

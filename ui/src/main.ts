@@ -13,16 +13,23 @@ import { createTelemetryFeed } from "./ui/telemetry";
 import { createCorePanel } from "./ui/core-panel";
 import { setupHelp } from "./ui/help";
 
+import { createDashboard, setupPages } from "./ui/dashboard";
+import { setupVoice } from "./ui/voice";
+
+const available = isTauri();
+const dashboard = createDashboard(available);
+setupPages();
 const vitals = createVitals();
-const crew = createCrewSelector(member => vitals.render(member));
+const crew = createCrewSelector(member => { vitals.render(member); dashboard.member(member); });
 const feed = createTelemetryFeed(state => {
   crew.update(state);
   vitals.feed(state);
+  dashboard.feed(state);
 });
 element("#feed-retry").addEventListener("click", () => { void feed.refresh(); });
-const available = isTauri();
-const panel = createCorePanel(available);
+const panel = createCorePanel(available, dashboard.core);
 setupHelp(available, panel);
+setupVoice(available, panel);
 window.addEventListener("pagehide", event => {
   if (!event.persisted) { feed.stop(); panel.stop(); }
 });

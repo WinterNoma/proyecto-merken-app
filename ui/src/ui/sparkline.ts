@@ -7,7 +7,7 @@ export function sparkline(records: RecordItem[], indicator: Indicator, historica
   const figure = el("figure", "history-figure");
   const ordered = records.filter(record => record.effective && !record.future_timestamp && record.indicator === indicator && Number.isFinite(Date.parse(record.measured_at)))
     .sort((a, b) => Date.parse(a.measured_at) - Date.parse(b.measured_at));
-  const points = ordered.map(record => ({ time: Date.parse(record.measured_at), value: scalar(record.value), record }));
+  const points = ordered.map(record => ({ time: Date.parse(record.measured_at), value: "systolic" in record.value ? record.value.systolic : scalar(record.value), record }));
   const valid = points.filter((point): point is typeof point & { value: number } => point.value !== null);
   if (!valid.length) { figure.append(el("p", "empty-history", "No history")); return figure; }
   const first = valid[0];
@@ -16,6 +16,7 @@ export function sparkline(records: RecordItem[], indicator: Indicator, historica
   const min = Math.min(...valid.map(point => point.value));
   const max = Math.max(...valid.map(point => point.value));
   const unit = units[indicator];
+  if (indicator === "blood_pressure") figure.append(el("p", "caption", "Systolic history · Full pressure readings are retained in the local record."));
   figure.append(el("figcaption", "", (historical ? "Historical readings" : "Recorded history") + " · " + valid.length + " samples · " + unit));
   const svg = document.createElementNS(ns, "svg");
   svg.setAttribute("viewBox", "0 0 360 100");
