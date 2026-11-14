@@ -28,3 +28,6 @@ externo/
 .env
 .env.*
 !.env.example
+
+# Instrucciones locales de agentes
+CLAUDE.md
