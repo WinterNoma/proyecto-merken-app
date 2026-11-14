@@ -1,8 +1,8 @@
-import { core, isCoreError, type Evaluation, type Indicator, type ProfileResponse, type RecordItem, type StatusResponse, type RaiseEventResult, type EventItem } from "../core-api";
+import { core, isCoreError, type Evaluation, type Indicator, type ProfileResponse, type RecordItem, type StatusResponse, type RaiseEventResult, type EventItem, type LogResult } from "../core-api";
 import { element, el, setText, timestamp, utc } from "./dom";
 import { evaluationCopy, statusCopy, escalationCopy, paintBadge, badge } from "./status-copy";
 import { indicatorName, recordValue } from "./core-format";
-import { createBodyMap, zoneName } from "./body-map";
+import { zoneName } from "./body-map";
 import { sparkline } from "./sparkline";
 
 const chartIndicators: Indicator[] = ["heart_rate", "body_temperature", "oxygen_in_blood", "glucose", "sleep"];
@@ -11,7 +11,7 @@ interface EvaluationView {
   update: (evaluation: Evaluation, demo: boolean) => void;
   history: (records: RecordItem[] | null, stale: boolean) => void;
 }
-function evaluationView(withHistory: boolean): EvaluationView {
+export function evaluationView(withHistory: boolean): EvaluationView {
   const node = el("article", "evaluation-row panel");
   const heading = el("div", "evaluation-heading");
   const name = el("h4");
@@ -66,9 +66,10 @@ export interface CorePanel {
   snapshot: () => StatusResponse | null;
   profile: () => ProfileResponse | null;
   acceptHelp: (result: RaiseEventResult) => void;
+  acceptRecord: (result: Extract<LogResult, { status: "saved" }>) => void;
   stop: () => void;
 }
-export function createCorePanel(available: boolean): CorePanel {
+export function createCorePanel(available: boolean, onChange: (status: StatusResponse | null, profile: ProfileResponse | null, online: boolean, confirmedAlert?: Evaluation) => void): CorePanel {
   let current: StatusResponse | null = null;
   let profile: ProfileResponse | null = null;
   let pending: Promise<StatusResponse | null> | null = null;
@@ -80,7 +81,6 @@ export function createCorePanel(available: boolean): CorePanel {
   const availability = element("#core-availability");
   const retry = element<HTMLButtonElement>("#core-retry");
   const demoButton = element<HTMLButtonElement>("#load-demo");
-  const updateBody = createBodyMap();
   const indicatorViews = new Map<string, EvaluationView>();
   const symptomViews = new Map<string, EvaluationView>();
   const alertViews = new Map<string, HTMLElement>();
@@ -165,7 +165,7 @@ export function createCorePanel(available: boolean): CorePanel {
     setText(element("#core-sync"), status.sync.pending + " pending · " + status.sync.failed + " not synced");
     setText(element("#core-evaluated"), "Evaluated " + utc(status.evaluated_at));
     renderAlerts(status.alerts, status.is_demo);
-    updateBody(status.body_zones);
+    onChange(status, profile, true);
     renderEvaluations(status.indicators, indicatorViews, element("#core-indicators"), status.is_demo);
     renderEvaluations(status.symptoms, symptomViews, element("#core-symptoms"), status.is_demo);
   }
@@ -204,6 +204,7 @@ export function createCorePanel(available: boolean): CorePanel {
         : "The local service could not be reached. This action was not confirmed.");
       element("#demo-empty").hidden = true;
       retry.hidden = false;
+      onChange(current, profile, false);
       return null;
     } finally {
       retry.disabled = false;
@@ -251,10 +252,22 @@ export function createCorePanel(available: boolean): CorePanel {
   else {
     setText(element("#core-availability-title"), "Local service unavailable");
     setText(element("#core-availability-copy"), "Open the Merken app to use on-device records.");
+    onChange(null, null, false);
   }
   const timer = available ? window.setInterval(() => { if (!actionBusy) void refresh(); }, 10000) : null;
   return {
     refresh, snapshot: () => current, profile: () => profile,
+    acceptRecord(result): void {
+      revision += 1;
+      if (current?.is_demo && !result.record.is_demo) {
+        current = null; profile = null; record.hidden = true;
+        element("#demo-badge").hidden = true;
+        indicatorViews.forEach(view => view.node.remove()); indicatorViews.clear();
+        symptomViews.forEach(view => view.node.remove()); symptomViews.clear();
+        alertViews.forEach(view => view.remove()); alertViews.clear(); alertSignatures.clear();
+      }
+      onChange(current, profile, false);
+    },
     acceptHelp(result): void {
       revision += 1;
       knownEvents.set(result.event.event_id, result.event);
@@ -270,6 +283,11 @@ export function createCorePanel(available: boolean): CorePanel {
         if (!alerts.some(alert => alert.input_event_ids.includes(result.event.event_id))) alerts.push(result.evaluation);
         renderAlerts(alerts, result.event.is_demo);
       }
+      // Preserve the confirmed alert without inventing a profile or sync queue.
+      if (result.evaluation && current) {
+        current = { ...current, overall: { status: "alarm", escalation: "urgent", worst: [...new Set([...current.overall.worst, result.evaluation.indicator])] }, alerts: [...current.alerts.filter(alert => !alert.input_event_ids.includes(result.event.event_id)), result.evaluation] };
+      }
+      onChange(current, profile, false, result.evaluation ?? undefined);
     },
     stop(): void { stopped = true; if (timer !== null) window.clearInterval(timer); },
   };

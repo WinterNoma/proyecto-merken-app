@@ -60,7 +60,7 @@ export function createVitals() {
       }
     },
     feed(state: FeedState): void {
-      const label = state.loading ? "Connecting…" : state.live ? "Live"
+      const label = state.loading ? "Connecting…" : state.live ? "Live · " + (state.lastSuccess ? utc(state.lastSuccess, true) : "Awaiting feed")
         : state.lastSuccess ? "Last update " + utc(state.lastSuccess, true) : "Connection unavailable";
       setText(element("#feed-status"), label);
       setText(element("#feed-time"), state.lastSuccess ? "Received " + utc(state.lastSuccess) : "No data received.");
