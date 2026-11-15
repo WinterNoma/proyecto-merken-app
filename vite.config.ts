@@ -12,6 +12,7 @@ const host = process.env.TAURI_DEV_HOST;
  */
 function mysqlSettings(mode: string) {
   const env = loadEnv(mode, `${process.cwd()}/server`, "MYSQL_");
+  const sslMode = (env.MYSQL_SSL_MODE || "").toUpperCase();
   const required = ["MYSQL_HOST", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE"] as const;
   const missing = required.filter(name => !env[name]);
   if (missing.length > 0) {
@@ -23,6 +24,10 @@ function mysqlSettings(mode: string) {
     user: env.MYSQL_USER,
     password: env.MYSQL_PASSWORD,
     database: env.MYSQL_DATABASE,
+    // Con MYSQL_SSL_MODE=REQUIRED se cifra la conexión (sin verificar el certificado del servidor).
+    ssl: sslMode === "REQUIRED" ? { rejectUnauthorized: false } : undefined,
+    // Si MySQL no responde, /api/astronauts devuelve un 500 claro en vez de quedarse colgado.
+    connectTimeout: 10000,
     waitForConnections: true,
     connectionLimit: 4,
     queueLimit: 0,
