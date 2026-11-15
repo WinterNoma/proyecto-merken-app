@@ -1917,161 +1917,171 @@ pub fn mentions_indicator(indicator: Indicator, quote: &str) -> bool {
         return false;
     }
     let tokens = tokenize(trimmed);
-    let len = tokens.len();
+    (0..tokens.len()).any(|i| indicator_mention_end(indicator, &tokens, i, tokens.len()).is_some())
+}
 
-    for i in 0..len {
-        let matched = match indicator {
-            Indicator::HeartRate => {
-                starts_with_words(&tokens, i, &["heart", "rate"])
-                    || starts_with_words(&tokens, i, &["frecuencia", "cardiaca"])
-                    || starts_with_words(&tokens, i, &["ritmo", "cardiaco"])
-                    || starts_with_words(&tokens, i, &["beats", "per", "minute"])
-                    || word_at(&tokens, i).is_some_and(|w| {
-                        matches!(
-                            w,
-                            "pulso"
-                                | "pulse"
-                                | "hr"
-                                | "bpm"
-                                | "lpm"
-                                | "pulsaciones"
-                                | "latidos"
-                                | "frecuencia"
-                        )
-                    })
-            }
-            Indicator::BloodPressure => {
-                is_bp_keyword_at(&tokens, i, len).is_some()
-                    || word_at(&tokens, i).is_some_and(|w| w == "mmhg")
-                    || (word_at(&tokens, i) == Some("mm") && word_at(&tokens, i + 1) == Some("hg"))
-                    || parse_simple_number(&tokens, i).is_some_and(|n1| {
-                        n1.end_idx + 1 < len
-                            && tokens
-                                .get(n1.end_idx)
-                                .is_some_and(|tk| tk.kind == TokenKind::Slash)
-                            && parse_simple_number(&tokens, n1.end_idx + 1)
-                                .is_some_and(|n2| n1_n2_bp_plausible(n1.value, n2.value))
-                    })
-            }
-            Indicator::BodyTemperature => {
-                starts_with_words(&tokens, i, &["body", "temperature"])
-                    || starts_with_words(&tokens, i, &["body", "temp"])
-                    || word_at(&tokens, i).is_some_and(|w| {
-                        matches!(
-                            w,
-                            "temperatura"
-                                | "temp"
-                                | "fiebre"
-                                | "fever"
-                                | "febricula"
-                                | "celsius"
-                                | "centigrados"
-                                | "centigrado"
-                        )
-                    })
-                    || tokens.get(i).is_some_and(|tk| tk.norm == "℃")
-                    || (tokens
-                        .get(i)
-                        .is_some_and(|tk| matches!(tk.norm.as_str(), "°" | "º"))
-                        && word_at(&tokens, i + 1) == Some("c"))
-                    || (matches!(
-                        word_at(&tokens, i),
-                        Some("grados" | "degrees" | "grado" | "degree")
-                    ) && !word_at(&tokens, i + 1).is_some_and(is_incompatible_temp_scale))
-            }
-            Indicator::Glucose => {
-                starts_with_words(&tokens, i, &["blood", "glucose"])
-                    || starts_with_words(&tokens, i, &["blood", "sugar"])
-                    || starts_with_words(&tokens, i, &["azucar", "en", "sangre"])
-                    || (word_at(&tokens, i) == Some("mg")
-                        && tokens
-                            .get(i + 1)
-                            .is_some_and(|tk| tk.kind == TokenKind::Slash)
-                        && word_at(&tokens, i + 2) == Some("dl"))
-                    || word_at(&tokens, i).is_some_and(|w| {
-                        matches!(w, "glucosa" | "glucemia" | "glucose" | "azucar" | "mgdl")
-                    })
-            }
-            Indicator::Sleep => word_at(&tokens, i).is_some_and(is_sleep_word),
-            Indicator::Mood => {
-                starts_with_words(&tokens, i, &["estado", "de", "animo"])
-                    || word_at(&tokens, i).is_some_and(|w| matches!(w, "animo" | "mood" | "humor"))
-            }
-            Indicator::OxygenInBlood => {
-                starts_with_words(&tokens, i, &["oxygen", "saturation"])
-                    || starts_with_words(&tokens, i, &["blood", "oxygen"])
-                    || starts_with_words(&tokens, i, &["saturacion", "de", "oxigeno"])
-                    || starts_with_words(&tokens, i, &["oxigeno", "en", "sangre"])
-                    || starts_with_words(&tokens, i, &["o2", "sat"])
-                    || word_at(&tokens, i).is_some_and(|w| {
-                        matches!(
-                            w,
-                            "saturacion" | "saturation" | "oxigeno" | "oxygen" | "spo2" | "o2"
-                        )
-                    })
-            }
-            Indicator::SpaceRadiation => {
-                starts_with_words(&tokens, i, &["space", "radiation"])
-                    || starts_with_words(&tokens, i, &["radiacion", "espacial"])
-                    || word_at(&tokens, i).is_some_and(|w| {
-                        matches!(
-                            w,
-                            "radiacion"
-                                | "radiation"
-                                | "usv"
-                                | "sievert"
-                                | "sieverts"
-                                | "microsievert"
-                                | "microsieverts"
-                                | "dosimetro"
-                                | "dosimeter"
-                        )
-                    })
-            }
-            Indicator::DistanceFromEarth => {
-                starts_with_words(&tokens, i, &["distance", "from", "earth"])
-                    || starts_with_words(&tokens, i, &["distancia", "a", "la", "tierra"])
-                    || starts_with_words(&tokens, i, &["distancia", "desde", "la", "tierra"])
-                    || word_at(&tokens, i).is_some_and(|w| {
-                        matches!(
-                            w,
-                            "distancia"
-                                | "distance"
-                                | "km"
-                                | "kilometro"
-                                | "kilometros"
-                                | "kilometer"
-                                | "kilometers"
-                        )
-                    })
-            }
-            Indicator::Nutrition => word_at(&tokens, i).is_some_and(|w| {
-                matches!(
-                    w,
-                    "nutricion"
-                        | "nutrition"
-                        | "kcal"
-                        | "calorias"
-                        | "caloria"
-                        | "calories"
-                        | "calorie"
-                        | "comida"
-                        | "alimento"
-                        | "food"
-                        | "meal"
-                )
-            }),
-            Indicator::Symptom => {
-                word_at(&tokens, i).is_some_and(is_symptom_cue)
-                    || match_body_zone_phrase(&tokens, i, len).is_some()
-            }
-        };
-        if matched {
-            return true;
+/// Reconoce menciones del contrato completo, independientemente de los extractores de valores.
+/// Devuelve el fin exclusivo de la mención, respetando el límite de la cláusula.
+pub(crate) fn indicator_mention_end(
+    indicator: Indicator,
+    tokens: &[Token],
+    i: usize,
+    end: usize,
+) -> Option<usize> {
+    let tokens = tokens.get(..end)?;
+    let phrases: &[&[&str]] = match indicator {
+        Indicator::HeartRate => &[
+            &["heart", "rate"],
+            &["frecuencia", "cardiaca"],
+            &["ritmo", "cardiaco"],
+            &["beats", "per", "minute"],
+        ],
+        Indicator::BloodPressure => &[],
+        Indicator::BodyTemperature => &[&["body", "temperature"], &["body", "temp"]],
+        Indicator::Glucose => &[
+            &["blood", "glucose"],
+            &["blood", "sugar"],
+            &["azucar", "en", "sangre"],
+        ],
+        Indicator::Sleep => &[],
+        Indicator::Mood => &[&["estado", "de", "animo"]],
+        Indicator::OxygenInBlood => &[
+            &["oxygen", "saturation"],
+            &["blood", "oxygen"],
+            &["saturacion", "de", "oxigeno"],
+            &["oxigeno", "en", "sangre"],
+            &["o2", "sat"],
+        ],
+        Indicator::SpaceRadiation => &[&["space", "radiation"], &["radiacion", "espacial"]],
+        Indicator::DistanceFromEarth => &[
+            &["distance", "from", "earth"],
+            &["distancia", "a", "la", "tierra"],
+            &["distancia", "desde", "la", "tierra"],
+        ],
+        Indicator::Nutrition | Indicator::Symptom => &[],
+    };
+    for phrase in phrases {
+        if starts_with_words(tokens, i, phrase) {
+            return Some(i + phrase.len());
         }
     }
 
-    false
+    // Menciones que no son una sola palabra (unidades, pares de presión y zonas).
+    match indicator {
+        Indicator::BloodPressure => {
+            if let Some(len) = is_bp_keyword_at(tokens, i, end) {
+                return Some(i + len);
+            }
+            if starts_with_words(tokens, i, &["mm", "hg"]) {
+                return Some(i + 2);
+            }
+            if let Some(n1) = parse_simple_number(tokens, i)
+                && tokens
+                    .get(n1.end_idx)
+                    .is_some_and(|tk| tk.kind == TokenKind::Slash)
+                && let Some(n2) = parse_simple_number(tokens, n1.end_idx + 1)
+                && n1_n2_bp_plausible(n1.value, n2.value)
+            {
+                return Some(n2.end_idx);
+            }
+        }
+        Indicator::BodyTemperature => {
+            if tokens
+                .get(i)
+                .is_some_and(|tk| matches!(tk.norm.as_str(), "°" | "º"))
+                && word_at(tokens, i + 1) == Some("c")
+            {
+                return Some(i + 2);
+            }
+            if tokens.get(i).is_some_and(|tk| tk.norm == "℃") {
+                return Some(i + 1);
+            }
+        }
+        Indicator::Glucose => {
+            if word_at(tokens, i) == Some("mg")
+                && tokens
+                    .get(i + 1)
+                    .is_some_and(|tk| tk.kind == TokenKind::Slash)
+                && word_at(tokens, i + 2) == Some("dl")
+            {
+                return Some(i + 3);
+            }
+        }
+        Indicator::Symptom => {
+            if let Some((_, zone_end)) = match_body_zone_phrase(tokens, i, end) {
+                return Some(zone_end);
+            }
+        }
+        _ => {}
+    }
+
+    let w = word_at(tokens, i)?;
+    let matched = match indicator {
+        Indicator::HeartRate => matches!(
+            w,
+            "pulso" | "pulse" | "hr" | "bpm" | "lpm" | "pulsaciones" | "latidos" | "frecuencia"
+        ),
+        Indicator::BloodPressure => w == "mmhg",
+        Indicator::BodyTemperature => {
+            matches!(
+                w,
+                "temperatura"
+                    | "temp"
+                    | "fiebre"
+                    | "fever"
+                    | "febricula"
+                    | "celsius"
+                    | "centigrados"
+                    | "centigrado"
+            ) || (matches!(w, "grados" | "degrees" | "grado" | "degree")
+                && !word_at(tokens, i + 1).is_some_and(is_incompatible_temp_scale))
+        }
+        Indicator::Glucose => matches!(w, "glucosa" | "glucemia" | "glucose" | "azucar" | "mgdl"),
+        Indicator::Sleep => is_sleep_word(w),
+        Indicator::Mood => matches!(w, "animo" | "mood" | "humor"),
+        Indicator::OxygenInBlood => matches!(
+            w,
+            "saturacion" | "saturation" | "oxigeno" | "oxygen" | "spo2" | "o2"
+        ),
+        Indicator::SpaceRadiation => matches!(
+            w,
+            "radiacion"
+                | "radiation"
+                | "usv"
+                | "sievert"
+                | "sieverts"
+                | "microsievert"
+                | "microsieverts"
+                | "dosimetro"
+                | "dosimeter"
+        ),
+        Indicator::DistanceFromEarth => matches!(
+            w,
+            "distancia"
+                | "distance"
+                | "km"
+                | "kilometro"
+                | "kilometros"
+                | "kilometer"
+                | "kilometers"
+        ),
+        Indicator::Nutrition => matches!(
+            w,
+            "nutricion"
+                | "nutrition"
+                | "kcal"
+                | "calorias"
+                | "caloria"
+                | "calories"
+                | "calorie"
+                | "comida"
+                | "alimento"
+                | "food"
+                | "meal"
+        ),
+        Indicator::Symptom => is_symptom_cue(w),
+    };
+    matched.then_some(i + 1)
 }
 
 #[derive(Clone, Copy, Debug)]
