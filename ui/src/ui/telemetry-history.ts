@@ -66,8 +66,21 @@ export interface CrewChoice {
   name: string;
 }
 
+export type TelemetryPersistStateKind = "ok" | "slow" | "error";
+
+export interface TelemetryPersistStatus {
+  status?: TelemetryPersistStateKind;
+  ok: boolean;
+  stored: number;
+  skipped: number;
+  rejected?: number;
+  lastRejection?: string | null;
+  lastError: string | null;
+}
+
 export interface TelemetryHistoryHandle {
   refresh(): Promise<void>;
+  setPersistStatus(persist: TelemetryPersistStatus | null): void;
   destroy(): void;
 }
 
@@ -135,36 +148,60 @@ function formatWithUnit(item: TelemetryItem, fallbackUnit: string): string {
   return unit ? `${text} ${unit}` : text;
 }
 
-function sortNewestFirst(items: TelemetryItem[]): TelemetryItem[] {
+interface ObservedIndicatorStats {
+  count: number;
+  maxReadingId: number | null;
+}
+
+type TraceStaleNotice = "newer" | "unknown" | null;
+
+interface TraceSnapshot {
+  result: VerifyTelemetryResult;
+  checkedAtMs: number;
+}
+
+/** Ordena una copia cronológicamente (antiguo → reciente) solo para la gráfica SVG, sin tocar la lista. */
+function sortChronologicalForChart(items: TelemetryItem[]): TelemetryItem[] {
   return [...items].sort((a, b) => {
     const ta = Date.parse(a.observed_at);
     const tb = Date.parse(b.observed_at);
     const aValid = Number.isFinite(ta);
     const bValid = Number.isFinite(tb);
-    if (aValid && bValid && tb !== ta) return tb - ta;
-    return b.reading_id - a.reading_id;
+    if (aValid && bValid && ta !== tb) return ta - tb;
+    return a.reading_id - b.reading_id;
   });
 }
 
-function buildTraceabilityText(verify: VerifyTelemetryResult): string {
-  if (verify.ok) {
-    return `${verify.checked} readings · chain consistent ✓`;
-  }
-  const problemText = verify.problem ? PROBLEM_LABELS[verify.problem] : "integrity issue";
-  return verify.first_bad_reading_id !== null
-    ? `chain problem: ${problemText} at #${verify.first_bad_reading_id}`
-    : `chain problem: ${problemText}`;
+function buildTraceabilityText(snapshot: TraceSnapshot, staleNotice: TraceStaleNotice): string {
+  const { result, checkedAtMs } = snapshot;
+  const timeUtc = utc(new Date(checkedAtMs), true);
+  const base = `Checked ${timeUtc} · ${result.checked} readings in chain`;
+  const statusText = result.ok
+    ? "consistent ✓"
+    : (() => {
+        const problemText = result.problem ? PROBLEM_LABELS[result.problem] : "integrity issue";
+        return result.first_bad_reading_id !== null
+          ? `chain problem: ${problemText} at #${result.first_bad_reading_id}`
+          : `chain problem: ${problemText}`;
+      })();
+  const staleSuffix =
+    staleNotice === "newer"
+      ? " · newer readings not yet checked"
+      : staleNotice === "unknown"
+        ? " · scope unknown"
+        : "";
+  return `${base} · ${statusText}${staleSuffix}`;
 }
 
-function buildLineChart(itemsNewestFirst: TelemetryItem[], option: IndicatorOption): HTMLElement {
+function buildLineChart(items: TelemetryItem[], option: IndicatorOption): HTMLElement {
   const figure = el("figure", "tele-hist-figure");
   if (option.key === "mood") {
     figure.append(el("p", "caption tele-hist-note", "Mood is stored as text labels. Recent entries are listed below."));
     return figure;
   }
 
-  // Tomamos hasta 200 puntos y los invertimos para dibujar de izquierda (antiguo) a derecha (reciente).
-  const chronological = itemsNewestFirst.slice(0, MAX_POINTS).reverse();
+  // Tomamos hasta 200 puntos y ordenamos aparte cronológicamente de izquierda (antiguo) a derecha (reciente).
+  const chronological = sortChronologicalForChart(items.slice(0, MAX_POINTS));
   const points = chronological
     .map(item => ({ item, extracted: extractValue(item) }))
     .filter((entry): entry is { item: TelemetryItem; extracted: ExtractedReading & { primary: number } } =>
@@ -273,12 +310,13 @@ function buildLineChart(itemsNewestFirst: TelemetryItem[], option: IndicatorOpti
   return figure;
 }
 
-function buildRecentList(itemsNewestFirst: TelemetryItem[], option: IndicatorOption): HTMLElement {
+function buildRecentList(itemsReceivedOrder: TelemetryItem[], option: IndicatorOption): HTMLElement {
   const wrapper = el("div", "tele-hist-list-wrap");
   wrapper.append(el("h4", "tele-hist-subtitle", "Latest 10 readings"));
 
   const list = el("ul", "tele-hist-list");
-  for (const item of itemsNewestFirst.slice(0, RECENT_LIST_LIMIT)) {
+  // Conservamos el orden recibido del backend (reading_id DESC).
+  for (const item of itemsReceivedOrder.slice(0, RECENT_LIST_LIMIT)) {
     const row = el("li", "tele-hist-item");
     const time = el("time", "tele-hist-time", utc(item.observed_at, true));
     if (Number.isFinite(Date.parse(item.observed_at))) {
@@ -341,6 +379,11 @@ export function mountTelemetryHistory(
   statusLine.setAttribute("role", "status");
   statusLine.setAttribute("aria-live", "polite");
 
+  const persistLine = el("p", "tele-hist-persist caption", "");
+  persistLine.setAttribute("role", "status");
+  persistLine.setAttribute("aria-live", "polite");
+  persistLine.hidden = true;
+
   const traceBox = el("div", "tele-hist-trace-box");
   const traceRow = el("div", "tele-hist-trace-row");
 
@@ -361,7 +404,7 @@ export function mountTelemetryHistory(
 
   const body = el("div", "tele-hist-body");
 
-  panel.append(header, controls, statusLine, traceBox, body);
+  panel.append(header, controls, statusLine, persistLine, traceBox, body);
   host.replaceChildren(panel);
 
   let selectedCrewId = "";
@@ -369,12 +412,17 @@ export function mountTelemetryHistory(
   let crewSignature = "";
   let requestSeq = 0;
   let activeLoadSeq: number | null = null;
+  let listInFlight = false;
+  let pendingRefresh = false;
+  let pendingRefreshPromise: Promise<void> | null = null;
+  let resolvePendingRefresh: (() => void) | null = null;
   let verifyInFlight = false;
   let pendingVerifyCrewId: string | null = null;
   let lastTrackedCrewId = "";
   let selectorTimer: number | null = null;
   const lastVerifiedAt = new Map<string, number>();
-  const lastVerifyResult = new Map<string, VerifyTelemetryResult>();
+  const lastTraceSnapshot = new Map<string, TraceSnapshot>();
+  const observedByCrew = new Map<string, Map<TelemetryIndicator, ObservedIndicatorStats>>();
   let destroyed = false;
 
   function clearLoadingBusy(): void {
@@ -382,16 +430,98 @@ export function mountTelemetryHistory(
     body.removeAttribute("aria-busy");
   }
 
+  function finishPendingWaiters(): void {
+    if (resolvePendingRefresh) {
+      const resolve = resolvePendingRefresh;
+      resolvePendingRefresh = null;
+      pendingRefreshPromise = null;
+      resolve();
+    }
+  }
+
   function updateVerifyButtonState(): void {
     verifyButton.disabled = destroyed || !isTauriRuntime() || !selectedCrewId || verifyInFlight;
   }
 
+  function setPersistStatus(persist: TelemetryPersistStatus | null): void {
+    if (destroyed) return;
+    if (!persist) {
+      persistLine.hidden = true;
+      delete persistLine.dataset.tone;
+      delete persistLine.dataset.state;
+      setText(persistLine, "");
+      return;
+    }
+    persistLine.hidden = false;
+    const phase: TelemetryPersistStateKind = persist.status ?? (persist.ok ? "ok" : "error");
+    persistLine.dataset.state = phase;
+    const rejectedSuffix =
+      persist.rejected && persist.rejected > 0
+        ? ` · ${persist.rejected} excluded (${persist.lastRejection ?? "invalid reading"})`
+        : "";
+
+    if (phase === "slow") {
+      persistLine.dataset.tone = "warn";
+      setText(
+        persistLine,
+        `Saving to device is taking longer than usual; waiting for it to finish.${rejectedSuffix}`,
+      );
+    } else if (phase === "ok") {
+      persistLine.dataset.tone = "ok";
+      setText(persistLine, `Saving to device: OK · last batch stored ${persist.stored}${rejectedSuffix}`);
+    } else {
+      persistLine.dataset.tone = "alarm";
+      const reason = persist.lastError?.trim() || "unknown error";
+      setText(persistLine, `Saving to device failed: ${reason}${rejectedSuffix}`);
+    }
+  }
+
+  function recordObservedReadings(
+    crewId: string,
+    indicator: TelemetryIndicator,
+    items: TelemetryItem[],
+  ): void {
+    let maxReadingId: number | null = null;
+    for (const item of items) {
+      if (Number.isFinite(item.reading_id) && (maxReadingId === null || item.reading_id > maxReadingId)) {
+        maxReadingId = item.reading_id;
+      }
+    }
+    const stats: ObservedIndicatorStats = { count: items.length, maxReadingId };
+    let crewObs = observedByCrew.get(crewId);
+    if (!crewObs) {
+      crewObs = new Map();
+      observedByCrew.set(crewId, crewObs);
+    }
+    crewObs.set(indicator, stats);
+  }
+
+  function getMaxObservedReadingId(crewId: string): number | null {
+    const crewObs = observedByCrew.get(crewId);
+    if (!crewObs) return null;
+    let maxId: number | null = null;
+    for (const stats of crewObs.values()) {
+      if (stats.maxReadingId !== null && (maxId === null || stats.maxReadingId > maxId)) {
+        maxId = stats.maxReadingId;
+      }
+    }
+    return maxId;
+  }
+
+  function getTraceStaleNotice(crewId: string, result: VerifyTelemetryResult): TraceStaleNotice {
+    const maxObserved = getMaxObservedReadingId(crewId);
+    if (maxObserved === null) return null;
+    const checkedThrough = result.checked_through_reading_id ?? null;
+    if (checkedThrough === null) return "unknown";
+    return maxObserved > checkedThrough ? "newer" : null;
+  }
+
   function applyCachedTrace(crewId: string): void {
-    const cached = lastVerifyResult.get(crewId);
-    if (cached) {
+    const snapshot = lastTraceSnapshot.get(crewId);
+    if (snapshot) {
       traceLine.hidden = false;
-      traceLine.dataset.tone = cached.ok ? "ok" : "alarm";
-      setText(traceLine, buildTraceabilityText(cached));
+      traceLine.dataset.tone = snapshot.result.ok ? "ok" : "alarm";
+      setText(traceLine, buildTraceabilityText(snapshot, getTraceStaleNotice(crewId, snapshot.result)));
       return;
     }
     if (!verifyInFlight) {
@@ -416,12 +546,14 @@ export function mountTelemetryHistory(
     try {
       const verify = await core.verifyTelemetry({ astronaut_key: crewId });
       if (destroyed) return;
-      lastVerifiedAt.set(crewId, Date.now());
-      lastVerifyResult.set(crewId, verify);
+      const checkedAtMs = Date.now();
+      lastVerifiedAt.set(crewId, checkedAtMs);
+      lastTraceSnapshot.set(crewId, {
+        result: verify,
+        checkedAtMs,
+      });
       if (selectedCrewId === crewId) {
-        traceLine.hidden = false;
-        traceLine.dataset.tone = verify.ok ? "ok" : "alarm";
-        setText(traceLine, buildTraceabilityText(verify));
+        applyCachedTrace(crewId);
       }
     } catch (error: unknown) {
       if (destroyed) return;
@@ -501,7 +633,7 @@ export function mountTelemetryHistory(
     body.replaceChildren(el("p", "tele-hist-empty", "History is available in the app"));
   }
 
-  async function refresh(): Promise<void> {
+  async function executeListPass(): Promise<void> {
     if (destroyed) return;
     const seq = ++requestSeq;
     const crew = syncCrewOptions();
@@ -538,56 +670,113 @@ export function mountTelemetryHistory(
 
     const indicatorOption =
       TELEMETRY_INDICATORS.find(item => item.key === selectedIndicator) ?? TELEMETRY_INDICATORS[0];
+    // Capturamos astronauta e indicador al lanzar la consulta para descartar respuestas obsoletas.
+    const queryCrewId = selectedCrewId;
+    const queryIndicator = indicatorOption.key;
 
     delete statusLine.dataset.tone;
     setText(statusLine, "Loading history…");
     activeLoadSeq = seq;
     body.setAttribute("aria-busy", "true");
+    listInFlight = true;
 
     try {
       const rawItems = await core.listTelemetry({
-        astronaut_key: selectedCrewId,
-        indicator: indicatorOption.key,
+        astronaut_key: queryCrewId,
+        indicator: queryIndicator,
         limit: MAX_POINTS,
       });
 
       if (destroyed) {
-        clearLoadingBusy();
+        if (activeLoadSeq === seq) clearLoadingBusy();
         return;
       }
-      if (seq !== requestSeq) {
-        if (activeLoadSeq !== requestSeq) clearLoadingBusy();
+      if (
+        seq !== requestSeq ||
+        queryCrewId !== selectedCrewId ||
+        queryIndicator !== selectedIndicator
+      ) {
+        if (activeLoadSeq === seq) clearLoadingBusy();
         return;
       }
-      clearLoadingBusy();
+      if (activeLoadSeq === seq) clearLoadingBusy();
 
-      const items = sortNewestFirst(rawItems);
-      if (items.length === 0) {
+      recordObservedReadings(queryCrewId, queryIndicator, rawItems);
+      applyCachedTrace(queryCrewId);
+
+      if (rawItems.length === 0) {
         setText(statusLine, "No readings stored yet");
         body.replaceChildren(el("p", "tele-hist-empty", "No readings stored yet"));
         return;
       }
 
-      setText(statusLine, `${items.length} readings loaded · ${indicatorOption.label}`);
+      setText(statusLine, `${rawItems.length} readings loaded · ${indicatorOption.label}`);
       body.replaceChildren(
-        buildLineChart(items, indicatorOption),
-        buildRecentList(items, indicatorOption),
+        buildLineChart(rawItems, indicatorOption),
+        buildRecentList(rawItems, indicatorOption),
       );
     } catch (error: unknown) {
       if (destroyed) {
-        clearLoadingBusy();
+        if (activeLoadSeq === seq) clearLoadingBusy();
         return;
       }
-      if (seq !== requestSeq) {
-        if (activeLoadSeq !== requestSeq) clearLoadingBusy();
+      if (
+        seq !== requestSeq ||
+        queryCrewId !== selectedCrewId ||
+        queryIndicator !== selectedIndicator
+      ) {
+        if (activeLoadSeq === seq) clearLoadingBusy();
         return;
       }
-      clearLoadingBusy();
+      if (activeLoadSeq === seq) clearLoadingBusy();
       statusLine.dataset.tone = "alarm";
       const message = "Could not load history: " + formatError(error);
       setText(statusLine, message);
       body.replaceChildren(el("p", "tele-hist-empty", message));
+    } finally {
+      listInFlight = false;
     }
+  }
+
+  /** Ejecuta el listado evitando llamadas simultáneas: 1 en vuelo y como máximo 1 pendiente. */
+  function refresh(): Promise<void> {
+    if (destroyed) return Promise.resolve();
+    syncCrewOptions();
+    if (!isTauriRuntime() || !selectedCrewId) {
+      pendingRefresh = false;
+      finishPendingWaiters();
+      return executeListPass();
+    }
+    if (listInFlight) {
+      pendingRefresh = true;
+      if (!pendingRefreshPromise) {
+        pendingRefreshPromise = new Promise<void>(resolve => {
+          resolvePendingRefresh = resolve;
+        });
+      }
+      return pendingRefreshPromise;
+    }
+
+    return (async () => {
+      try {
+        await executeListPass();
+        while (!destroyed && pendingRefresh) {
+          pendingRefresh = false;
+          const resolveWaiters = resolvePendingRefresh;
+          resolvePendingRefresh = null;
+          pendingRefreshPromise = null;
+          if (!isTauriRuntime() || !selectedCrewId) {
+            await executeListPass();
+            resolveWaiters?.();
+            break;
+          }
+          await executeListPass();
+          resolveWaiters?.();
+        }
+      } finally {
+        finishPendingWaiters();
+      }
+    })();
   }
 
   /** Agrupa cambios rápidos de selector con debounce de 250 ms. */
@@ -603,12 +792,16 @@ export function mountTelemetryHistory(
 
   function onCrewChange(): void {
     selectedCrewId = crewSelect.value;
+    // Invalidamos cualquier consulta activa en vuelo al cambiar de astronauta.
+    requestSeq += 1;
     updateVerifyButtonState();
     scheduleSelectorRefresh();
   }
 
   function onIndicatorChange(): void {
     selectedIndicator = indicatorSelect.value as TelemetryIndicator;
+    // Invalidamos cualquier consulta activa en vuelo al cambiar de indicador.
+    requestSeq += 1;
     scheduleSelectorRefresh();
   }
 
@@ -641,8 +834,11 @@ export function mountTelemetryHistory(
       }
       return refresh();
     },
+    setPersistStatus,
     destroy(): void {
       destroyed = true;
+      pendingRefresh = false;
+      finishPendingWaiters();
       requestSeq += 1;
       clearLoadingBusy();
       if (selectorTimer !== null) {

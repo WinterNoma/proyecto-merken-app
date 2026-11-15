@@ -1,0 +1,33 @@
+{
+  "_comment": "Contrato compartido UI <-> Rust. La prueba de la interfaz exige que parseCrew + crewToReadings de `crew_row` produzcan `readings` (comparados ordenados por indicador). La prueba de Rust guarda `readings` con record_telemetry. Las claves de valor siguen a crates/core (usv_h, km) y a la lista cerrada de docs/api/telemetria-local.md.",
+  "crew_row": {
+    "id": 2,
+    "astronaut_name": "Alex Morgan",
+    "blood_pressure": "132/86",
+    "blood_sugar": 98,
+    "body_temperature": 36.8,
+    "heart_rate": 74,
+    "oxygen_in_blood": 97,
+    "sleep_hours": 7.5,
+    "nutrition": 2100,
+    "space_radiation": 14.1,
+    "distance_from_earth": 418.2,
+    "mood": "calm",
+    "hrv": 62,
+    "body_battery": 85
+  },
+  "readings": [
+    {"astronaut_key": "2", "astronaut_name": "Alex Morgan", "indicator": "heart_rate", "value": {"bpm": 74}, "unit": "bpm"},
+    {"astronaut_key": "2", "astronaut_name": "Alex Morgan", "indicator": "oxygen_in_blood", "value": {"percentage": 97}, "unit": "%"},
+    {"astronaut_key": "2", "astronaut_name": "Alex Morgan", "indicator": "glucose", "value": {"mg_dl": 98}, "unit": "mg/dL"},
+    {"astronaut_key": "2", "astronaut_name": "Alex Morgan", "indicator": "body_temperature", "value": {"celsius": 36.8}, "unit": "°C"},
+    {"astronaut_key": "2", "astronaut_name": "Alex Morgan", "indicator": "sleep", "value": {"hours": 7.5}, "unit": "h"},
+    {"astronaut_key": "2", "astronaut_name": "Alex Morgan", "indicator": "nutrition", "value": {"kcal": 2100}, "unit": "kcal"},
+    {"astronaut_key": "2", "astronaut_name": "Alex Morgan", "indicator": "space_radiation", "value": {"usv_h": 14.1}, "unit": "µSv/h"},
+    {"astronaut_key": "2", "astronaut_name": "Alex Morgan", "indicator": "distance_from_earth", "value": {"km": 418.2}, "unit": "km"},
+    {"astronaut_key": "2", "astronaut_name": "Alex Morgan", "indicator": "hrv", "value": {"ms": 62}, "unit": "ms"},
+    {"astronaut_key": "2", "astronaut_name": "Alex Morgan", "indicator": "body_battery", "value": {"value": 85}, "unit": ""},
+    {"astronaut_key": "2", "astronaut_name": "Alex Morgan", "indicator": "blood_pressure", "value": {"systolic": 132, "diastolic": 86}, "unit": "mmHg"},
+    {"astronaut_key": "2", "astronaut_name": "Alex Morgan", "indicator": "mood", "value": {"label": "calm"}, "unit": ""}
+  ]
+}

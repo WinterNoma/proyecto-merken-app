@@ -237,6 +237,7 @@ function sampleRawCrewRow(id, overrides = {}) {
 }
 
 let tempDir;
+let coreMod;
 let telemetryMod;
 let historyMod;
 
@@ -244,6 +245,7 @@ before(async () => {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "merken-telemetry-ui-test-"));
   const build = await rolldown({
     input: {
+      core: path.join(repoRoot, "ui/src/core-api.ts"),
       telemetry: path.join(repoRoot, "ui/src/ui/telemetry.ts"),
       history: path.join(repoRoot, "ui/src/ui/telemetry-history.ts"),
     },
@@ -256,6 +258,7 @@ before(async () => {
   await build.close();
 
   createDomEnvironment();
+  coreMod = await import(pathToFileURL(path.join(tempDir, "core.mjs")).href);
   telemetryMod = await import(pathToFileURL(path.join(tempDir, "telemetry.mjs")).href);
   historyMod = await import(pathToFileURL(path.join(tempDir, "history.mjs")).href);
 });
@@ -267,6 +270,47 @@ after(() => {
 });
 
 describe("telemetría local — parseCrew, crewToReadings y cola IPC", () => {
+
+  test("Ronda 5: valores presentes inválidos se rechazan y los válidos se conservan", () => {
+    for (const value of ["1e309", "abc", NaN]) {
+      const crew = telemetryMod.parseCrew([sampleRawCrewRow("a1", { heart_rate: value })]);
+      assert.deepEqual(crew[0].invalid, [{ indicator: "heart_rate", reason: "not a finite number" }]);
+      const result = telemetryMod.partitionCrewReadings(crew);
+      assert.equal(result.rejected, 1);
+      assert.equal(result.lastRejection, "heart_rate: not a finite number");
+      assert.equal(result.readings.some(r => r.indicator === "heart_rate"), false);
+      assert.ok(result.readings.some(r => r.indicator === "oxygen_in_blood"));
+    }
+    for (const pressure of ["abc/80", "120/abc"]) {
+      const result = telemetryMod.partitionCrewReadings(telemetryMod.parseCrew([sampleRawCrewRow("a1", { blood_pressure: pressure })]));
+      assert.equal(result.rejected, 1);
+      assert.equal(result.lastRejection, "blood_pressure: not a finite number");
+      assert.equal(result.readings.some(r => r.indicator === "blood_pressure"), false);
+      assert.ok(result.readings.some(r => r.indicator === "heart_rate"));
+    }
+    const both = telemetryMod.partitionCrewReadings(telemetryMod.parseCrew([sampleRawCrewRow("a1", { blood_pressure: "abc/xyz" })]));
+    assert.equal(both.rejected, 2);
+  });
+
+  test("Ronda 5: ausencias no cuentan y NaN directo sí cuenta", () => {
+    for (const value of [null, "", "  ", undefined]) {
+      const row = sampleRawCrewRow("a1", { heart_rate: value, blood_pressure: value });
+      if (value === undefined) { delete row.heart_rate; delete row.blood_pressure; }
+      const result = telemetryMod.partitionCrewReadings(telemetryMod.parseCrew([row]));
+      assert.equal(result.rejected, 0);
+      assert.equal(result.lastRejection, null);
+      assert.ok(result.readings.some(r => r.indicator === "oxygen_in_blood"));
+    }
+    const crew = telemetryMod.parseCrew([sampleRawCrewRow("a1")]);
+    crew[0].telemetry.heart_rate = NaN;
+    crew[0].telemetry.blood_pressure.diastolic = NaN;
+    const result = telemetryMod.partitionCrewReadings(crew);
+    assert.equal(result.rejected, 2);
+    assert.equal(result.lastRejection, "blood_pressure: not a finite number");
+    assert.ok(result.readings.some(r => r.indicator === "oxygen_in_blood"));
+    assert.equal(result.readings.some(r => r.indicator === "heart_rate" || r.indicator === "blood_pressure"), false);
+  });
+
   test("parseCrew normaliza una vez y rechaza duplicados tras normalizar ('a1' y ' a1 ')", () => {
     assert.throws(
       () => telemetryMod.parseCrew([sampleRawCrewRow("a1"), sampleRawCrewRow(" a1 ")]),
@@ -313,18 +357,41 @@ describe("telemetría local — parseCrew, crewToReadings y cola IPC", () => {
     assert.equal(partialKeys.has("hrv"), false);
   });
 
+  test("N1 contrato compartido: parseCrew + crewToReadings coincide con el fixture telemetry-record-batch.json", () => {
+    const fixturePath = path.join(repoRoot, "docs/api/fixtures/telemetry-record-batch.json");
+    const fixture = JSON.parse(fs.readFileSync(fixturePath, "utf8"));
+
+    const byIndicator = (a, b) => a.indicator.localeCompare(b.indicator);
+    const actual = telemetryMod
+      .crewToReadings(telemetryMod.parseCrew([fixture.crew_row]))
+      .slice()
+      .sort(byIndicator);
+    const expected = fixture.readings.slice().sort(byIndicator);
+
+    assert.deepStrictEqual(actual, expected);
+  });
+
   test("createTelemetryFeed fuera de Tauri publica el feed sin invocar IPC", async () => {
     delete globalThis.window.__TAURI_INTERNALS__;
     let invokeCount = 0;
+    const origRecordTelemetry = coreMod.core.recordTelemetry;
+    coreMod.core.recordTelemetry = (...args) => {
+      invokeCount += 1;
+      return origRecordTelemetry(...args);
+    };
     globalThis.fetch = async () => ({
       ok: true,
       json: async () => [sampleRawCrewRow("a1")],
     });
 
     const states = [];
-    const feed = telemetryMod.createTelemetryFeed(s => states.push(s));
-    await flushMicrotasks();
-    feed.stop();
+    try {
+      const feed = telemetryMod.createTelemetryFeed(s => states.push(s));
+      await flushMicrotasks();
+      feed.stop();
+    } finally {
+      coreMod.core.recordTelemetry = origRecordTelemetry;
+    }
 
     const latest = states.at(-1);
     assert.equal(latest.live, true);
@@ -437,53 +504,243 @@ describe("telemetría local — parseCrew, crewToReadings y cola IPC", () => {
     assert.equal(ipcCalls.length, 2);
   });
 
-  test("cola de guardado: tiempo máximo de 10 s marca error en state.persist y libera la cola", async t => {
+  test("N3 cola de guardado: timeout de 10 s avisa sin liberar la cola hasta resolver y envía solo el último lote pendiente", async t => {
     t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
 
-    let callIndex = 0;
+    const ipcCalls = [];
+    const firstIpc = deferred();
+    let inFlightIpc = 0;
+    let maxInFlightIpc = 0;
+
     globalThis.window.__TAURI_INTERNALS__ = {
-      invoke: (_cmd, args) => {
-        callIndex += 1;
-        if (callIndex === 1) {
-          // Simula IPC colgado que nunca responde.
-          return new Promise(() => {});
+      invoke: async (cmd, args) => {
+        assert.equal(cmd, "record_telemetry");
+        inFlightIpc += 1;
+        maxInFlightIpc = Math.max(maxInFlightIpc, inFlightIpc);
+        const keys = [...new Set(args.input.readings.map(r => r.astronaut_key))];
+        ipcCalls.push(keys);
+        try {
+          if (ipcCalls.length === 1) {
+            return await firstIpc.promise;
+          }
+          return {
+            stored: args.input.readings.length,
+            skipped: 0,
+            batch_id: `batch-${ipcCalls.length}`,
+          };
+        } finally {
+          inFlightIpc -= 1;
         }
-        return Promise.resolve({
-          stored: args.input.readings.length,
-          skipped: 0,
-          batch_id: "recovered-batch",
-        });
       },
     };
 
+    let fetchSeq = 0;
+    globalThis.fetch = async () => {
+      fetchSeq += 1;
+      return {
+        ok: true,
+        json: async () => [sampleRawCrewRow(`crew-${fetchSeq}`)],
+      };
+    };
+
+    const states = [];
+    const feed = telemetryMod.createTelemetryFeed(s => states.push(s));
+    await flushMicrotasks();
+
+    assert.equal(ipcCalls.length, 1);
+    assert.equal(inFlightIpc, 1);
+    assert.equal(states.at(-1).live, true);
+
+    // Avanzamos 10 s: el timeout publica estado "slow" (lento != fallo, ok sigue true), sin lanzar un segundo invoke.
+    t.mock.timers.tick(10_000);
+    await flushMicrotasks();
+
+    const slowState = states.find(s => s.persist && s.persist.status === "slow");
+    assert.ok(slowState, "Debe haberse publicado un estado con persist.status === 'slow' tras vencer 10 s");
+    assert.equal(slowState.persist.ok, true);
+    assert.equal(slowState.persist.lastError, null);
+    assert.equal(ipcCalls.length, 1);
+    assert.equal(inFlightIpc, 1);
+
+    // Mientras sigue colgado el primero, llegan lotes intermedios: ninguno dispara otro invoke.
+    await feed.refresh();
+    await feed.refresh();
+    await feed.refresh();
+    assert.equal(ipcCalls.length, 1);
+    assert.equal(maxInFlightIpc, 1);
+    const latestCrewKey = states.at(-1).crew[0].id;
+    assert.notEqual(latestCrewKey, "crew-1");
+    assert.notEqual(latestCrewKey, "crew-2");
+
+    // Al resolverse la promesa original, se envía únicamente el último lote pendiente (gana la última).
+    firstIpc.resolve({ stored: 12, skipped: 0, batch_id: "slow-1" });
+    await flushMicrotasks(60);
+    feed.stop();
+
+    assert.equal(maxInFlightIpc, 1);
+    assert.deepEqual(ipcCalls, [["crew-1"], [latestCrewKey]]);
+    assert.equal(states.at(-1).persist.status, "ok");
+    assert.equal(states.at(-1).persist.ok, true);
+    assert.equal(states.at(-1).persist.lastError, null);
+    assert.equal(states.at(-1).persist.lastBatchId, "batch-2");
+  });
+
+  test("R3-1: validateReading replica cotas de Rust (clave, nombre, unidad, mood, finitos y tamaño JSON)", () => {
+    const base = {
+      astronaut_key: "a1",
+      astronaut_name: "Alice",
+      indicator: "heart_rate",
+      value: { bpm: 72 },
+      unit: "bpm",
+    };
+    assert.deepEqual(telemetryMod.validateReading(base), { ok: true, reason: null });
+
+    assert.equal(telemetryMod.validateReading({ ...base, astronaut_key: "   " }).ok, false);
+    assert.equal(telemetryMod.validateReading({ ...base, astronaut_key: "k".repeat(65) }).ok, false);
+    assert.equal(telemetryMod.validateReading({ ...base, astronaut_key: "a1\n" }).ok, false);
+    assert.equal(telemetryMod.validateReading({ ...base, astronaut_key: "k".repeat(64) }).ok, true);
+
+    assert.equal(telemetryMod.validateReading({ ...base, astronaut_name: "   " }).ok, false);
+    assert.equal(telemetryMod.validateReading({ ...base, astronaut_name: "n".repeat(101) }).ok, false);
+    assert.equal(telemetryMod.validateReading({ ...base, astronaut_name: "Alice\x00" }).ok, false);
+    assert.equal(telemetryMod.validateReading({ ...base, astronaut_name: "n".repeat(100) }).ok, true);
+
+    assert.equal(telemetryMod.validateReading({ ...base, unit: "u".repeat(17) }).ok, false);
+    assert.equal(telemetryMod.validateReading({ ...base, unit: "u".repeat(16) }).ok, true);
+
+    const moodBase = { ...base, indicator: "mood", value: { label: "Focused" }, unit: "" };
+    assert.equal(telemetryMod.validateReading(moodBase).ok, true);
+    assert.deepEqual(
+      telemetryMod.validateReading({ ...moodBase, value: { label: "m".repeat(65) } }),
+      { ok: false, reason: "mood: too long" },
+    );
+    assert.equal(telemetryMod.validateReading({ ...moodBase, value: { label: "calm\nnext" } }).ok, false);
+    assert.equal(telemetryMod.validateReading({ ...moodBase, value: { label: "   " } }).ok, false);
+
+    assert.equal(telemetryMod.validateReading({ ...base, value: { bpm: Number.NaN } }).ok, false);
+    assert.equal(telemetryMod.validateReading({ ...base, value: { bpm: Number.POSITIVE_INFINITY } }).ok, false);
+    assert.equal(
+      telemetryMod.validateReading({
+        ...base,
+        value: { bpm: 72, extra: "x".repeat(2048) },
+      }).ok,
+      false,
+    );
+  });
+
+  test("R3-1: mood de 65, mood con salto de línea, nombre de 101 e id vacío tras trim excluyen solo su lectura y envían el resto", async () => {
+    const sentReadings = [];
+    globalThis.window.__TAURI_INTERNALS__ = {
+      invoke: async (cmd, args) => {
+        assert.equal(cmd, "record_telemetry");
+        sentReadings.push(...args.input.readings);
+        return { stored: args.input.readings.length, skipped: 0, batch_id: "b-r3-1" };
+      },
+    };
+
+    // Caso A: mood de 65 caracteres en crew-1 -> solo se excluye mood, las otras 11 lecturas se envían.
+    const crewMoodLong = telemetryMod.parseCrew([
+      sampleRawCrewRow("crew-1", { mood: "m".repeat(65) }),
+    ]);
+    const partLong = telemetryMod.partitionCrewReadings(crewMoodLong);
+    assert.equal(partLong.readings.length, 11);
+    assert.equal(partLong.rejected, 1);
+    assert.equal(partLong.lastRejection, "mood: too long");
+    assert.equal(partLong.readings.some(r => r.indicator === "mood"), false);
+
+    // Caso B: mood con salto de línea en crew-2 -> solo se excluye mood.
+    const crewMoodNewline = telemetryMod.parseCrew([
+      sampleRawCrewRow("crew-2", { mood: "calm\nline" }),
+    ]);
+    const partNewline = telemetryMod.partitionCrewReadings(crewMoodNewline);
+    assert.equal(partNewline.readings.length, 11);
+    assert.equal(partNewline.rejected, 1);
+    assert.match(partNewline.lastRejection, /^mood:/);
+
+    // Caso C: nombre de 101 chars + id vacío tras trim + miembro válido en el mismo lote.
+    const longNameMember = telemetryMod.parseCrew([
+      sampleRawCrewRow("crew-long-name", { astronaut_name: "N".repeat(101) }),
+    ])[0];
+    const emptyIdMember = {
+      ...telemetryMod.parseCrew([sampleRawCrewRow("temp")])[0],
+      id: "   ",
+    };
+    const validMember = telemetryMod.parseCrew([sampleRawCrewRow("crew-ok")])[0];
+
+    const mixedBatch = telemetryMod.partitionCrewReadings([
+      longNameMember,
+      emptyIdMember,
+      validMember,
+    ]);
+    assert.equal(mixedBatch.readings.length, 12);
+    assert.ok(mixedBatch.readings.every(r => r.astronaut_key === "crew-ok"));
+    assert.equal(mixedBatch.rejected, 24);
+
+    // Caso D: createTelemetryFeed registra state.persist.rejected y lastRejection al persistir.
     globalThis.fetch = async () => ({
       ok: true,
-      json: async () => [sampleRawCrewRow("a1")],
+      json: async () => [
+        sampleRawCrewRow("crew-valid"),
+        sampleRawCrewRow("crew-long", { astronaut_name: "A".repeat(101) }),
+        sampleRawCrewRow("crew-bad-mood", { mood: "x".repeat(65) }),
+      ],
+    });
+    const states = [];
+    const feed = telemetryMod.createTelemetryFeed(s => states.push(s));
+    await flushMicrotasks(60);
+    feed.stop();
+
+    // crew-valid (12) + crew-bad-mood sin mood (11) = 23 lecturas enviadas; 12 + 1 = 13 rechazadas.
+    assert.equal(sentReadings.length, 23);
+    assert.equal(sentReadings.some(r => r.astronaut_key === "crew-long"), false);
+    assert.equal(
+      sentReadings.some(r => r.astronaut_key === "crew-bad-mood" && r.indicator === "mood"),
+      false,
+    );
+    const latest = states.at(-1);
+    assert.equal(latest.persist.status, "ok");
+    assert.equal(latest.persist.ok, true);
+    assert.equal(latest.persist.stored, 23);
+    assert.equal(latest.persist.rejected, 13);
+    assert.equal(latest.persist.lastRejection, "mood: too long");
+  });
+
+  test("R3-4: lento transitions -> error tras timeout de 10 s manteniendo un único invoke en vuelo", async t => {
+    t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
+    const firstIpc = deferred();
+    let invokeCount = 0;
+
+    globalThis.window.__TAURI_INTERNALS__ = {
+      invoke: async () => {
+        invokeCount += 1;
+        return firstIpc.promise;
+      },
+    };
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => [sampleRawCrewRow("crew-err")],
     });
 
     const states = [];
     const feed = telemetryMod.createTelemetryFeed(s => states.push(s));
     await flushMicrotasks();
 
-    assert.equal(callIndex, 1);
-    assert.equal(states.at(-1).live, true);
-
-    // Avanzamos 10 s: el primer IPC vence por timeout, registra error y libera la cola.
     t.mock.timers.tick(10_000);
     await flushMicrotasks();
+    const slowState = states.at(-1);
+    assert.equal(slowState.persist.status, "slow");
+    assert.equal(slowState.persist.ok, true);
+    assert.equal(slowState.persist.lastError, null);
+    assert.equal(invokeCount, 1);
 
-    const failedState = states.find(s => s.persist && s.persist.ok === false);
-    assert.ok(failedState, "Debe haberse publicado un estado con persist.ok === false tras vencer 10 s");
-    assert.match(failedState.persist.lastError, /timed out/i);
-
-    // La cola quedó liberada: un guardado posterior (por intervalo o refresco) completa correctamente.
-    await feed.refresh();
-    await flushMicrotasks();
+    firstIpc.reject(new Error("SQLite locked"));
+    await flushMicrotasks(40);
     feed.stop();
 
-    assert.ok(callIndex >= 2);
-    assert.equal(states.at(-1).persist.ok, true);
-    assert.equal(states.at(-1).persist.lastBatchId, "recovered-batch");
+    const errState = states.at(-1);
+    assert.equal(errState.persist.status, "error");
+    assert.equal(errState.persist.ok, false);
+    assert.equal(errState.persist.lastError, "SQLite locked");
   });
 });
 
@@ -520,6 +777,7 @@ describe("telemetría local — panel telemetry-history.ts", () => {
             series_checked: 1,
             first_bad_reading_id: null,
             problem: null,
+            checked_through_reading_id: 1,
           });
         }
         if (mode === "hang") return firstList.promise;
@@ -560,7 +818,16 @@ describe("telemetría local — panel telemetry-history.ts", () => {
     mode = "hang";
     const hang2 = deferred();
     globalThis.window.__TAURI_INTERNALS__.invoke = cmd =>
-      cmd === "list_telemetry" ? hang2.promise : Promise.resolve({ ok: true, checked: 0, series_checked: 0, first_bad_reading_id: null, problem: null });
+      cmd === "list_telemetry"
+        ? hang2.promise
+        : Promise.resolve({
+            ok: true,
+            checked: 0,
+            series_checked: 0,
+            first_bad_reading_id: null,
+            problem: null,
+            checked_through_reading_id: null,
+          });
     void handle.refresh();
     assert.equal(body.getAttribute("aria-busy"), "true");
     delete globalThis.window.__TAURI_INTERNALS__;
@@ -588,6 +855,7 @@ describe("telemetría local — panel telemetry-history.ts", () => {
       series_checked: 2,
       first_bad_reading_id: null,
       problem: null,
+      checked_through_reading_id: 15,
     };
 
     globalThis.window.__TAURI_INTERNALS__ = {
@@ -630,8 +898,9 @@ describe("telemetría local — panel telemetry-history.ts", () => {
       },
     };
 
+    const parsedCrew = telemetryMod.parseCrew([sampleRawCrewRow(" a1 ")]);
     const crew = [
-      { id: "a1", name: "Alice" },
+      { id: parsedCrew[0].id, name: parsedCrew[0].name },
       { id: "a2", name: "Bob" },
     ];
     const host = createHost();
@@ -647,7 +916,7 @@ describe("telemetría local — panel telemetry-history.ts", () => {
     const traceLine = host.querySelector(".tele-hist-trace");
     const helpLine = host.querySelector(".tele-hist-help");
     const verifyBtn = host.querySelector(".tele-hist-verify");
-    assert.equal(traceLine.textContent, "15 readings · chain consistent ✓");
+    assert.match(traceLine.textContent, /^Checked \d{2}:\d{2}:\d{2} UTC · 15 readings in chain · consistent ✓$/);
     assert.equal(/verified/i.test(traceLine.textContent), false);
     assert.equal(traceLine.title, "Detects edits and missing records on this device.");
     assert.equal(helpLine.textContent, "Detects edits and missing records on this device.");
@@ -688,7 +957,7 @@ describe("telemetría local — panel telemetry-history.ts", () => {
     t.mock.timers.tick(250);
     await flushMicrotasks();
     assert.equal(verifyCalls.length, 2);
-    assert.equal(traceLine.textContent, "15 readings · chain consistent ✓");
+    assert.match(traceLine.textContent, /^Checked \d{2}:\d{2}:\d{2} UTC · 15 readings in chain · consistent ✓$/);
 
     // Botón "Verify chain" deshabilitado mientras corre y sin dos verificaciones simultáneas.
     nextVerifyDeferred = deferred();
@@ -699,6 +968,7 @@ describe("telemetría local — panel telemetry-history.ts", () => {
       series_checked: 1,
       first_bad_reading_id: 42,
       problem: "hash_mismatch",
+      checked_through_reading_id: 10,
     };
     verifyBtn.click();
     assert.equal(verifyBtn.disabled, true);
@@ -712,7 +982,7 @@ describe("telemetría local — panel telemetry-history.ts", () => {
     slowVerify.resolve(verifyResponse);
     await flushMicrotasks();
     assert.equal(verifyBtn.disabled, false);
-    assert.equal(traceLine.textContent, "chain problem: hash mismatch at #42");
+    assert.match(traceLine.textContent, /^Checked \d{2}:\d{2}:\d{2} UTC · 10 readings in chain · chain problem: hash mismatch at #42$/);
 
     // Tras >= 60 s, cambiar a "a2" vuelve a verificar y muestra texto legible sin #id si es null.
     t.mock.timers.tick(65_000);
@@ -722,13 +992,14 @@ describe("telemetría local — panel telemetry-history.ts", () => {
       series_checked: 1,
       first_bad_reading_id: null,
       problem: "missing_tail",
+      checked_through_reading_id: 10,
     };
     crewSelect.value = "a2";
     crewSelect.dispatchEvent(new Event("change"));
     t.mock.timers.tick(250);
     await flushMicrotasks();
     assert.equal(verifyCalls.length, 4);
-    assert.equal(traceLine.textContent, "chain problem: missing tail");
+    assert.match(traceLine.textContent, /^Checked \d{2}:\d{2}:\d{2} UTC · 9 readings in chain · chain problem: missing tail$/);
 
     // Comprobación de los restantes tipos de problema.
     for (const [problem, expected] of [
@@ -742,11 +1013,548 @@ describe("telemetría local — panel telemetry-history.ts", () => {
         series_checked: 1,
         first_bad_reading_id: 7,
         problem,
+        checked_through_reading_id: 10,
       };
       verifyBtn.click();
       await flushMicrotasks();
-      assert.equal(traceLine.textContent, expected);
+      assert.match(traceLine.textContent, new RegExp(`^Checked \\d{2}:\\d{2}:\\d{2} UTC · 5 readings in chain · ${expected}$`));
     }
+
+    handle.destroy();
+  });
+
+  test("Hallazgo 6: tres refresh() seguidos coalescen a 1 en vuelo + 1 pendiente con la selección más reciente", async () => {
+    const { createHost } = createDomEnvironment();
+    const listCalls = [];
+    const deferredLists = [];
+    let listInFlight = 0;
+    let maxListInFlight = 0;
+
+    globalThis.window.__TAURI_INTERNALS__ = {
+      invoke: async (cmd, args) => {
+        if (cmd === "verify_telemetry") {
+          return {
+            ok: true,
+            checked: 2,
+            series_checked: 1,
+            first_bad_reading_id: null,
+            problem: null,
+            checked_through_reading_id: 2,
+          };
+        }
+        if (cmd === "list_telemetry") {
+          listInFlight += 1;
+          maxListInFlight = Math.max(maxListInFlight, listInFlight);
+          listCalls.push({ ...args.input });
+          const d = deferred();
+          deferredLists.push(d);
+          try {
+            return await d.promise;
+          } finally {
+            listInFlight -= 1;
+          }
+        }
+        throw new Error(`Unexpected command: ${cmd}`);
+      },
+    };
+
+    const host = createHost();
+    const handle = historyMod.mountTelemetryHistory(host, () => [{ id: "a1", name: "Alice" }]);
+
+    // Resolvemos la carga inicial del montaje para partir en reposo.
+    assert.equal(deferredLists.length, 1);
+    deferredLists[0].resolve([]);
+    await flushMicrotasks();
+    listCalls.length = 0;
+    deferredLists.length = 0;
+
+    const [, indicatorSelect] = host.querySelectorAll(".tele-hist-select");
+
+    // Tres refresh() seguidos cambiando selección entre el 2º y 3º.
+    const p1 = handle.refresh();
+    indicatorSelect.value = "glucose";
+    indicatorSelect.dispatchEvent(new Event("change"));
+    const p2 = handle.refresh();
+    indicatorSelect.value = "hrv";
+    indicatorSelect.dispatchEvent(new Event("change"));
+    const p3 = handle.refresh();
+
+    // Solo 1 llamada en vuelo mientras no termine la primera.
+    assert.equal(listCalls.length, 1);
+    assert.equal(listInFlight, 1);
+
+    deferredLists[0].resolve([]);
+    await flushMicrotasks();
+
+    // Al terminar la 1ª, se lanza exactamente 1 pasada pendiente con la selección más reciente ("hrv").
+    assert.equal(listCalls.length, 2);
+    assert.equal(listCalls[1].indicator, "hrv");
+    assert.equal(maxListInFlight, 1);
+
+    deferredLists[1].resolve([]);
+    await Promise.all([p1, p2, p3]);
+    assert.equal(listCalls.length, 2);
+
+    handle.destroy();
+  });
+
+  test("N5: la lista conserva el orden recibido [2, 1] aunque observed_at venga invertido", async () => {
+    const { createHost } = createDomEnvironment();
+    const backendItems = [
+      {
+        reading_id: 2,
+        astronaut_key: "a1",
+        astronaut_name: "Alice",
+        indicator: "heart_rate",
+        value: { bpm: 72 },
+        unit: "bpm",
+        observed_at: "2026-11-14T20:00:00.000Z",
+        batch_id: "b2",
+        source: "mysql",
+        app_version: "0.1.0",
+        prev_hash: "h1",
+        row_hash: "h2",
+      },
+      {
+        reading_id: 1,
+        astronaut_key: "a1",
+        astronaut_name: "Alice",
+        indicator: "heart_rate",
+        value: { bpm: 88 },
+        unit: "bpm",
+        observed_at: "2026-11-14T22:00:00.000Z",
+        batch_id: "b1",
+        source: "mysql",
+        app_version: "0.1.0",
+        prev_hash: "0",
+        row_hash: "h1",
+      },
+    ];
+
+    globalThis.window.__TAURI_INTERNALS__ = {
+      invoke: async cmd => {
+        if (cmd === "verify_telemetry") {
+          return {
+            ok: true,
+            checked: 2,
+            series_checked: 1,
+            first_bad_reading_id: null,
+            problem: null,
+            checked_through_reading_id: 2,
+          };
+        }
+        if (cmd === "list_telemetry") {
+          return backendItems;
+        }
+        throw new Error(`Unexpected command: ${cmd}`);
+      },
+    };
+
+    const host = createHost();
+    const handle = historyMod.mountTelemetryHistory(host, () => [{ id: "a1", name: "Alice" }]);
+    await flushMicrotasks();
+
+    const rows = host.querySelectorAll(".tele-hist-item");
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].querySelector(".tele-hist-time").textContent, "20:00:00 UTC");
+    assert.equal(rows[0].querySelector(".tele-hist-value").textContent, "72 bpm");
+    assert.equal(rows[1].querySelector(".tele-hist-time").textContent, "22:00:00 UTC");
+    assert.equal(rows[1].querySelector(".tele-hist-value").textContent, "88 bpm");
+
+    // La gráfica ordena aparte cronológicamente sin alterar la lista.
+    const chartWindow = host.querySelector(".tele-hist-window");
+    assert.equal(chartWindow.textContent, "20:00:00 UTC — 22:00:00 UTC");
+
+    handle.destroy();
+  });
+
+  test("N6: etiqueta de integridad muestra hora UTC, alcance y marca lecturas nuevas sin re-verificar sola", async t => {
+    t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
+    t.mock.timers.setTime(Date.UTC(2026, 10, 14, 10, 15, 30));
+
+    const { createHost } = createDomEnvironment();
+    let verifyCount = 0;
+    let listedItems = [
+      {
+        reading_id: 5,
+        astronaut_key: "a1",
+        astronaut_name: "Alice",
+        indicator: "heart_rate",
+        value: { bpm: 70 },
+        unit: "bpm",
+        observed_at: "2026-11-14T10:15:00.000Z",
+        batch_id: "b1",
+        source: "mysql",
+        app_version: "0.1.0",
+        prev_hash: "0",
+        row_hash: "h5",
+      },
+    ];
+    let checkedTotal = 5;
+
+    globalThis.window.__TAURI_INTERNALS__ = {
+      invoke: async cmd => {
+        if (cmd === "verify_telemetry") {
+          verifyCount += 1;
+          return {
+            ok: true,
+            checked: checkedTotal,
+            series_checked: 1,
+            first_bad_reading_id: null,
+            problem: null,
+            checked_through_reading_id: checkedTotal,
+          };
+        }
+        if (cmd === "list_telemetry") {
+          return listedItems;
+        }
+        throw new Error(`Unexpected command: ${cmd}`);
+      },
+    };
+
+    const host = createHost();
+    const handle = historyMod.mountTelemetryHistory(host, () => [{ id: "a1", name: "Alice" }]);
+    await flushMicrotasks();
+
+    const traceLine = host.querySelector(".tele-hist-trace");
+    const verifyBtn = host.querySelector(".tele-hist-verify");
+    assert.equal(verifyCount, 1);
+    assert.equal(traceLine.textContent, "Checked 10:15:30 UTC · 5 readings in chain · consistent ✓");
+
+    // Llegan lecturas nuevas en un refresco: marca el aviso pero NO re-verifica automáticamente.
+    t.mock.timers.tick(5_000);
+    listedItems = [
+      {
+        ...listedItems[0],
+        reading_id: 6,
+        observed_at: "2026-11-14T10:15:35.000Z",
+      },
+      listedItems[0],
+    ];
+    await handle.refresh();
+    assert.equal(verifyCount, 1);
+    assert.equal(
+      traceLine.textContent,
+      "Checked 10:15:30 UTC · 5 readings in chain · consistent ✓ · newer readings not yet checked",
+    );
+
+    // El botón manual "Verify chain" actualiza la hora y limpia el aviso.
+    checkedTotal = 6;
+    verifyBtn.click();
+    await flushMicrotasks();
+    assert.equal(verifyCount, 2);
+    assert.equal(traceLine.textContent, "Checked 10:15:35 UTC · 6 readings in chain · consistent ✓");
+
+    handle.destroy();
+  });
+
+  test("R3-2: respuesta tardía de A tras cambiar a B se descarta y luego B se pinta bien", async () => {
+    const { createHost } = createDomEnvironment();
+    const listA = deferred();
+    const listB = deferred();
+    const listCalls = [];
+
+    globalThis.window.__TAURI_INTERNALS__ = {
+      invoke: async (cmd, args) => {
+        if (cmd === "verify_telemetry") {
+          return {
+            ok: true,
+            checked: 4,
+            series_checked: 1,
+            first_bad_reading_id: null,
+            problem: null,
+            checked_through_reading_id: 4,
+          };
+        }
+        if (cmd === "list_telemetry") {
+          listCalls.push({ ...args.input });
+          if (args.input.astronaut_key === "A" && listCalls.length === 1) {
+            return listA.promise;
+          }
+          if (args.input.astronaut_key === "B") {
+            return listB.promise;
+          }
+          return [];
+        }
+        throw new Error(`Unexpected command: ${cmd}`);
+      },
+    };
+
+    const host = createHost();
+    const handle = historyMod.mountTelemetryHistory(host, () => [
+      { id: "A", name: "Alice" },
+      { id: "B", name: "Bob" },
+    ]);
+
+    assert.equal(listCalls.length, 1);
+    assert.equal(listCalls[0].astronaut_key, "A");
+
+    // Cambiamos a astronauta B mientras la consulta de A sigue en vuelo y refrescamos.
+    const [crewSelect, indicatorSelect] = host.querySelectorAll(".tele-hist-select");
+    crewSelect.value = "B";
+    crewSelect.dispatchEvent(new Event("change"));
+    const refreshB = handle.refresh();
+
+    // Llega tarde la respuesta de A (con reading_id 999 > 4 para detectar cualquier fuga a estadísticas).
+    listA.resolve([
+      {
+        reading_id: 999,
+        astronaut_key: "A",
+        astronaut_name: "Alice",
+        indicator: "heart_rate",
+        value: { bpm: 177 },
+        unit: "bpm",
+        observed_at: "2026-11-14T11:00:00.000Z",
+        batch_id: "ba",
+        source: "mysql",
+        app_version: "0.1.0",
+        prev_hash: "0",
+        row_hash: "ha",
+      },
+    ]);
+    await flushMicrotasks();
+
+    const statusLine = host.querySelector(".tele-hist-status");
+    const traceLine = host.querySelector(".tele-hist-trace");
+    const body = host.querySelector(".tele-hist-body");
+    assert.doesNotMatch(statusLine.textContent, /readings loaded/);
+    assert.equal(body.querySelectorAll(".tele-hist-item").length, 0);
+    assert.doesNotMatch(traceLine.textContent, /newer readings not yet checked/);
+
+    // Ahora se resuelve B: B debe pintarse correctamente sin rastro de A.
+    assert.equal(listCalls.length, 2);
+    assert.equal(listCalls[1].astronaut_key, "B");
+    listB.resolve([
+      {
+        reading_id: 3,
+        astronaut_key: "B",
+        astronaut_name: "Bob",
+        indicator: "heart_rate",
+        value: { bpm: 64 },
+        unit: "bpm",
+        observed_at: "2026-11-14T11:05:00.000Z",
+        batch_id: "bb",
+        source: "mysql",
+        app_version: "0.1.0",
+        prev_hash: "0",
+        row_hash: "hb",
+      },
+    ]);
+    await refreshB;
+    await flushMicrotasks();
+
+    assert.equal(statusLine.textContent, "1 readings loaded · Heart rate");
+    const rows = body.querySelectorAll(".tele-hist-item");
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].querySelector(".tele-hist-value").textContent, "64 bpm");
+    assert.doesNotMatch(traceLine.textContent, /newer readings not yet checked/);
+
+    // También invalida al cambiar de indicador con consulta activa en vuelo.
+    const oldIndicator = deferred();
+    const newIndicator = deferred();
+    let mode = "old";
+    globalThis.window.__TAURI_INTERNALS__.invoke = async cmd => {
+      if (cmd === "verify_telemetry") {
+        return {
+          ok: true,
+          checked: 4,
+          series_checked: 1,
+          first_bad_reading_id: null,
+          problem: null,
+          checked_through_reading_id: 4,
+        };
+      }
+      return mode === "old" ? oldIndicator.promise : newIndicator.promise;
+    };
+    const pOld = handle.refresh();
+    indicatorSelect.value = "glucose";
+    indicatorSelect.dispatchEvent(new Event("change"));
+    mode = "new";
+    const pNew = handle.refresh();
+    oldIndicator.resolve([
+      {
+        reading_id: 4,
+        astronaut_key: "B",
+        astronaut_name: "Bob",
+        indicator: "heart_rate",
+        value: { bpm: 99 },
+        unit: "bpm",
+        observed_at: "2026-11-14T11:06:00.000Z",
+        batch_id: "b-old",
+        source: "mysql",
+        app_version: "0.1.0",
+        prev_hash: "0",
+        row_hash: "ho",
+      },
+    ]);
+    await flushMicrotasks();
+    assert.doesNotMatch(statusLine.textContent, /Heart rate$/);
+    newIndicator.resolve([
+      {
+        reading_id: 4,
+        astronaut_key: "B",
+        astronaut_name: "Bob",
+        indicator: "glucose",
+        value: { mg_dl: 95 },
+        unit: "mg/dL",
+        observed_at: "2026-11-14T11:07:00.000Z",
+        batch_id: "b-new",
+        source: "mysql",
+        app_version: "0.1.0",
+        prev_hash: "0",
+        row_hash: "hn",
+      },
+    ]);
+    await Promise.all([pOld, pNew]);
+    assert.equal(statusLine.textContent, "1 readings loaded · Blood glucose");
+    assert.equal(body.querySelector(".tele-hist-value").textContent, "95 mg/dL");
+
+    handle.destroy();
+  });
+
+  test("R3-3: vigencia usa checked_through_reading_id entre indicadores y muestra scope unknown si falta referencia", async t => {
+    t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
+    t.mock.timers.setTime(Date.UTC(2026, 10, 14, 12, 0, 0));
+    const { createHost } = createDomEnvironment();
+
+    let verifyPayload = {
+      ok: true,
+      checked: 12,
+      series_checked: 2,
+      first_bad_reading_id: null,
+      problem: null,
+      checked_through_reading_id: 12,
+    };
+    const itemsByIndicator = {
+      heart_rate: [
+        {
+          reading_id: 12,
+          astronaut_key: "a1",
+          astronaut_name: "Alice",
+          indicator: "heart_rate",
+          value: { bpm: 71 },
+          unit: "bpm",
+          observed_at: "2026-11-14T11:59:00.000Z",
+          batch_id: "b1",
+          source: "mysql",
+          app_version: "0.1.0",
+          prev_hash: "0",
+          row_hash: "h12",
+        },
+      ],
+      glucose: [],
+    };
+
+    globalThis.window.__TAURI_INTERNALS__ = {
+      invoke: async (cmd, args) => {
+        if (cmd === "verify_telemetry") return verifyPayload;
+        if (cmd === "list_telemetry") return itemsByIndicator[args.input.indicator] ?? [];
+        throw new Error(`Unexpected command: ${cmd}`);
+      },
+    };
+
+    const host = createHost();
+    const handle = historyMod.mountTelemetryHistory(host, () => [{ id: "a1", name: "Alice" }]);
+    await flushMicrotasks();
+
+    const traceLine = host.querySelector(".tele-hist-trace");
+    const verifyBtn = host.querySelector(".tele-hist-verify");
+    const [, indicatorSelect] = host.querySelectorAll(".tele-hist-select");
+    assert.equal(traceLine.textContent, "Checked 12:00:00 UTC · 12 readings in chain · consistent ✓");
+
+    // Llega glucosa #13 y el usuario selecciona glucosa por primera vez: debe avisar pese a tener 1 sola fila.
+    itemsByIndicator.glucose = [
+      {
+        reading_id: 13,
+        astronaut_key: "a1",
+        astronaut_name: "Alice",
+        indicator: "glucose",
+        value: { mg_dl: 102 },
+        unit: "mg/dL",
+        observed_at: "2026-11-14T12:00:10.000Z",
+        batch_id: "b2",
+        source: "mysql",
+        app_version: "0.1.0",
+        prev_hash: "0",
+        row_hash: "h13",
+      },
+    ];
+    indicatorSelect.value = "glucose";
+    indicatorSelect.dispatchEvent(new Event("change"));
+    t.mock.timers.tick(250);
+    await flushMicrotasks();
+
+    assert.equal(
+      traceLine.textContent,
+      "Checked 12:00:00 UTC · 12 readings in chain · consistent ✓ · newer readings not yet checked",
+    );
+
+    // Si checked_through_reading_id es null con lecturas presentes: muestra "scope unknown".
+    verifyPayload = {
+      ok: true,
+      checked: 0,
+      series_checked: 0,
+      first_bad_reading_id: null,
+      problem: null,
+      checked_through_reading_id: null,
+    };
+    verifyBtn.click();
+    await flushMicrotasks();
+    assert.equal(
+      traceLine.textContent,
+      "Checked 12:00:00 UTC · 0 readings in chain · consistent ✓ · scope unknown",
+    );
+
+    // Si checked_through_reading_id es null pero NO hay lecturas cargadas, no muestra "scope unknown".
+    itemsByIndicator.heart_rate = [];
+    itemsByIndicator.glucose = [];
+    await handle.refresh();
+    indicatorSelect.value = "heart_rate";
+    indicatorSelect.dispatchEvent(new Event("change"));
+    t.mock.timers.tick(250);
+    await flushMicrotasks();
+    assert.equal(traceLine.textContent, "Checked 12:00:00 UTC · 0 readings in chain · consistent ✓");
+
+    handle.destroy();
+  });
+
+  test("setPersistStatus pinta los tres estados (ok, slow, error) en el panel con role=status", async () => {
+    delete globalThis.window.__TAURI_INTERNALS__;
+    const { createHost } = createDomEnvironment();
+    const host = createHost();
+
+    const handle = historyMod.mountTelemetryHistory(host, () => []);
+    await flushMicrotasks();
+
+    const persistLine = host.querySelector(".tele-hist-persist");
+    assert.ok(persistLine);
+    assert.equal(persistLine.getAttribute("role"), "status");
+    assert.equal(persistLine.hidden, true);
+
+    handle.setPersistStatus({ status: "ok", ok: true, stored: 12, skipped: 0, lastError: null });
+    assert.equal(persistLine.hidden, false);
+    assert.equal(persistLine.dataset.tone, "ok");
+    assert.equal(persistLine.dataset.state, "ok");
+    assert.equal(persistLine.textContent, "Saving to device: OK · last batch stored 12");
+
+    handle.setPersistStatus({ status: "slow", ok: true, stored: 12, skipped: 0, lastError: null });
+    assert.equal(persistLine.hidden, false);
+    assert.equal(persistLine.dataset.tone, "warn");
+    assert.equal(persistLine.dataset.state, "slow");
+    assert.equal(
+      persistLine.textContent,
+      "Saving to device is taking longer than usual; waiting for it to finish.",
+    );
+
+    handle.setPersistStatus({ status: "error", ok: false, stored: 0, skipped: 0, lastError: "disk full" });
+    assert.equal(persistLine.hidden, false);
+    assert.equal(persistLine.dataset.tone, "alarm");
+    assert.equal(persistLine.dataset.state, "error");
+    assert.equal(persistLine.textContent, "Saving to device failed: disk full");
+
+    handle.setPersistStatus(null);
+    assert.equal(persistLine.hidden, true);
+    assert.equal(persistLine.textContent, "");
 
     handle.destroy();
   });

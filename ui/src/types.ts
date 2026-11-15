@@ -22,4 +22,5 @@ export interface AstronautProfile {
   id: string;
   name: string;
   telemetry: AstronautTelemetry;
+  invalid?: { indicator: string; reason: string }[];
 }
