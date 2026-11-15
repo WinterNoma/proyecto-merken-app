@@ -56,7 +56,7 @@ fn symbol_prefix_start(text: &str, start: usize) -> usize {
     };
     let mut begin = start;
     for (offset, ch) in before.char_indices().rev() {
-        if matches!(ch, ' ' | '\t') {
+        if horizontal_space(ch) {
             continue;
         }
         if ch.is_alphanumeric()
@@ -99,6 +99,65 @@ fn symbol_prefix_start(text: &str, start: usize) -> usize {
     } else {
         begin
     }
+}
+
+fn horizontal_space(ch: char) -> bool {
+    ch.is_whitespace() && !matches!(ch, '\n' | '\r' | '\u{2028}' | '\u{2029}')
+}
+
+fn sentence_punctuation(ch: char) -> bool {
+    matches!(
+        ch,
+        '.' | ','
+            | ';'
+            | ':'
+            | '!'
+            | '?'
+            | '¡'
+            | '¿'
+            | '('
+            | ')'
+            | '\''
+            | '"'
+            | '‘'
+            | '’'
+            | '“'
+            | '”'
+            | '«'
+            | '»'
+            | '‹'
+            | '›'
+    )
+}
+
+fn word_char(ch: char) -> bool {
+    ch.is_alphanumeric() || ('\u{0300}'..='\u{036f}').contains(&ch)
+}
+
+// Keep the original symbol suffix of a pending word (units such as "%" or "℉"),
+// mirroring `symbol_prefix_start`: horizontal spaces may join symbols, sentence
+// punctuation and line breaks stop, and a symbol run attached on its right to a
+// word belongs to that word.
+fn symbol_suffix_end(text: &str, end: usize) -> usize {
+    let Some(after) = text.get(end..) else {
+        return end;
+    };
+    let mut last = end;
+    for (offset, ch) in after.char_indices() {
+        if horizontal_space(ch) {
+            continue;
+        }
+        if word_char(ch) || ch.is_whitespace() || sentence_punctuation(ch) {
+            break;
+        }
+        last = end + offset + ch.len_utf8();
+    }
+    let attached_to_next = last > end
+        && text
+            .get(last..)
+            .and_then(|tail| tail.chars().next())
+            .is_some_and(word_char);
+    if attached_to_next { end } else { last }
 }
 
 pub(super) fn connector(word: &str) -> bool {
@@ -459,6 +518,7 @@ pub(super) fn unresolved_fragments(text: &str, proposal: &Proposal) -> Vec<Strin
     }
     for span in &mut spans {
         span.0 = symbol_prefix_start(text, span.0);
+        span.1 = symbol_suffix_end(text, span.1);
     }
     spans.sort_unstable();
     let mut merged: Vec<(usize, usize)> = Vec::new();
