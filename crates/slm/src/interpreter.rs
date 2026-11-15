@@ -104,7 +104,7 @@ Rules:
 /// Trait para intérpretes de texto libre hacia una [`Proposal`] validable por `merken-core`.
 pub trait Interpreter {
     /// Interpreta `text` y devuelve una propuesta verificada con [`Proposal::check`].
-    fn interpret(&mut self, text: &str, ctl: &Control<'_>) -> Result<Proposal, SlmError>;
+    fn interpret(&mut self, text: &str, ctl: &mut Control<'_>) -> Result<Proposal, SlmError>;
 }
 
 /// Intérprete de respaldo (capa 2 de RF-14) respaldado por un [`Engine`] y gramática GBNF.
@@ -232,10 +232,10 @@ fn sanitize_proposal(proposal: &mut Proposal, input: &str) -> Result<(), SlmErro
                 }
                 "negated" => dedup_quoted(&mut proposal.negated, input),
                 "uninterpreted" => dedup_quoted(&mut proposal.uninterpreted, input),
-                other => {
+                _ => {
                     return Err(SlmError::InvalidOutput(vec![OutputIssue::new(
                         "invalid_proposal",
-                        format!("Unrecoverable proposal issue on field '{other}'"),
+                        "Unrecoverable proposal validation issue",
                     )]));
                 }
             }
@@ -338,17 +338,17 @@ fn sanitize_proposal(proposal: &mut Proposal, input: &str) -> Result<(), SlmErro
 }
 
 impl<E: Engine> Interpreter for SlmInterpreter<E> {
-    fn interpret(&mut self, text: &str, ctl: &Control<'_>) -> Result<Proposal, SlmError> {
+    fn interpret(&mut self, text: &str, ctl: &mut Control<'_>) -> Result<Proposal, SlmError> {
         ctl.check()?;
         let req = self.build_request(text);
         let raw_output = self.engine.generate(&req, ctl)?;
         ctl.check()?;
-        ctl.report(Progress::Validating);
+        ctl.report_and_check(Progress::Validating)?;
 
-        let raw: RawProposal = serde_json::from_str(raw_output.trim()).map_err(|e| {
+        let raw: RawProposal = serde_json::from_str(raw_output.trim()).map_err(|_| {
             SlmError::InvalidOutput(vec![OutputIssue::new(
                 "invalid_json",
-                format!("Interpreter output is not valid Proposal JSON: {e}"),
+                "Interpreter output is not valid Proposal JSON",
             )])
         })?;
 
@@ -396,7 +396,8 @@ impl<E: Engine> Interpreter for SlmInterpreter<E> {
         };
 
         sanitize_proposal(&mut proposal, text)?;
-        ctl.report(Progress::Done);
+        ctl.check()?;
+        ctl.report_and_check(Progress::Done)?;
         Ok(proposal)
     }
 }
@@ -421,9 +422,9 @@ mod tests {
     fn run_interpret(input: &str, mock_json: &str) -> (Result<Proposal, SlmError>, MockEngine) {
         let engine = MockEngine::with_responses([mock_json]);
         let mut interp = SlmInterpreter::new(engine, "granite-4.0-350m");
-        let ctl =
+        let mut ctl =
             Control::without_progress(CancelToken::new(), Deadline::after(Duration::from_secs(5)));
-        let res = interp.interpret(input, &ctl);
+        let res = interp.interpret(input, &mut ctl);
         (res, interp.into_engine())
     }
 
@@ -629,5 +630,125 @@ mod tests {
     fn broken_json_returns_invalid_output() {
         let (res, _) = run_interpret("pulse 72", "{\"records\": [broken");
         assert!(matches!(res, Err(SlmError::InvalidOutput(issues)) if !issues.is_empty()));
+    }
+
+    #[test]
+    fn cancel_on_validating_and_done_callbacks_returns_cancelled() {
+        let input = "my pulse is 72";
+        let valid_json = json!({
+            "schema_version": 1,
+            "interpreter": "slm",
+            "interpreter_version": "v1",
+            "records": [{
+                "indicator": "heart_rate",
+                "fields": [{"key": "bpm", "value": 72, "quote": "72"}],
+                "time": {"kind": "unspecified"},
+                "quote": "pulse is 72"
+            }],
+            "negated": [],
+            "uninterpreted": []
+        })
+        .to_string();
+
+        for target_stage in [Progress::Validating, Progress::Done] {
+            let engine = MockEngine::with_responses([valid_json.clone()]);
+            let mut interp = SlmInterpreter::new(engine, "granite-4.0-350m");
+            let cancel = CancelToken::new();
+            let cancel_cb = cancel.clone();
+            let mut ctl = Control::new(
+                cancel,
+                Deadline::after(Duration::from_secs(5)),
+                move |progress| {
+                    if progress == target_stage {
+                        cancel_cb.cancel();
+                    }
+                },
+            );
+            assert_eq!(interp.interpret(input, &mut ctl), Err(SlmError::Cancelled));
+        }
+    }
+
+    #[test]
+    fn deadline_expiring_during_validating_returns_timeout() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+        use std::time::Instant;
+
+        let input = "my pulse is 72";
+        let valid_json = json!({
+            "schema_version": 1,
+            "interpreter": "slm",
+            "interpreter_version": "v1",
+            "records": [{
+                "indicator": "heart_rate",
+                "fields": [{"key": "bpm", "value": 72, "quote": "72"}],
+                "time": {"kind": "unspecified"},
+                "quote": "pulse is 72"
+            }],
+            "negated": [],
+            "uninterpreted": []
+        })
+        .to_string();
+
+        let start = Instant::now();
+        let expired = Arc::new(AtomicBool::new(false));
+        let expired_clock = Arc::clone(&expired);
+        let deadline = Deadline::with_clock(
+            start,
+            Duration::from_secs(5),
+            Arc::new(move || {
+                if expired_clock.load(Ordering::SeqCst) {
+                    start + Duration::from_secs(10)
+                } else {
+                    start
+                }
+            }),
+        );
+        let expired_cb = Arc::clone(&expired);
+        let mut ctl = Control::new(CancelToken::new(), deadline, move |progress| {
+            if progress == Progress::Validating {
+                expired_cb.store(true, Ordering::SeqCst);
+            }
+        });
+
+        let engine = MockEngine::with_responses([valid_json]);
+        let mut interp = SlmInterpreter::new(engine, "granite-4.0-350m");
+        assert_eq!(interp.interpret(input, &mut ctl), Err(SlmError::Timeout));
+    }
+
+    #[test]
+    fn interpreter_errors_never_leak_sensitive_text_or_serde_fragments() {
+        let secret = "[I have HIV] 999";
+        let (res, _) = run_interpret(secret, secret);
+        let err = res.unwrap_err();
+        let display = err.to_string();
+        assert!(!display.contains("HIV"));
+        assert!(!display.contains("999"));
+        let SlmError::InvalidOutput(issues) = err else {
+            panic!("expected InvalidOutput");
+        };
+        for issue in &issues {
+            assert!(!issue.code.contains("HIV"));
+            assert!(!issue.detail.contains("HIV"));
+            assert!(!issue.detail.contains("999"));
+        }
+
+        let wrong_version = json!({
+            "schema_version": 999,
+            "records": [],
+            "negated": ["[I have HIV]"],
+            "uninterpreted": []
+        })
+        .to_string();
+        let (res_ver, _) = run_interpret(secret, &wrong_version);
+        let SlmError::InvalidOutput(ver_issues) = res_ver.unwrap_err() else {
+            panic!("expected InvalidOutput");
+        };
+        for issue in &ver_issues {
+            assert!(!issue.detail.contains("999"));
+            assert!(!issue.detail.contains("HIV"));
+        }
     }
 }

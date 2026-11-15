@@ -40,7 +40,11 @@ impl Default for GenerateRequest {
 /// Abstracción del motor de inferencia local (p. ej. llama.cpp, candle, ONNX o mock).
 pub trait Engine: Send {
     /// Genera una respuesta respetando el control de cancelación, plazo y progreso.
-    fn generate(&mut self, req: &GenerateRequest, ctl: &Control<'_>) -> Result<String, SlmError>;
+    fn generate(
+        &mut self,
+        req: &GenerateRequest,
+        ctl: &mut Control<'_>,
+    ) -> Result<String, SlmError>;
 
     /// Identificador del modelo activo en el motor.
     fn model_id(&self) -> &str {
@@ -121,16 +125,19 @@ impl MockEngine {
 }
 
 impl Engine for MockEngine {
-    fn generate(&mut self, req: &GenerateRequest, ctl: &Control<'_>) -> Result<String, SlmError> {
+    fn generate(
+        &mut self,
+        req: &GenerateRequest,
+        ctl: &mut Control<'_>,
+    ) -> Result<String, SlmError> {
         self.requests.push(req.clone());
         ctl.check()?;
 
         if req.max_tokens == 0 {
-            ctl.report(Progress::Generating {
+            ctl.report_and_check(Progress::Generating {
                 tokens: 0,
                 max_tokens: 0,
-            });
-            ctl.check()?;
+            })?;
         } else {
             let total_steps = self.steps.min(req.max_tokens).max(1);
             for step in 1..=total_steps {
@@ -140,14 +147,14 @@ impl Engine for MockEngine {
                 } else {
                     step
                 };
-                ctl.report(Progress::Generating {
+                ctl.report_and_check(Progress::Generating {
                     tokens,
                     max_tokens: req.max_tokens,
-                });
-                ctl.check()?;
+                })?;
             }
         }
 
+        ctl.check()?;
         match self.queue.pop_front() {
             Some(result) => result,
             None => Err(SlmError::Engine(
@@ -178,7 +185,7 @@ mod tests {
         let mut engine = MockEngine::with_responses(["first", "second"]).with_steps(2);
         let mut progress = Vec::new();
         let mut on_progress = |p| progress.push(p);
-        let ctl = Control::new(
+        let mut ctl = Control::new(
             CancelToken::new(),
             Deadline::after(Duration::from_secs(5)),
             &mut on_progress,
@@ -188,8 +195,9 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(engine.generate(&req, &ctl).unwrap(), "first");
-        assert_eq!(engine.generate(&req, &ctl).unwrap(), "second");
+        assert_eq!(engine.generate(&req, &mut ctl).unwrap(), "first");
+        assert_eq!(engine.generate(&req, &mut ctl).unwrap(), "second");
+        drop(ctl);
         assert_eq!(engine.remaining(), 0);
         assert_eq!(engine.requests().len(), 2);
         assert_eq!(
@@ -229,7 +237,7 @@ mod tests {
                 }
             }
         };
-        let ctl = Control::new(
+        let mut ctl = Control::new(
             cancel,
             Deadline::after(Duration::from_secs(5)),
             &mut on_progress,
@@ -238,16 +246,17 @@ mod tests {
             max_tokens: 10,
             ..Default::default()
         };
-        assert_eq!(engine.generate(&req, &ctl), Err(SlmError::Cancelled));
+        assert_eq!(engine.generate(&req, &mut ctl), Err(SlmError::Cancelled));
+        drop(ctl);
         assert_eq!(seen, 1);
     }
 
     #[test]
     fn mock_engine_respects_expired_deadline() {
         let mut engine = MockEngine::with_responses(["never"]);
-        let ctl = Control::without_progress(CancelToken::new(), Deadline::expired());
+        let mut ctl = Control::without_progress(CancelToken::new(), Deadline::expired());
         assert_eq!(
-            engine.generate(&GenerateRequest::default(), &ctl),
+            engine.generate(&GenerateRequest::default(), &mut ctl),
             Err(SlmError::Timeout)
         );
     }

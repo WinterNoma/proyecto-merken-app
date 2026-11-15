@@ -3,7 +3,6 @@
 use crate::error::SlmError;
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::RefCell,
     fmt,
     sync::{
         Arc,
@@ -161,23 +160,25 @@ pub enum Progress {
 }
 
 /// Contexto de control compartido con el motor y los adaptadores de alto nivel.
+///
+/// Es [`Send`] para poder construirse o moverse directamente a un hilo trabajador
+/// (p. ej. `std::thread::spawn` o `spawn_blocking`) junto con su callback de progreso.
 pub struct Control<'a> {
     pub cancel: CancelToken,
     pub deadline: Deadline,
-    on_progress: Option<RefCell<&'a mut dyn FnMut(Progress)>>,
+    on_progress: Option<Box<dyn FnMut(Progress) + Send + 'a>>,
 }
 
 impl<'a> Control<'a> {
     /// Crea un contexto de control con testigo de cancelación, plazo y callback de progreso.
-    pub fn new(
-        cancel: CancelToken,
-        deadline: Deadline,
-        on_progress: &'a mut dyn FnMut(Progress),
-    ) -> Self {
+    pub fn new<F>(cancel: CancelToken, deadline: Deadline, on_progress: F) -> Self
+    where
+        F: FnMut(Progress) + Send + 'a,
+    {
         Self {
             cancel,
             deadline,
-            on_progress: Some(RefCell::new(on_progress)),
+            on_progress: Some(Box::new(on_progress)),
         }
     }
 
@@ -191,12 +192,16 @@ impl<'a> Control<'a> {
     }
 
     /// Notifica un cambio de progreso si hay un observador registrado.
-    pub fn report(&self, progress: Progress) {
-        if let Some(cell) = &self.on_progress
-            && let Ok(mut cb) = cell.try_borrow_mut()
-        {
+    pub fn report(&mut self, progress: Progress) {
+        if let Some(cb) = &mut self.on_progress {
             cb(progress);
         }
+    }
+
+    /// Notifica un cambio de progreso y comprueba inmediatamente cancelación y plazo.
+    pub fn report_and_check(&mut self, progress: Progress) -> Result<(), SlmError> {
+        self.report(progress);
+        self.check()
     }
 
     /// Verifica si se debe abortar por cancelación o vencimiento del plazo.
@@ -271,13 +276,61 @@ mod tests {
         let cancel = CancelToken::new();
         let mut events = Vec::new();
         let mut on_progress = |p| events.push(p);
-        let ctl = Control::new(cancel.clone(), Deadline::expired(), &mut on_progress);
+        let mut ctl = Control::new(cancel.clone(), Deadline::expired(), &mut on_progress);
         assert_eq!(ctl.check(), Err(SlmError::Timeout));
         cancel.cancel();
         assert_eq!(ctl.check(), Err(SlmError::Cancelled));
 
         ctl.report(Progress::Loading);
-        ctl.report(Progress::Done);
+        assert_eq!(
+            ctl.report_and_check(Progress::Done),
+            Err(SlmError::Cancelled)
+        );
+        drop(ctl);
         assert_eq!(events, vec![Progress::Loading, Progress::Done]);
+    }
+
+    #[test]
+    fn control_with_and_without_callback_moves_into_thread_spawn() {
+        use std::sync::Mutex;
+
+        let cancel_no_cb = CancelToken::new();
+        let ctl_no_cb = Control::without_progress(
+            cancel_no_cb.clone(),
+            Deadline::after(Duration::from_secs(5)),
+        );
+        let handle_no_cb = std::thread::spawn(move || {
+            let mut ctl = ctl_no_cb;
+            ctl.report(Progress::Loading);
+            ctl.check()
+        });
+        assert_eq!(handle_no_cb.join().unwrap(), Ok(()));
+
+        let cancel_with_cb = CancelToken::new();
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let seen_in_cb = Arc::clone(&seen);
+        let cancel_in_cb = cancel_with_cb.clone();
+        let ctl_with_cb = Control::new(
+            cancel_with_cb,
+            Deadline::after(Duration::from_secs(5)),
+            move |progress| {
+                seen_in_cb.lock().unwrap().push(progress);
+                if progress == Progress::Validating {
+                    cancel_in_cb.cancel();
+                }
+            },
+        );
+
+        let handle_with_cb = std::thread::spawn(move || {
+            let mut ctl = ctl_with_cb;
+            ctl.report_and_check(Progress::Loading)?;
+            ctl.report_and_check(Progress::Validating)
+        });
+
+        assert_eq!(handle_with_cb.join().unwrap(), Err(SlmError::Cancelled));
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![Progress::Loading, Progress::Validating]
+        );
     }
 }

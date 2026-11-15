@@ -4,11 +4,15 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Problema concreto detectado al validar la salida de un modelo SLM.
+///
+/// Por privacidad, `code` y `detail` contienen únicamente códigos y mensajes
+/// constantes: nunca fragmentos de la salida del modelo, texto del usuario,
+/// cifras clínicas ni mensajes de Serde.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OutputIssue {
     /// Código corto y estable del problema (p. ej. `invalid_json`, `unknown_citation`).
     pub code: String,
-    /// Descripción en inglés del problema detectado, sin exponer datos clínicos sensibles.
+    /// Descripción constante en inglés del problema detectado, sin exponer datos sensibles.
     pub detail: String,
 }
 
@@ -75,8 +79,19 @@ impl fmt::Display for SlmError {
 
 impl std::error::Error for SlmError {}
 
+fn io_error_message(kind: std::io::ErrorKind) -> &'static str {
+    match kind {
+        std::io::ErrorKind::NotFound => "file or directory not found",
+        std::io::ErrorKind::PermissionDenied => "permission denied",
+        std::io::ErrorKind::AlreadyExists => "already exists",
+        std::io::ErrorKind::InvalidInput => "invalid input",
+        std::io::ErrorKind::UnexpectedEof => "unexpected end of file",
+        _ => "i/o operation failed",
+    }
+}
+
 impl From<std::io::Error> for SlmError {
     fn from(err: std::io::Error) -> Self {
-        Self::Io(err.to_string())
+        Self::Io(io_error_message(err.kind()).to_owned())
     }
 }
