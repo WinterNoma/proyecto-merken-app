@@ -2208,6 +2208,9 @@ name = "merken-slm"
 version = "0.1.0"
 dependencies = [
  "merken-core",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
