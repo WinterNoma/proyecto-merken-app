@@ -187,3 +187,44 @@ One request at a time is admitted; another returns `busy`. The model loads on th
 Install the sherpa-onnx Kokoro v1.0 int8 package in `<app_data_dir>/models/kokoro-int8-multi-lang-v1_0/`, with `model.int8.onnx`, `voices.bin`, `tokens.txt` and `lexicon-us-en.txt`. Also copy [merken-us-en.txt](../../crates/voice/lexicon/merken-us-en.txt) into that directory. Debug builds use `MERKEN_SLM_MODELS_DIR` as the parent models directory when set, just like the SLM. The native sherpa-onnx libraries must also be available for the target platform; see the crate README.
 
 On the measured PC, first audio arrived in about 2 seconds and real-time factor was about 1.3 with four threads. Mobile playback may pause between sentences; measure on the target device.
+
+
+## Local dictation (STT)
+
+Build with the optional `voice-stt` feature (alone or alongside `voice-tts`) to enable offline speech-to-text dictation. Without it, `transcribe_audio` and `stt_release` return `voice_unavailable`. No audio or transcribed text leaves the device.
+
+- `core.transcribeAudio({ request_id, pcm_f32le_base64, sample_rate, language? })` invokes `transcribe_audio({ input })` and returns `{ request_id, text, duration_ms }`, where `duration_ms` is the transcription runtime measured in Rust (not the audio duration).
+  - `request_id`: 1–64 ASCII letters, digits, underscores, or hyphens (malformed IDs return `invalid_value` with field `request_id`).
+  - `pcm_f32le_base64`: strict standard RFC 4648 base64 (`=`-padded, no whitespace or URL-safe alphabet) of mono IEEE 754 `f32` little-endian samples in `[-1, 1]`. Hard limits: max 30 seconds at 48 kHz (5,760,000 raw bytes / 7,680,000 base64 characters, checked before decoding). Empty audio, invalid base64, byte length not divisible by 4, non-finite samples, or exceeding the limit returns `audio_invalid` with field `pcm_f32le_base64`.
+  - `sample_rate`: integer in `8000..=48000` Hz (values outside `i32` or `8000..=48000` return `audio_invalid` with field `sample_rate`).
+  - `language`: optional `"es"`, `"en"`, or `"auto"` (defaults to `"auto"` when omitted or `null`; unknown values return `audio_invalid` with field `language`).
+- `core.sttRelease()` invokes `stt_release()` and unloads the cached STT model, returning `true` if a model was loaded or `false` if already empty. Returns `busy` while a transcription is active.
+- Browser capture helpers in [`ui/src/core-api.ts`](../../ui/src/core-api.ts):
+  - `recordDictation()` returns `{ ready, limitReached, stop(), cancel() }`. `ready` resolves when the microphone is active and rejects if permission or Web Audio setup fails. It captures via `AudioWorklet` (with `ScriptProcessorNode` fallback), mixes to mono, resamples to `16000` Hz, and caps recording at 30 s. When the 30 s limit is reached, capture stops automatically (stopping `MediaStream` tracks, the audio processor, and closing the `AudioContext`) while retaining the accumulated audio for `stop()`, and `limitReached` (`Promise<void>`, which never rejects) resolves. `stop()` and `cancel()` always release all audio resources and clear retained PCM chunks.
+  - `dictate(recording, language?)` stops the recording, encodes the `Float32Array` as little-endian base64, generates a unique `request_id`, calls `core.transcribeAudio`, and returns `{ request_id, text, duration_ms }`.
+- **Mandatory workflow rule**: `dictate` / `transcribe_audio` is strictly voice-to-text and **never** interprets or saves health records on its own. Always pass the resulting `text` into `core.interpretText({ request_id, text, source: "voice" })` and require the user to confirm or edit every field before calling `core.logRecord({ ..., source: "voice" })`.
+
+One STT transcription runs at a time, using its own state separate from TTS so speech synthesis and dictation do not block each other; a concurrent call returns `busy`. Transcription cannot be cancelled once dispatched: if the caller stops awaiting the promise, the native call continues running and new requests receive `busy` until it finishes. Error codes: `busy`, `audio_invalid`, `model_missing`, `transcription_failed`, `voice_unavailable`, and `invalid_value` for malformed `request_id`.
+
+STT uses the same models root as SLM and TTS (`<app_data_dir>/models/`, or `MERKEN_SLM_MODELS_DIR` in debug builds) and probes these subdirectories in order, loading the first directory that exists with 2 threads:
+
+1. `stt-whisper-base/`
+2. `stt-whisper-small/`
+3. `stt-canary-180m/`
+
+`SttPaths::from_dir` detects the model by filenames inside the chosen directory (`<x>-encoder.int8.onnx` for Whisper, `encoder.int8.onnx` for Canary).
+
+The Android plugin manifest (`plugins/slm-assets/android/src/main/AndroidManifest.xml`) declares `android.permission.RECORD_AUDIO` so the WebView can prompt for microphone access when `recordDictation()` runs.
+
+```ts
+const recording = recordDictation();
+await recording.ready;
+// ... user speaks, then taps stop:
+const { text } = await dictate(recording, "auto");
+// Never save directly: always run through the interpreter and confirm field by field.
+const interpreted = await core.interpretText({
+  request_id: crypto.randomUUID(),
+  text,
+  source: "voice",
+});
+```

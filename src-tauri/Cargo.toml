@@ -35,3 +35,4 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 default = ["slm-llama"]
 slm-llama = ["merken-slm/llama"]
 voice-tts = ["dep:merken-voice", "merken-voice/tts"]
+voice-stt = ["dep:merken-voice", "merken-voice/stt"]

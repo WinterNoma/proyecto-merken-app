@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 mod normalize;
+mod stt;
 use normalize::{Lexicon, normalize_text};
+pub use stt::{SttConfig, SttEngine, SttLanguage, SttModel, SttPaths, validate_audio};
 
 /// English speakers in the sherpa-onnx Kokoro v1.0 package.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -119,6 +121,8 @@ impl FromStr for Voice {
 pub enum VoiceError {
     ModelMissing,
     LoadFailed,
+    AudioInvalid,
+    TranscriptionFailed,
     TextInvalid,
     SynthesisFailed,
     TextUnsupported,
@@ -130,6 +134,8 @@ impl VoiceError {
         match self {
             Self::ModelMissing => "model_missing",
             Self::LoadFailed => "load_failed",
+            Self::AudioInvalid => "audio_invalid",
+            Self::TranscriptionFailed => "transcription_failed",
             Self::TextInvalid => "text_invalid",
             Self::SynthesisFailed => "synthesis_failed",
             Self::TextUnsupported => "text_unsupported",
