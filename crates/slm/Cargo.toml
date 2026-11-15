@@ -34,3 +34,7 @@ required-features = ["llama"]
 [[example]]
 name = "offline_probe"
 required-features = ["native"]
+
+[[example]]
+name = "card_choice"
+required-features = ["llama"]
