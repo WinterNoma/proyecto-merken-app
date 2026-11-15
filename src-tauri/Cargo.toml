@@ -21,6 +21,11 @@ tauri-plugin-opener = "2"
 serde.workspace = true
 serde_json.workspace = true
 merken-core.workspace = true
+merken-slm = { path = "../crates/slm" }
 merken-store.workspace = true
 merken-seed.workspace = true
 merken-sync.workspace = true
+
+[features]
+default = []
+slm-llama = ["merken-slm/llama"]

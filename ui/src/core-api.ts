@@ -83,6 +83,11 @@ export interface Evaluation {
 // ---------- Errores ----------
 
 export type ErrorCode =
+  | "busy"
+  | "model_unavailable"
+  | "cancelled"
+  | "timeout"
+  | "slm_error"
   | "invalid_value"
   | "invalid_schema"
   | "not_found"
@@ -393,7 +398,25 @@ export interface VerifyTelemetryResult {
   checked_through_reading_id: number | null;
 }
 
+
+export type TimeHint = { kind: "unspecified" } | { kind: "ambiguous"; quote: string };
+export interface ProposedField { key: string; value: string | number | boolean | null; quote: string | null }
+export interface ProposedRecord { indicator: Indicator; fields: ProposedField[]; time: TimeHint; quote: string }
+export interface Proposal { schema_version: number; interpreter: "rules" | "slm"; interpreter_version: string; records: ProposedRecord[]; negated: string[]; uninterpreted: string[] }
+export type Layer2Status = "not_needed" | "unavailable" | "used" | "model_unavailable" | "cancelled" | "timeout" | "discarded" | "slm_error";
+export interface InterpretResponse { proposal: Proposal; layer2_proposal: Proposal | null; unresolved: string[]; layer2: Layer2Status }
+export interface FactLine { id: string; text: string }
+export interface AiNote { statements: { ficha_id: string; statement_id: string; text: string }[]; label: string }
+export type NoteStatus = "available" | "no_fichas" | "model_unavailable" | "cancelled" | "timeout" | "discarded" | "slm_error";
+export interface ExplainResponse { facts: FactLine[]; note: AiNote | null; note_status: NoteStatus; model_id: string | null }
+export interface SlmModelStatus { model_id: string; installed: boolean; verified: boolean; loaded: boolean; available: boolean }
+export interface SlmStatus { interpreter: SlmModelStatus; explainer: SlmModelStatus }
+
 export const core = {
+  interpretText: (input: { text: string; source?: "text" | "voice" }) => invoke<InterpretResponse>("interpret_text", { input }),
+  explainIndicator: (input: { indicator: Indicator; body_zone?: BodyZone }) => invoke<ExplainResponse>("explain_indicator", { input }),
+  slmStatus: () => invoke<SlmStatus>("slm_status"),
+  slmCancel: () => invoke<boolean>("slm_cancel"),
   getProfile: () => invoke<ProfileResponse>("get_profile"),
   logRecord: (input: LogRecordInput) => invoke<LogResult>("log_record", { input }),
   correctRecord: (input: CorrectRecordInput) => invoke<LogResult>("correct_record", { input }),
