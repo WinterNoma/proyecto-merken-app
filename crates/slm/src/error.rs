@@ -42,6 +42,10 @@ pub enum EngineErrorCode {
     LoadFailed,
     /// Fallo durante la generación de salida en el motor.
     GenerationFailed,
+    /// La gramática GBNF solicitada no es válida para el vocabulario del modelo.
+    InvalidGrammar,
+    /// El prompt más `max_tokens` supera el tamaño máximo de contexto configurado.
+    ContextExceeded,
     /// El motor no devolvió ninguna respuesta (p. ej. cola vacía en pruebas).
     EmptyResponse,
     /// Error de sincronización interna al adquirir el bloqueo del almacén de modelos.
@@ -58,6 +62,8 @@ impl EngineErrorCode {
         match self {
             Self::LoadFailed => "load_failed",
             Self::GenerationFailed => "generation_failed",
+            Self::InvalidGrammar => "invalid_grammar",
+            Self::ContextExceeded => "context_exceeded",
             Self::EmptyResponse => "empty_response",
             Self::LockPoisoned => "lock_poisoned",
             Self::LockReentrant => "lock_reentrant",
