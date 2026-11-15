@@ -1,4 +1,4 @@
-import { core, dictate, isCoreError, recordDictation, type DictationRecording, type Indicator, type LogRecordInput, type ProposedRecord, type RecordValue } from "../core-api";
+import { core, isCoreError, type Indicator, type LogRecordInput, type ProposedRecord, type RecordValue } from "../core-api";
 import type { CorePanel } from "./core-panel";
 import { element, el, setText, utc } from "./dom";
 import { modal } from "./dialog";
@@ -6,7 +6,7 @@ import { bodyZones, zoneName } from "./body-map";
 import { indicatorName } from "./core-format";
 import { setupAssistant, type AssistSource } from "./assistant";
 import { createReadingChat, type PulseProposal } from "./reading-chat";
-import { registerDictation } from "./dictation";
+import { setupDictation } from "./dictation";
 
 const fieldSelectors: Record<Indicator, Record<string, string>> = {
   heart_rate: { bpm: "#manual-a" },
@@ -24,11 +24,6 @@ const fieldSelectors: Record<Indicator, Record<string, string>> = {
 
 export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (active: boolean) => void): void {
   const dialog = element<HTMLDialogElement>("#voice-dialog");
-  const hold = element<HTMLButtonElement>("#talk-hold");
-  const chatHold = element<HTMLButtonElement>("#chat-talk");
-  const chatStatus = element("#chat-voice-status");
-  const entry = element(".voice-entry");
-  const inlineStatus = element("#voice-inline-status");
   const close = element<HTMLButtonElement>("#voice-close");
   const form = element<HTMLFormElement>("#manual-form");
   const fields = element<HTMLFieldSetElement>("#manual-fields");
@@ -38,8 +33,6 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
   const note = element<HTMLTextAreaElement>("#manual-note");
   const save = element<HTMLButtonElement>("#manual-save");
   const result = element("#manual-result");
-  let holding = false;
-  let pointer: number | null = null;
   let busy = false;
   let saved = false;
   let warnedDemo = false;
@@ -129,104 +122,22 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
     close.disabled = false; save.disabled = !available; setText(close, "Discard");
     controls.open(close);
   }
-  // Offline dictation: hold to record, release to transcribe. The transcript only
-  // fills the description box and is interpreted; nothing is saved until Save.
-  let recording: DictationRecording | null = null;
-  let transcribing = false;
-  const dictation = registerDictation(available, [{
-    button: chatHold,
-    canStart: () => dialog.open && form.hidden && !transcribing,
-    status: text => setText(chatStatus, text),
-    transcript: text => chat.transcript(text),
-  }]);
-  async function transcribe(active: DictationRecording): Promise<void> {
-    transcribing = true;
-    entry.dataset.voiceState = "idle";
-    setText(inlineStatus, "Transcribing on this device…");
-    try {
-      const response = await dictate(active, null);
-      const text = response.text.trim();
-      if (!text) { setText(inlineStatus, "Nothing was recognized · Try again or use Type"); return; }
-      setText(inlineStatus, "");
-      if (dialog.open && form.hidden) {
-        chat.transcript(text);
-        setText(chatStatus, "Transcript ready to review.");
-        return;
-      }
-      await manual();
-      if (dialog.open) await assistant.interpretInto(text, "voice");
-    } catch (error) {
-      setText(inlineStatus, (isCoreError(error) ? error.message : "Dictation failed") + " · Use Type");
-    } finally {
-      transcribing = false;
-    }
-  }
-  function release(cancelled = false): void {
-    if (!holding) return;
-    const captured = pointer;
-    holding = false; pointer = null; hold.setAttribute("aria-pressed", "false");
-    entry.dataset.voiceState = "idle";
-    if (captured !== null && hold.hasPointerCapture(captured)) hold.releasePointerCapture(captured);
-    onHolding?.(false);
-    const active = recording;
-    recording = null;
-    if (!active) { setText(inlineStatus, cancelled ? "Recording stopped" : "Voice unavailable · Use Type"); return; }
-    if (cancelled) { active.cancel(); setText(inlineStatus, "Recording cancelled · No audio kept"); return; }
-    void transcribe(active);
-  }
-  function begin(): boolean {
-    if (holding || busy || transcribing || dialog.open) return false;
-    hold.focus({ preventScroll: true }); holding = true; hold.setAttribute("aria-pressed", "true");
-    entry.dataset.voiceState = "holding";
-    onHolding?.(true);
-    if (!available) { setText(inlineStatus, "Voice needs the installed app · Use Type"); return true; }
-    setText(inlineStatus, "Listening… release to finish");
-    const active = recordDictation();
-    recording = active;
-    active.ready.catch(() => {
-      if (recording !== active) return;
-      recording = null; active.cancel();
-      setText(inlineStatus, "Microphone unavailable · Check the permission or use Type");
-    });
-    void active.limitReached.then(() => { if (recording === active) release(); });
-    return true;
-  }
-  hold.addEventListener("pointerdown", event => {
-    if (!event.isPrimary || event.button !== 0) return;
-    event.preventDefault();
-    if (!begin()) return;
-    pointer = event.pointerId;
-    hold.setPointerCapture(pointer);
-  });
-  window.addEventListener("pointerup", event => { if (pointer === event.pointerId) release(); }, true);
-  window.addEventListener("pointercancel", event => { if (pointer === event.pointerId) release(true); }, true);
-  hold.addEventListener("lostpointercapture", () => { if (pointer !== null) release(true); });
-  hold.addEventListener("keydown", event => {
-    if (event.key === " " || event.key === "Enter") { event.preventDefault(); if (!event.repeat) begin(); }
-  });
-  window.addEventListener("keydown", event => { if (holding && event.key === "Escape") { event.preventDefault(); release(true); } });
-  window.addEventListener("keyup", event => {
-    if (holding && pointer === null && (event.key === " " || event.key === "Enter")) { event.preventDefault(); release(); }
-  }, true);
-  // An AT-generated click has no down/up sequence; announce availability inline.
-  hold.addEventListener("click", event => { if (event.detail === 0 && begin()) release(); });
-  window.addEventListener("blur", () => release(true));
-  window.addEventListener("pagehide", () => release(true));
-  document.addEventListener("visibilitychange", () => { if (document.hidden) release(true); });
+  const dictation = setupDictation(available, text => void manual(undefined, text), onHolding);
   close.addEventListener("click", controls.close);
   dialog.addEventListener("close", () => {
-    holding = false; pointer = null; opening += 1; hold.setAttribute("aria-pressed", "false"); onHolding?.(false);
-    assistant.reset(); dictation.cancel();
+    if (dialog.open) return;
+    opening += 1;
+    assistant.reset();
+    dictation.hide();
   });
-  async function manual(proposal?: PulseProposal): Promise<void> {
+  async function manual(proposal?: PulseProposal, transcript?: string): Promise<void> {
     if (!dialog.open) openSheet();
     const revision = opening;
-    release(true); entry.dataset.voiceState = "idle"; setText(inlineStatus, "");
-    dictation.cancel();
+    dictation.hide();
     chat.hide();
     form.hidden = false;
-    entrySource = proposal?.source ?? "form";
-    setText(element("#voice-title"), proposal ? "Review reading" : "Type a reading");
+    entrySource = proposal ? "text" : "form";
+    setText(element("#voice-title"), proposal || transcript ? "Review reading" : "Type a reading");
     if (proposal) {
       select.value = "heart_rate";
       renderFields();
@@ -240,6 +151,7 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
     setText(element("#manual-availability"), available ? "Saved to the on-device profile, separate from the selected MySQL crew member." : "Local service unavailable. Entries are not recorded in the browser.");
     save.disabled = !available; select.focus();
     if (!available) return;
+    if (transcript) void assistant.interpretInto(transcript, "voice");
     const [status, identity] = await Promise.allSettled([core.getStatus(), core.getProfile()]);
     if (revision !== opening || !dialog.open || busy || saved) return;
     setText(element("#manual-profile"), "On-device profile · " + (identity.status === "fulfilled" ? identity.value.profile?.astronaut.display_name ?? "No profile available" : "Profile unavailable"));
@@ -248,16 +160,22 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
       setText(save, confirmedDraft ? "Confirm warnings and save" : warnedDemo ? "Save real data" : "Save reading");
     } else setText(result, "Local service unavailable. Your entry has been kept; try saving again.");
   }
-  element("#manual-open").addEventListener("click", () => {
-    release(true);
-    openSheet();
+  function showChat(): void {
+    if (!dialog.open) openSheet();
+    dictation.hide();
     form.hidden = true;
     setText(element("#voice-title"), "Onboard assistant");
-    setText(inlineStatus, "");
-    setText(chatStatus, "");
-    chat.show(true);
-    element("#chat-input").focus({ preventScroll: true });
+    chat.show();
+  }
+  element("#talk-hold").addEventListener("click", () => {
+    openSheet();
+    chat.hide();
+    form.hidden = true;
+    setText(element("#voice-title"), "Voice dictation");
+    dictation.show();
   });
+  element("#manual-open").addEventListener("click", showChat);
+  element("#voice-type").addEventListener("click", showChat);
   element("#chat-manual").addEventListener("click", () => { void manual(); });
   function date(id: string): string {
     const raw = element<HTMLInputElement>(id).value;

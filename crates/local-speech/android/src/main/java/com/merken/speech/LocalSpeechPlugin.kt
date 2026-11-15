@@ -58,7 +58,7 @@ class LocalSpeechPlugin(private val activity: Activity) : Plugin(activity) {
             when {
                 earlyFinish == args.session -> {
                     earlyFinish = null
-                    invoke.reject("Hold the microphone button while speaking.")
+                    invoke.reject("Start dictation again.")
                 }
                 active != null || permissionPending -> invoke.reject("Dictation is already in progress.")
                 Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
@@ -77,7 +77,7 @@ class LocalSpeechPlugin(private val activity: Activity) : Plugin(activity) {
     fun microphonePermission(invoke: Invoke) {
         permissionPending = false
         if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            invoke.reject("Microphone enabled. Hold again to dictate.")
+            invoke.reject("Microphone enabled. Select Start dictation again.")
         } else {
             invoke.reject("Microphone permission was not granted. You can type instead.")
         }

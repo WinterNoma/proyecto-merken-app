@@ -15,35 +15,6 @@ export const readingLinks: Record<string, { indicator: Indicator; zone: BodyZone
   sleep: { indicator: "sleep", zone: "head" }, nutrition: { indicator: "nutrition", zone: "abdomen" },
   radiation: { indicator: "space_radiation", zone: "other" }, distance: { indicator: "distance_from_earth", zone: "other" },
 };
-export function setupPages(onChange?: (index: number) => void) {
-  const pages = [element("#overview"), element("#core-panel")];
-  const dots = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-page]"));
-  let active = 0;
-  function show(index: number, focus = false): void {
-    active = Math.max(0, Math.min(pages.length - 1, index));
-    pages.forEach((page, i) => { page.hidden = i !== active; });
-    dots.forEach((dot, i) => { if (i === active) dot.setAttribute("aria-current", "page"); else dot.removeAttribute("aria-current"); });
-    setText(element("#page-name"), active === 0 ? "Overview" : "History / On-device record");
-    if (focus) pages[active].focus();
-    onChange?.(active);
-  }
-  dots.forEach((dot, index) => dot.addEventListener("click", () => show(index)));
-  element("#sync-open").addEventListener("click", () => show(1, true));
-  element("#overview-alerts").addEventListener("click", () => show(1, true));
-  document.querySelector(".wordmark")?.addEventListener("click", () => show(0, true));
-  let start: { x: number; y: number; id: number } | null = null;
-  const container = element("#screens");
-  container.addEventListener("pointerdown", event => {
-    if (event.pointerType !== "touch" || (event.target as Element).closest('button, input, select, textarea, summary, a, [role="button"]')) return;
-    start = { x: event.clientX, y: event.clientY, id: event.pointerId };
-  });
-  container.addEventListener("pointerup", event => {
-    if (!start || event.pointerId !== start.id) return;
-    const dx = event.clientX - start.x; const dy = event.clientY - start.y; start = null;
-    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) show(active + (dx < 0 ? 1 : -1), true);
-  });
-  container.addEventListener("pointercancel", () => { start = null; });
-}
 export function createDashboard(available: boolean, onZoneSelection?: (zone: BodyZone) => void) {
   const map = createBodyMap(zone => {
     highlight(zone);

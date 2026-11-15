@@ -1,139 +1,162 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { dictate, isCoreError, recordDictation, type DictationRecording } from "../core-api";
+import { element } from "./dom";
 
 type SpeechEvent = { state: "listening" | "processing" } | { state: "partial"; text: string };
-type Microphone = {
-  button: HTMLButtonElement;
-  canStart: () => boolean;
-  status: (text: string) => void;
-  listening?: (active: boolean) => void;
-  transcript: (text: string) => void;
-};
-type Session = {
-  id: string;
-  mic: Microphone;
-  pointer: number | null;
-  stopping: boolean;
-  toggle: boolean;
-};
+type Phase = "preparing" | "listening" | "processing";
+type Capture = { phase: Phase; previous: string } & (
+  | { mode: "live"; id: string }
+  | { mode: "recorded"; recording: DictationRecording }
+);
 
-export function registerDictation(available: boolean, microphones: Microphone[]) {
-  let active: Session | null = null;
+export function setupDictation(available: boolean, onReview: (text: string) => void, onListening?: (active: boolean) => void) {
+  const panel = element("#voice-capture");
+  const mic = element<HTMLButtonElement>("#voice-microphone");
+  const label = element("#voice-microphone-label");
+  const status = element("#voice-status");
+  const transcript = element<HTMLTextAreaElement>("#voice-transcript");
+  const review = element<HTMLButtonElement>("#voice-review");
+  const fallback = element<HTMLButtonElement>("#voice-recorded");
+  let mode: Capture["mode"] = /Android/i.test(navigator.userAgent) ? "live" : "recorded";
+  let capture: Capture | null = null;
   let sequence = 0;
 
-  function showListening(mic: Microphone, listening: boolean): void {
-    mic.button.setAttribute("aria-pressed", String(listening));
-    mic.listening?.(listening);
+  function render(message: string): void {
+    const phase = capture?.phase;
+    mic.setAttribute("aria-pressed", String(phase === "listening"));
+    mic.disabled = !available || phase === "preparing" || phase === "processing";
+    label.textContent = phase === "preparing" ? "Opening microphone…"
+      : phase === "listening" ? "Stop dictation"
+      : phase === "processing" ? "Transcribing…"
+      : "Start dictation";
+    status.textContent = message;
+    transcript.readOnly = capture !== null || !transcript.value;
+    review.disabled = !available || capture !== null || !transcript.value.trim();
+    onListening?.(phase === "listening");
   }
 
-  function clear(session: Session): void {
-    active = null;
-    showListening(session.mic, false);
-    const pointer = session.pointer;
-    if (pointer !== null && session.mic.button.hasPointerCapture(pointer)) {
-      session.mic.button.releasePointerCapture(pointer);
-    }
+  function phase(session: Capture, phase: Phase, message: string): void {
+    session.phase = phase;
+    render(message);
   }
 
-  async function finish(discard = false): Promise<void> {
-    const session = active;
-    if (!session || (session.stopping && !discard)) return;
-    session.stopping = true;
-    showListening(session.mic, false);
-    if (discard) {
-      clear(session);
-      session.mic.status("Dictation canceled.");
-    } else {
-      session.mic.status("Finishing dictation…");
-    }
-    try {
-      await invoke("plugin:local-speech|finish", { session: session.id, discard });
-    } catch {
-      if (active !== session) return;
-      clear(session);
-      session.mic.status("Dictation could not finish. You can type instead.");
-    }
+  function complete(session: Capture, text: string, message: string): void {
+    if (capture !== session) return;
+    transcript.value = text.slice(0, transcript.maxLength);
+    capture = null;
+    render(message);
   }
 
-  function begin(mic: Microphone, pointer: number | null, toggle = false): boolean {
-    if (active || !mic.canStart()) return false;
-    if (!available) {
-      mic.status("On-device dictation requires a supported Android device. You can type instead.");
-      return false;
+  function stopLive(session: Extract<Capture, { mode: "live" }>, discard: boolean): Promise<void> {
+    return invoke("plugin:local-speech|finish", { session: session.id, discard });
+  }
+
+  function cancel(): void {
+    const session = capture;
+    if (!session) return;
+    complete(session, session.previous, "Dictation canceled.");
+    if (session.mode === "live") void stopLive(session, true).catch(() => {});
+    else session.recording.cancel();
+  }
+
+  function finish(session: Capture): void {
+    if (capture !== session || session.phase !== "listening") return;
+    phase(session, "processing", "Transcribing on this device…");
+    if (session.mode === "live") {
+      void stopLive(session, false).catch(() => {
+        if (capture !== session) return;
+        cancel();
+        render("The microphone could not finish. Try again.");
+      });
+      return;
     }
-    const session = { id: String(++sequence), mic, pointer, stopping: false, toggle };
-    active = session;
-    mic.status("Preparing microphone…");
+    void dictate(session.recording, null).then(result => {
+      const text = result.text.trim();
+      complete(session, text || session.previous, text ? "Edit the transcript before reviewing." : "No speech was recognized. Try again.");
+    }, error => {
+      complete(session, session.previous, isCoreError(error) ? error.message : "Dictation failed. Try again or open the text chat.");
+    });
+  }
+
+  function startLive(): void {
+    const session: Extract<Capture, { mode: "live" }> = {
+      mode: "live", id: String(++sequence), phase: "preparing", previous: transcript.value,
+    };
+    capture = session;
+    fallback.hidden = true;
+    let partial = "";
+    render("Preparing the on-device microphone…");
     const events = new Channel<SpeechEvent>(event => {
-      if (active !== session) return;
-      if (event.state === "listening" && !session.stopping) {
-        showListening(mic, true);
-        mic.status(toggle ? "Listening on this device. Activate the microphone again to stop." : "Listening on this device…");
-      } else if (event.state === "partial" && !session.stopping) {
-        mic.status(`Listening · ${event.text}`);
+      if (capture !== session) return;
+      if (event.state === "listening" && session.phase === "preparing") {
+        phase(session, "listening", "Listening on this device.");
+      } else if (event.state === "partial" && event.text.trim()) {
+        partial = event.text.slice(0, transcript.maxLength);
+        transcript.value = partial;
       } else if (event.state === "processing") {
-        showListening(mic, false);
-        mic.status("Transcribing on this device…");
+        phase(session, "processing", "Transcribing on this device…");
       }
     });
     void invoke<string>("plugin:local-speech|start", {
-      session: session.id,
-      language: navigator.language || "en-US",
-      events,
-    }).then(transcript => {
-      if (active !== session) return;
-      clear(session);
-      mic.status("Transcript ready to review.");
-      mic.transcript(transcript);
-    }, (error: unknown) => {
-      if (active !== session) return;
-      clear(session);
-      mic.status(typeof error === "string" ? error : "On-device dictation could not start. You can type instead.");
+      session: session.id, language: navigator.language || "en-US", events,
+    }).then(text => {
+      complete(session, text, "Edit the transcript before reviewing.");
+    }, error => {
+      if (capture !== session) return;
+      const message = typeof error === "string" ? error : "Live dictation could not start.";
+      complete(session, partial || session.previous, partial ? message + " Only a partial transcript is available." : message);
+      fallback.hidden = false;
     });
-    return true;
   }
 
-  for (const mic of microphones) {
-    mic.button.addEventListener("pointerdown", event => {
-      if (!event.isPrimary || event.button !== 0 || !begin(mic, event.pointerId)) return;
-      event.preventDefault();
-      mic.button.focus({ preventScroll: true });
-      mic.button.setPointerCapture(event.pointerId);
+  function startRecorded(): void {
+    const recording = recordDictation();
+    const session: Extract<Capture, { mode: "recorded" }> = {
+      mode: "recorded", recording, phase: "preparing", previous: transcript.value,
+    };
+    capture = session;
+    render("Preparing the microphone…");
+    void recording.ready.then(() => {
+      if (capture === session) phase(session, "listening", "Recording on this device. Stop to see the transcript.");
+    }, () => {
+      if (capture !== session) return;
+      recording.cancel();
+      complete(session, session.previous, "Microphone unavailable. Check permission or open the text chat.");
     });
-    mic.button.addEventListener("lostpointercapture", event => {
-      if (active?.pointer === event.pointerId && !active.stopping) void finish(true);
-    });
-    mic.button.addEventListener("keydown", event => {
-      if (event.key !== " " && event.key !== "Enter") return;
-      event.preventDefault();
-      if (!event.repeat) begin(mic, null);
-    });
-    mic.button.addEventListener("keyup", event => {
-      if (event.key !== " " && event.key !== "Enter") return;
-      event.preventDefault();
-      if (active?.mic === mic && !active.toggle) void finish();
-    });
-    mic.button.addEventListener("click", event => {
-      if (event.detail !== 0) return;
-      if (active?.mic === mic && active.toggle) void finish();
-      else begin(mic, null, true);
-    });
+    void recording.limitReached.then(() => finish(session));
   }
-  window.addEventListener("pointerup", event => {
-    if (active?.pointer === event.pointerId) void finish();
-  }, true);
-  window.addEventListener("pointercancel", event => {
-    if (active?.pointer === event.pointerId) void finish(true);
-  }, true);
-  window.addEventListener("keydown", event => {
-    if (active && event.key === "Escape") {
-      event.preventDefault();
-      void finish(true);
-    }
-  }, true);
-  window.addEventListener("blur", () => void finish(true));
-  window.addEventListener("pagehide", () => void finish(true));
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) void finish(true);
+
+  function show(): void {
+    panel.hidden = false;
+    transcript.value = "";
+    fallback.hidden = true;
+    render(!available ? "Open the installed app to use the microphone."
+      : mode === "live" ? "Start dictation to see recognized words here."
+      : "Record a reading, then stop to transcribe it on this device.");
+    (available ? mic : element("#voice-type")).focus({ preventScroll: true });
+  }
+
+  mic.addEventListener("click", () => {
+    if (!available) return;
+    if (capture) finish(capture);
+    else if (mode === "live") startLive();
+    else startRecorded();
   });
-  return { cancel: () => void finish(true) };
+  fallback.addEventListener("click", () => {
+    mode = "recorded";
+    fallback.hidden = true;
+    render("Record a reading, then stop to transcribe it on this device.");
+    mic.focus({ preventScroll: true });
+  });
+  transcript.addEventListener("input", () => { review.disabled = !available || capture !== null || !transcript.value.trim(); });
+  review.addEventListener("click", () => {
+    const text = transcript.value.trim();
+    if (available && !capture && text) onReview(text);
+  });
+  window.addEventListener("pagehide", cancel);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) cancel(); });
+  return {
+    show,
+    hide() { cancel(); panel.hidden = true; },
+  };
 }

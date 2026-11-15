@@ -7,6 +7,7 @@ import "../../docs/brand/tokens.css";
 import "./styles.css";
 import "./hybrid.css";
 import "./assistant.css";
+import "./recommendations.css";
 import { isTauri } from "@tauri-apps/api/core";
 import { element } from "./ui/dom";
 import { createVitals } from "./ui/vitals";
@@ -16,7 +17,8 @@ import { mountTelemetryHistory } from "./ui/telemetry-history";
 import { createCorePanel } from "./ui/core-panel";
 import { setupHelp } from "./ui/help";
 
-import { createDashboard, setupPages } from "./ui/dashboard";
+import { createDashboard } from "./ui/dashboard";
+import { setupPages } from "./ui/page-navigation";
 import { setupVoice } from "./ui/voice";
 import { icon, type IconName } from "./ui/icons";
 import { createPreviewFeed } from "./ui/visual-preview";
@@ -57,12 +59,11 @@ const historyHost = element("#telemetry-history");
 const history = available ? mountTelemetryHistory(historyHost, () => latestCrew) : null;
 historyHost.hidden = !available;
 let historyTimer: number | null = null;
-setupPages(index => {
-  ambient.setActive(index === 0);
+setupPages(page => {
   if (!history) return;
   // El historial solo se refresca mientras su pantalla está a la vista.
   if (historyTimer !== null) { window.clearInterval(historyTimer); historyTimer = null; }
-  if (index === 1) {
+  if (page === "core-panel") {
     void history.refresh();
     historyTimer = window.setInterval(() => { void history.refresh(); }, 10000);
   }

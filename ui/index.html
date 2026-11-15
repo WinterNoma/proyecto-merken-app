@@ -43,7 +43,9 @@
 <p id="body-source" class="source-line">Body zones · Not evaluated in browser</p>
 <div class="context-grid"><button type="button" id="vital-radiation" class="context-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Radiation</span><span class="reading"><span class="reading-value">--</span> <span class="unit">µSv/h</span></span><span class="vital-status"></span><span class="reference" hidden>Context only</span></button>
 <button type="button" id="vital-distance" class="context-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Distance</span><span class="reading"><span class="reading-value">--</span> <span class="unit">km</span></span><span class="vital-status"></span><span class="reference" hidden>Context only</span></button><button id="sync-open" class="context-card panel" type="button"><span class="card-label">Sync</span><span id="overview-sync">Unavailable</span></button></div>
-<div class="voice-entry" data-voice-state="idle"><button id="talk-hold" class="talk-button" type="button" aria-label="Hold to talk" aria-pressed="false" aria-describedby="voice-inline-status"><span class="mic-disc"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></span><span class="talk-label">Hold to talk</span><span class="mic-dots" aria-hidden="true">···</span></button><button id="manual-open" class="text-button" type="button" aria-label="Type a reading" aria-haspopup="dialog" aria-controls="voice-dialog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14Z"/></svg><span class="manual-label">Type a reading</span><span class="manual-label-compact" aria-hidden="true">Type</span></button><p id="voice-inline-status" class="voice-inline-status" role="status" aria-live="polite" aria-atomic="true"></p></div>
+<div class="voice-entry" data-voice-state="idle"><button id="talk-hold" class="talk-button" type="button" aria-haspopup="dialog" aria-controls="voice-dialog"><span class="mic-disc"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></span><span class="talk-label">Voice</span><span class="mic-dots" aria-hidden="true">···</span></button><button id="manual-open" class="text-button" type="button" aria-label="Type a reading" aria-haspopup="dialog" aria-controls="voice-dialog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14Z"/></svg><span class="manual-label">Type a reading</span><span class="manual-label-compact" aria-hidden="true">Type</span></button>
+  <div class="voice-inline-status" aria-hidden="true"></div>
+</div>
 </section>
         <section id="core-panel" class="core-section screen" hidden tabindex="-1" aria-labelledby="core-title">
           <div class="section-heading"><div><p class="eyebrow">02 / Device record</p><h2 id="core-title">History / On-device record</h2></div><span id="demo-badge" class="status-chip" data-tone="neutral" hidden>DEMO</span></div>
@@ -69,8 +71,60 @@
           </div>
           <div id="telemetry-history" class="telemetry-history-slot" hidden></div>
         </section>
+        <section id="recommendations-page" class="screen recommendations-page" hidden tabindex="-1" aria-labelledby="recommendations-title">
+          <header class="recommendations-heading">
+            <h2 id="recommendations-title">Recommendations</h2>
+            <p>Get an on-device suggestion based on saved measurements.</p>
+          </header>
+          <div class="recommendations-layout">
+            <form id="recommendation-form" class="panel recommendation-panel" aria-labelledby="recommendation-form-title">
+              <h3 id="recommendation-form-title">Set up a recommendation</h3>
+              <div class="recommendation-fields">
+                <label for="recommendation-source">Measurement source
+                  <select id="recommendation-source" aria-describedby="recommendation-source-note"></select>
+                </label>
+                <label for="recommendation-preference">Leisure preference
+                  <select id="recommendation-preference">
+                    <option value="">No preference</option><option value="READING">Reading</option>
+                    <option value="MUSIC">Music</option><option value="PUZZLE">Puzzle</option><option value="JOURNAL">Journal</option>
+                  </select>
+                </label>
+              </div>
+              <p id="recommendation-source-note" class="caption"></p>
+              <div class="recommendation-actions">
+                <button id="recommendation-generate" class="button primary" type="submit">Generate recommendation</button>
+                <button id="recommendation-cancel" class="button secondary" type="button" hidden>Cancel</button>
+              </div>
+              <p id="recommendation-status" class="caption" role="status"></p>
+            </form>
+            <section class="panel recommendation-panel recommendation-result" aria-labelledby="recommendation-result-title">
+              <h3 id="recommendation-result-title">Suggested next step</h3>
+              <p id="recommendation-empty" class="caption">Generate a recommendation to see the suggestion and the measurements it uses.</p>
+              <div id="recommendation-output" hidden></div>
+            </section>
+          </div>
+          <details class="panel recommendation-disclosure">
+            <summary>Ground-station snapshot</summary>
+            <p class="caption">Sign in to save measurements and core flags on this device for offline use. Passwords are not saved.</p>
+            <form id="recommendation-sync" class="recommendation-sync">
+              <label for="recommendation-username">Username<input id="recommendation-username" value="demo" autocomplete="username" required maxlength="100" /></label>
+              <label for="recommendation-password">Password<input id="recommendation-password" type="password" autocomplete="current-password" required maxlength="512" /></label>
+              <button id="recommendation-connect" class="button secondary" type="submit">Synchronize measurements</button>
+              <p id="recommendation-sync-status" class="caption" role="status"></p>
+            </form>
+          </details>
+          <details class="panel recommendation-disclosure">
+            <summary>Mission exercise guidance</summary>
+            <p class="caption">Cycling, treadmill and resistance equipment are mission-plan options. No personal intensity or duration is generated. Current clearance and a reviewed mission plan are required before exercise is recommended.</p>
+          </details>
+        </section>
 </div>
-<nav class="screen-pagination" aria-label="Observation screens"><button class="page-dot" type="button" data-page="0" aria-controls="overview" aria-label="Health overview" aria-current="page"><span class="dot-mark"></span></button><button class="page-dot" type="button" data-page="1" aria-controls="core-panel" aria-label="History / On-device record"><span class="dot-mark"></span></button><span id="page-name" class="caption">Overview</span></nav>
+<nav class="screen-pagination" aria-label="Observation screens">
+  <button class="page-dot" type="button" data-page="0" aria-controls="core-panel" aria-label="History / On-device record"><span class="dot-mark"></span></button>
+  <button class="page-dot" type="button" data-page="1" aria-controls="overview" aria-label="Daily overview" aria-current="page"><span class="dot-mark"></span></button>
+  <button class="page-dot" type="button" data-page="2" aria-controls="recommendations-page" aria-label="Recommendations"><span class="dot-mark"></span></button>
+  <span id="page-name" class="caption">Daily overview</span>
+</nav>
 </main>
 </div>
   <dialog id="crew-dialog" role="dialog" aria-modal="true" aria-labelledby="crew-dialog-title" aria-describedby="crew-dialog-description" tabindex="-1">
@@ -101,16 +155,28 @@
 <dialog id="reading-dialog" class="sheet" aria-labelledby="reading-title" tabindex="-1"><div class="dialog-heading"><h2 id="reading-title">Reading details</h2><button id="reading-close" class="button secondary" type="button">Close</button></div><div id="reading-content"></div><div class="assistant-slot"><span>Explain (assistant not loaded)</span></div></dialog>
 <dialog id="voice-dialog" class="sheet voice-sheet" aria-labelledby="voice-title" tabindex="-1">
 <div class="sheet-handle" aria-hidden="true"></div><div class="dialog-heading"><h2 id="voice-title">Type a reading</h2><button id="voice-close" class="button secondary" type="button">Discard</button></div>
+<div id="voice-capture" hidden>
+  <div class="voice-controls">
+    <button id="voice-microphone" class="voice-microphone" type="button" aria-pressed="false" aria-describedby="voice-status">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg>
+      <span id="voice-microphone-label">Start dictation</span>
+    </button>
+    <p id="voice-status" class="caption" role="status"></p>
+    <button id="voice-recorded" class="text-button" type="button" hidden>Use recorded dictation</button>
+  </div>
+  <label for="voice-transcript">Transcript</label>
+  <textarea id="voice-transcript" rows="5" maxlength="2000" placeholder="The words recognized by the microphone appear here."></textarea>
+  <div class="voice-actions">
+    <button id="voice-review" class="button primary" type="button" disabled>Review transcript</button>
+    <button id="voice-type" class="text-button" type="button">Open text chat</button>
+  </div>
+</div>
 <div id="reading-chat" hidden>
   <p class="chat-scope">On-device · Pulse entry</p>
   <div id="chat-messages" class="chat-log" role="log" aria-label="Reading conversation"></div>
-  <p id="chat-voice-status" class="chat-voice-status" role="status"></p>
   <form id="chat-compose" class="chat-compose">
     <label class="sr-only" for="chat-input">Reading or reply</label>
-    <textarea id="chat-input" rows="2" maxlength="240" placeholder="Type a reading or reply"></textarea>
-    <button id="chat-talk" class="button secondary" type="button" aria-label="Hold to dictate" aria-pressed="false" aria-describedby="chat-voice-status">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg>
-    </button>
+    <textarea id="chat-input" rows="3" maxlength="240" placeholder="Type a reading or reply"></textarea>
     <button id="chat-send" type="submit" class="button primary">Send</button>
   </form>
   <button id="chat-manual" type="button" class="text-button">Use reading form</button>
