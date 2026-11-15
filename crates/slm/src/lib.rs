@@ -24,6 +24,7 @@ pub mod interpreter;
 #[cfg(feature = "llama")]
 pub mod llama;
 pub mod manifest;
+pub mod service;
 pub mod slot;
 pub mod store;
 

@@ -6,6 +6,12 @@
 //! Contrato de los comandos: `docs/api/comandos-core.md` y `ui/src/core-api.ts`.
 
 use merken_core::time::Timestamp;
+use merken_slm::{
+    Ficha,
+    service::{
+        ExplainResponse, InterpretResponse, ServiceError, SlmService, SlmStatus, default_deadline,
+    },
+};
 use merken_store::{
     ListTelemetryInput, RecordTelemetryInput, RecordTelemetryResult, Scenario, Store, StoreError,
     TelemetryItem, VerifyTelemetryResult,
@@ -27,6 +33,130 @@ const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Base de datos local, compartida por todos los comandos.
 pub struct AppState(Mutex<Store>);
+pub struct SlmState {
+    service: SlmService,
+    fichas: Vec<Ficha>,
+}
+
+#[derive(Deserialize)]
+pub struct InterpretInput {
+    pub text: String,
+    pub source: Option<String>,
+}
+#[derive(Deserialize)]
+pub struct ExplainInput {
+    pub indicator: String,
+    pub body_zone: Option<merken_core::catalog::BodyZone>,
+}
+
+fn slm_error(code: &str, field: Option<&str>, message: &str) -> StoreError {
+    StoreError {
+        code: code.into(),
+        field: field.map(str::to_owned),
+        message: message.into(),
+    }
+}
+fn service_error(e: ServiceError) -> StoreError {
+    match e {
+        ServiceError::Busy => slm_error("busy", None, "The assistant is busy. Try again shortly"),
+        ServiceError::InvalidValue => slm_error(
+            "invalid_value",
+            Some("text"),
+            "Text exceeds the maximum length",
+        ),
+        ServiceError::Unavailable => slm_error("slm_error", None, "The assistant is unavailable"),
+    }
+}
+pub fn handle_interpret(
+    service: &SlmService,
+    input: InterpretInput,
+) -> Result<InterpretResponse, StoreError> {
+    if input
+        .source
+        .as_deref()
+        .is_some_and(|s| s != "text" && s != "voice")
+    {
+        return Err(slm_error(
+            "invalid_value",
+            Some("source"),
+            "Source must be text or voice",
+        ));
+    }
+    service
+        .interpret(input.text, default_deadline())
+        .map_err(service_error)?
+        .recv()
+        .map_err(|_| slm_error("slm_error", None, "The assistant is unavailable"))
+}
+pub fn handle_find_evaluation(
+    store: &mut Store,
+    input: ExplainInput,
+    at: Timestamp,
+) -> Result<merken_core::evaluate::Evaluation, StoreError> {
+    let status = store.status(at, APP_VERSION)?;
+    let entries = if input.indicator == "symptom" {
+        status.symptoms
+    } else {
+        status.indicators
+    };
+    entries
+        .into_iter()
+        .find(|e| e.indicator == input.indicator && e.body_zone == input.body_zone)
+        .ok_or_else(|| slm_error("not_found", Some("indicator"), "Indicator not found"))
+}
+pub fn handle_explain(
+    service: &SlmService,
+    eval: merken_core::evaluate::Evaluation,
+    fichas: Vec<Ficha>,
+) -> Result<ExplainResponse, StoreError> {
+    service
+        .explain(eval, fichas, default_deadline())
+        .map_err(service_error)?
+        .recv()
+        .map_err(|_| slm_error("slm_error", None, "The assistant is unavailable"))
+}
+async fn slm_blocking<T: Send + 'static>(
+    f: impl FnOnce() -> Result<T, StoreError> + Send + 'static,
+) -> Result<T, StoreError> {
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|_| slm_error("slm_error", None, "The assistant was interrupted"))?
+}
+#[tauri::command]
+async fn interpret_text(
+    state: tauri::State<'_, SlmState>,
+    input: InterpretInput,
+) -> Result<InterpretResponse, StoreError> {
+    let service = state.service.clone();
+    slm_blocking(move || handle_interpret(&service, input)).await
+}
+#[tauri::command]
+async fn explain_indicator(
+    store: tauri::State<'_, AppState>,
+    state: tauri::State<'_, SlmState>,
+    input: ExplainInput,
+) -> Result<ExplainResponse, StoreError> {
+    let eval = with_store(&store, |s| handle_find_evaluation(s, input, now()))?;
+    let service = state.service.clone();
+    let fichas = state.fichas.clone();
+    slm_blocking(move || handle_explain(&service, eval, fichas)).await
+}
+#[tauri::command]
+async fn slm_status(state: tauri::State<'_, SlmState>) -> Result<SlmStatus, StoreError> {
+    let service = state.service.clone();
+    slm_blocking(move || {
+        service
+            .status(default_deadline())
+            .map_err(service_error)?
+            .recv()
+            .map_err(|_| slm_error("slm_error", None, "The assistant is unavailable"))
+    })
+    .await
+}
+#[tauri::command]
+async fn slm_cancel(state: tauri::State<'_, SlmState>) -> Result<bool, StoreError> {
+    Ok(state.service.cancel())
+}
 
 fn now() -> Timestamp {
     let ms = std::time::SystemTime::now()
@@ -331,9 +461,26 @@ pub fn run() {
         .setup(|app| {
             let store = open_store(app)?;
             app.manage(AppState(Mutex::new(store)));
+            let root = if cfg!(debug_assertions) {
+                std::env::var_os("MERKEN_SLM_MODELS_DIR")
+                    .map(std::path::PathBuf::from)
+                    .unwrap_or(app.path().app_data_dir()?.join("models"))
+            } else {
+                app.path().app_data_dir()?.join("models")
+            };
+            #[cfg(feature = "slm-llama")]
+            let factory = merken_slm::service::LlamaFactory;
+            #[cfg(not(feature = "slm-llama"))]
+            let factory = merken_slm::service::NoEngineFactory;
+            let (service, fichas) = SlmService::start(root, factory, None)?;
+            app.manage(SlmState { service, fichas });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            interpret_text,
+            explain_indicator,
+            slm_status,
+            slm_cancel,
             core_status,
             get_profile,
             log_record,
@@ -360,6 +507,48 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn slm_handlers_use_local_status_and_validate_input() -> Result<(), StoreError> {
+        let (service, fichas) = SlmService::start(
+            std::env::temp_dir().join("merken-tauri-slm-test"),
+            merken_slm::service::NoEngineFactory,
+            None,
+        )
+        .map_err(|_| slm_error("slm_error", None, "Test setup failed"))?;
+        let invalid = handle_interpret(
+            &service,
+            InterpretInput {
+                text: "a".repeat(merken_core::interpret::MAX_INPUT_CHARS + 1),
+                source: None,
+            },
+        );
+        assert!(
+            invalid.is_err_and(|e| e.code == "invalid_value" && e.field.as_deref() == Some("text"))
+        );
+        let mut store = Store::open_in_memory()?;
+        let evaluation = handle_find_evaluation(
+            &mut store,
+            ExplainInput {
+                indicator: "heart_rate".into(),
+                body_zone: None,
+            },
+            Timestamp::from_millis(0),
+        )?;
+        let explanation = handle_explain(&service, evaluation, fichas)?;
+        assert_eq!(explanation.note_status, "no_fichas");
+        assert!(!explanation.facts.is_empty());
+        let missing = handle_find_evaluation(
+            &mut store,
+            ExplainInput {
+                indicator: "unknown".into(),
+                body_zone: None,
+            },
+            Timestamp::from_millis(0),
+        );
+        assert!(missing.is_err_and(|e| e.code == "not_found"));
+        Ok(())
+    }
 
     #[test]
     fn unknown_demo_scenario_is_rejected() -> Result<(), StoreError> {

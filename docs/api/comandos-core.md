@@ -118,3 +118,28 @@ const status = await core.getStatus(); // el núcleo ya los evalúa
 
 - Login y descarga del perfil real: llegan con la sincronización (`crates/sync`), cuando el backend tenga URL. Hasta entonces `getProfile` devuelve `profile: null` salvo con DEMO.
 - Subida y descarga con Tierra: los datos quedan en la cola (`sync.pending`).
+
+
+## Interpreter and explainer (SLM)
+
+`interpretText` returns a proposal and a layer-2 status; it does not save anything. Show fields from `proposal` and `layer2_proposal` alongside each literal `quote`, labeling layer-2 fields **interpreted by AI**. The user confirms or corrects every field. Put both `unresolved` and `proposal.uninterpreted` fragments and ambiguous times in the form. Once the user confirms each record, use `logRecord` with `source: "text"` or `"voice"`, including the usual warning confirmation flow. Negated mentions are not records.
+
+`explainIndicator` obtains the evaluation from the local store in Rust. Always show its deterministic facts. When a note exists, show its label **AI-generated suggestion** and its curated statements. Selection is restricted to statements applicable to the existing state and cannot change that state. There are currently no curated fichas, so the note is null with `no_fichas`.
+
+Layer 2 can be `not_needed`, `unavailable`, `used`, `model_unavailable`, `cancelled`, `timeout`, `discarded` or `slm_error`. The rules proposal is unchanged. `layer2_proposal` is separate and contains only checked SLM records for indicators absent from the rules proposal, with each full quote inside `unresolved` or `proposal.uninterpreted`; it is null if none survive. The filtered proposal is checked against the original input. Residual text excludes literal rule citations, negations and uninterpreted spans; standalone punctuation and the connectors y, e, pero, también, tambien, and, but and also are ignored at fragment edges. Since a rules record may quote an entire clause including unrelated text after a connector, its citation is shortened for residual calculation only when the prefix independently reproduces its fields and time. All literal occurrences of a citation are covered. Unresolved text remains visible for confirmation. `note_status` can be `available`, `no_fichas`, `model_unavailable`, `cancelled`, `timeout`, `discarded` or `slm_error`. Failures do not expose engine output.
+
+`slmStatus` reports installed, verified, loaded and backend availability without paths. `slmCancel` requests cancellation of the current job and returns whether one was active. Jobs have a 120-second deadline including queue time; a full queue rejects with `busy`.
+
+For manual desktop installation, create `<app_data_dir>/models/space-health-v5/` and copy both `space-health-base-Q4_K_M.gguf` and `space-health-lora-f16.gguf` from the v5 package. In a debug build `MERKEN_SLM_MODELS_DIR` selects the parent models directory. The embedded trusted manifest fixes sizes and SHA-256; a disk manifest is not trusted. Build with `slm-llama` to enable the backend. No interpreter model or curated fichas currently ships. Android integration and benchmarking remain Phase 3.
+
+```ts
+const { proposal, layer2_proposal, unresolved } = await core.interpretText({ text, source: "voice" });
+// Present both proposals and their quotes; label layer2_proposal fields as interpreted by AI.
+// Put unresolved, proposal.uninterpreted and ambiguous times in the form.
+// After explicit confirmation and constructing a valid value:
+await core.logRecord({ indicator, value, source: "voice" });
+
+const explanation = await core.explainIndicator({ indicator: "heart_rate" });
+for (const fact of explanation.facts) show(fact.text);
+if (explanation.note) show(explanation.note.label);
+```

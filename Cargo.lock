@@ -2298,6 +2298,7 @@ version = "0.1.0"
 dependencies = [
  "merken-core",
  "merken-seed",
+ "merken-slm",
  "merken-store",
  "merken-sync",
  "serde",
