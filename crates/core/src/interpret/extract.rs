@@ -3,9 +3,10 @@
 use super::{
     RULES_INTERPRETER_VERSION,
     lexicon::{
-        Token, TokenKind, UnitKind, is_bp_keyword_at, is_general_symptom_zone_word, is_hour_unit,
-        is_minute_unit, is_negated_good_sleep, is_negation_cue_in_words, is_sleep_word,
-        is_symptom_cue, match_body_zone_phrase, match_unit_at, n1_n2_bp_plausible, parse_body_zone,
+        Token, TokenKind, UnitKind, has_post_unit_unknown_tail, is_bp_keyword_at,
+        is_general_symptom_zone_word, is_hour_unit, is_minute_unit, is_negated_good_sleep,
+        is_negation_word, is_sleep_word, is_symptom_cue, is_unknown_unit_after_number,
+        match_body_zone_phrase, match_unit_at, n1_n2_bp_plausible, parse_body_zone,
         sleep_quality_word, slice_from_bytes, slice_tokens, starts_with_words, tokenize,
         truncate_chars, word_at,
     },
@@ -68,6 +69,7 @@ struct SegmentCtx<'a> {
     start: usize,
     end: usize,
     anchor_start: usize,
+    anchor_end: usize,
     time_mask: &'a TimeMask,
     time_hint: TimeHint,
     has_conflict: bool,
@@ -80,6 +82,8 @@ struct ProposalOut {
     negated: Vec<String>,
     uninterpreted: Vec<String>,
     last_was_open_sleep: bool,
+    last_clause_rec: Option<(Indicator, usize, usize)>,
+    pending_correction_from: Option<(Indicator, usize, usize, Option<usize>)>,
 }
 
 fn field_some(key: &str, value: Value, quote: String) -> ProposedField {
@@ -222,9 +226,29 @@ fn is_indicator_or_symptom_start(tokens: &[Token], idx: usize, end: usize) -> bo
             | "tampoco"
             | "ningun"
             | "ninguna"
+            | "nunca"
+            | "jamas"
             | "dont"
             | "doesnt"
             | "didnt"
+            | "isnt"
+            | "arent"
+            | "havent"
+            | "hasnt"
+            | "hadnt"
+            | "wasnt"
+            | "werent"
+            | "couldnt"
+            | "cant"
+            | "cannot"
+            | "wont"
+            | "wouldnt"
+            | "shouldnt"
+            | "mustnt"
+            | "not"
+            | "never"
+            | "neither"
+            | "nor"
             | "without"
             | "my"
             | "mi"
@@ -678,16 +702,312 @@ fn is_non_clinical_prefix_word(w: Option<&str>) -> bool {
     )
 }
 
+fn is_safe_attribution_word(w: &str) -> bool {
+    matches!(
+        w,
+        "a" | "al"
+            | "de"
+            | "del"
+            | "en"
+            | "con"
+            | "por"
+            | "para"
+            | "como"
+            | "unos"
+            | "unas"
+            | "un"
+            | "una"
+            | "el"
+            | "la"
+            | "lo"
+            | "los"
+            | "las"
+            | "es"
+            | "fue"
+            | "era"
+            | "esta"
+            | "estuvo"
+            | "estan"
+            | "sido"
+            | "hay"
+            | "tiene"
+            | "tengo"
+            | "tenia"
+            | "tuve"
+            | "is"
+            | "are"
+            | "was"
+            | "were"
+            | "be"
+            | "been"
+            | "at"
+            | "of"
+            | "in"
+            | "on"
+            | "around"
+            | "about"
+            | "like"
+            | "for"
+            | "to"
+            | "with"
+            | "as"
+            | "the"
+            | "an"
+            | "had"
+            | "have"
+            | "got"
+            | "aproximadamente"
+            | "approx"
+            | "approximately"
+            | "casi"
+            | "cerca"
+            | "alrededor"
+            | "solo"
+            | "solamente"
+            | "only"
+            | "just"
+            | "nivel"
+            | "level"
+            | "intensidad"
+            | "intensity"
+            | "valor"
+            | "value"
+            | "score"
+            | "puntuacion"
+            | "rating"
+            | "grado"
+            | "grade"
+            | "scale"
+            | "escala"
+            | "hoy"
+            | "today"
+            | "ahora"
+            | "now"
+            | "actual"
+            | "actualmente"
+            | "currently"
+            | "muy"
+            | "bastante"
+            | "algo"
+            | "mucho"
+            | "very"
+            | "quite"
+            | "pretty"
+            | "reposo"
+            | "resting"
+            | "rest"
+            | "ayunas"
+            | "ayuno"
+            | "fasting"
+            | "postprandial"
+            | "leve"
+            | "ligero"
+            | "ligera"
+            | "suave"
+            | "moderado"
+            | "moderada"
+            | "fuerte"
+            | "intenso"
+            | "intensa"
+            | "severo"
+            | "severa"
+            | "agudo"
+            | "aguda"
+            | "mild"
+            | "slight"
+            | "moderate"
+            | "severe"
+            | "strong"
+            | "intense"
+            | "baja"
+            | "alta"
+            | "lower"
+            | "upper"
+            | "izquierda"
+            | "izquierdo"
+            | "derecha"
+            | "derecho"
+            | "left"
+            | "right"
+            | "bien"
+            | "mal"
+            | "regular"
+            | "bueno"
+            | "buena"
+            | "malo"
+            | "mala"
+            | "terrible"
+            | "horrible"
+            | "genial"
+            | "excelente"
+            | "poco"
+            | "nada"
+            | "pesimo"
+            | "pesima"
+            | "good"
+            | "well"
+            | "bad"
+            | "badly"
+            | "poor"
+            | "poorly"
+            | "fair"
+            | "ok"
+            | "okay"
+            | "great"
+            | "fine"
+            | "awful"
+    )
+}
+
+fn is_tight_pre_anchor_connector(w: &str) -> bool {
+    matches!(
+        w,
+        "de" | "del"
+            | "of"
+            | "en"
+            | "in"
+            | "para"
+            | "for"
+            | "con"
+            | "with"
+            | "por"
+            | "el"
+            | "la"
+            | "los"
+            | "las"
+            | "mi"
+            | "my"
+            | "the"
+            | "su"
+            | "his"
+            | "her"
+    )
+}
+
+fn is_safe_pre_value_word(w: &str) -> bool {
+    is_tight_pre_anchor_connector(w)
+        || matches!(
+            w,
+            "unos"
+                | "unas"
+                | "como"
+                | "about"
+                | "around"
+                | "durante"
+                | "cerca"
+                | "alrededor"
+                | "aproximadamente"
+                | "approx"
+                | "approximately"
+                | "tengo"
+                | "tuve"
+                | "tenia"
+                | "siento"
+                | "estoy"
+                | "i"
+                | "im"
+                | "ive"
+                | "had"
+                | "have"
+                | "got"
+                | "a"
+                | "an"
+                | "un"
+                | "una"
+                | "al"
+                | "hoy"
+                | "today"
+                | "anoche"
+                | "ayer"
+        )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn attribution_link_ok(
+    tokens: &[Token],
+    seg_start: usize,
+    anchor_start: usize,
+    anchor_end: usize,
+    val_start: usize,
+    val_end: usize,
+    explicit_unit: bool,
+    time_mask: &TimeMask,
+) -> bool {
+    // 1. El valor está contenido en el propio ancla (p. ej., "72 bpm", "36.8°C", "120/80").
+    if val_start >= anchor_start && val_end <= anchor_end {
+        return true;
+    }
+
+    // 2. Valor posterior al ancla: solo palabras de enlace seguras en anchor_end..val_start.
+    if val_start >= anchor_end {
+        for k in anchor_end..val_start {
+            if time_mask.is_masked(k) {
+                continue;
+            }
+            let Some(tk) = tokens.get(k) else {
+                return false;
+            };
+            match tk.kind {
+                TokenKind::Word => {
+                    if !is_safe_attribution_word(tk.norm.as_str()) {
+                        return false;
+                    }
+                }
+                TokenKind::Other if matches!(tk.norm.as_str(), ":" | "=") => {}
+                _ => return false,
+            }
+        }
+        return true;
+    }
+
+    // 3. Valor previo al ancla: exige unidad explícita, conectores mínimos entre val_end..anchor_start
+    //    y ausencia de verbos/predicados ajenos antes del valor (p. ej. "trabajé 5 horas antes de dormir").
+    if !explicit_unit || val_end > anchor_start {
+        return false;
+    }
+    for k in val_end..anchor_start {
+        if time_mask.is_masked(k) {
+            continue;
+        }
+        if let Some(w) = word_at(tokens, k) {
+            if !is_tight_pre_anchor_connector(w) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+    for k in seg_start..val_start {
+        if time_mask.is_masked(k) {
+            continue;
+        }
+        if let Some(w) = word_at(tokens, k) {
+            if !is_safe_pre_value_word(w) {
+                return false;
+            }
+        } else if tokens
+            .get(k)
+            .is_some_and(|tk| !(tk.kind == TokenKind::Other && tk.norm == ":"))
+        {
+            return false;
+        }
+    }
+    true
+}
+
 struct NumberSearchResult {
     chosen: Option<ParsedNumber>,
     ambiguous: bool,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn find_unique_number(
+    orig: &str,
     tokens: &[Token],
     seg_start: usize,
     seg_end: usize,
     anchor_start: usize,
+    anchor_end: usize,
     time_mask: &TimeMask,
     target: Indicator,
 ) -> NumberSearchResult {
@@ -714,12 +1034,19 @@ fn find_unique_number(
                 }
                 let (has_matching_unit, compatible, next_i) =
                     match match_unit_at(tokens, num.end_idx, seg_end) {
-                        Some((unit, u_end)) => (
-                            unit.matches_indicator(target),
-                            unit.matches_indicator(target),
-                            u_end,
-                        ),
-                        None => (false, true, num.end_idx),
+                        Some((unit, u_end)) => {
+                            let bad_tail = has_post_unit_unknown_tail(tokens, u_end, seg_end);
+                            (
+                                unit.matches_indicator(target),
+                                unit.matches_indicator(target) && !bad_tail,
+                                u_end,
+                            )
+                        }
+                        None => {
+                            let unknown_u =
+                                is_unknown_unit_after_number(orig, tokens, num.end_idx, seg_end);
+                            (false, !unknown_u, num.end_idx)
+                        }
                     };
 
                 let has_slash_10 = allow_fraction_10
@@ -729,13 +1056,27 @@ fn find_unique_number(
 
                 let bad_prefix =
                     i > seg_start && is_non_clinical_prefix_word(word_at(tokens, i - 1));
-                let local_ok = i >= anchor_start || explicit_unit;
+                let local_ok = attribution_link_ok(
+                    tokens,
+                    seg_start,
+                    anchor_start,
+                    anchor_end,
+                    i,
+                    next_i,
+                    explicit_unit,
+                    time_mask,
+                );
 
                 if compatible && !bad_prefix && local_ok {
+                    let is_range_or_alt_sep = tokens
+                        .get(next_i)
+                        .is_some_and(|tk| tk.kind == TokenKind::Hyphen)
+                        || matches!(
+                            word_at(tokens, next_i),
+                            Some("o" | "or" | "vs" | "y" | "and")
+                        );
                     if next_i + 1 < seg_end
-                        && tokens
-                            .get(next_i)
-                            .is_some_and(|tk| tk.kind == TokenKind::Hyphen)
+                        && is_range_or_alt_sep
                         && tokens.get(next_i + 1).is_some_and(|tk| {
                             matches!(tk.kind, TokenKind::Number | TokenKind::InvalidNumber)
                         })
@@ -772,11 +1113,15 @@ fn find_unique_number(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn parse_sleep_hours_at(
+    orig: &str,
     tokens: &[Token],
+    seg_start: usize,
     idx: usize,
     end: usize,
     anchor_start: usize,
+    anchor_end: usize,
     time_mask: &TimeMask,
 ) -> Option<(f64, Option<u64>, usize, bool)> {
     if time_mask.is_masked(idx) {
@@ -789,13 +1134,35 @@ fn parse_sleep_hours_at(
         && idx + 2 <= end
         && !time_mask.any_masked(idx, idx + 2)
     {
-        return Some((0.5, None, idx + 2, true));
+        let ok = !has_post_unit_unknown_tail(tokens, idx + 2, end)
+            && attribution_link_ok(
+                tokens,
+                seg_start,
+                anchor_start,
+                anchor_end,
+                idx,
+                idx + 2,
+                true,
+                time_mask,
+            );
+        return Some((if ok { 0.5 } else { f64::NAN }, None, idx + 2, ok));
     }
     if starts_with_words(tokens, idx, &["half", "an", "hour"])
         && idx + 3 <= end
         && !time_mask.any_masked(idx, idx + 3)
     {
-        return Some((0.5, None, idx + 3, true));
+        let ok = !has_post_unit_unknown_tail(tokens, idx + 3, end)
+            && attribution_link_ok(
+                tokens,
+                seg_start,
+                anchor_start,
+                anchor_end,
+                idx,
+                idx + 3,
+                true,
+                time_mask,
+            );
+        return Some((if ok { 0.5 } else { f64::NAN }, None, idx + 3, ok));
     }
 
     match scan_number(tokens, idx, end, false)? {
@@ -809,64 +1176,80 @@ fn parse_sleep_hours_at(
             let mut is_int = num.int_value;
             let mut has_hour_unit = false;
 
-            if num_end < end
-                && let Some((unit, u_end)) = match_unit_at(tokens, num_end, end)
-            {
-                if unit != UnitKind::SleepHours {
-                    // p. ej. "20 minutos", "6 ejercicios": rechazar sin volver a intentar.
-                    return Some((f64::NAN, None, u_end, false));
-                }
-                has_hour_unit = true;
-                let unit_idx = num_end;
-                num_end = u_end;
-
-                if (starts_with_words(tokens, unit_idx + 1, &["y", "media"])
-                    || starts_with_words(tokens, unit_idx + 1, &["y", "medio"]))
-                    && unit_idx + 3 <= end
-                    && let Some(iv) = is_int
-                    && let Ok(parsed) = format!("{iv}.5").parse::<f64>()
-                {
-                    val = parsed;
-                    is_int = None;
-                    num_end = unit_idx + 3;
-                } else if starts_with_words(tokens, unit_idx + 1, &["and", "a", "half"])
-                    && unit_idx + 4 <= end
-                    && let Some(iv) = is_int
-                    && let Ok(parsed) = format!("{iv}.5").parse::<f64>()
-                {
-                    val = parsed;
-                    is_int = None;
-                    num_end = unit_idx + 4;
-                } else if starts_with_words(tokens, unit_idx + 1, &["and", "half"])
-                    && unit_idx + 3 <= end
-                    && let Some(iv) = is_int
-                    && let Ok(parsed) = format!("{iv}.5").parse::<f64>()
-                {
-                    val = parsed;
-                    is_int = None;
-                    num_end = unit_idx + 3;
-                } else if matches!(word_at(tokens, unit_idx + 1), Some("y" | "and"))
-                    && let Some(mins) = parse_simple_number(tokens, unit_idx + 2)
-                    && mins.end_idx < end
-                    && word_at(tokens, mins.end_idx).is_some_and(is_minute_unit)
-                {
-                    // Solo convierte minutos añadidos a horas si la fracción es decimal exacta (múltiplo de 3 min)
-                    if mins
-                        .int_value
-                        .is_some_and(|m| m > 0 && m < 60 && m % 3 == 0)
-                    {
-                        val += mins.value / 60.0;
-                        is_int = None;
-                        num_end = mins.end_idx + 1;
-                    } else {
-                        return Some((f64::NAN, None, mins.end_idx + 1, false));
+            if num_end < end {
+                if let Some((unit, u_end)) = match_unit_at(tokens, num_end, end) {
+                    if unit != UnitKind::SleepHours {
+                        // p. ej. "20 minutos", "6 ejercicios": rechazar sin volver a intentar.
+                        return Some((f64::NAN, None, u_end, false));
                     }
+                    has_hour_unit = true;
+                    let unit_idx = num_end;
+                    num_end = u_end;
+
+                    if (starts_with_words(tokens, unit_idx + 1, &["y", "media"])
+                        || starts_with_words(tokens, unit_idx + 1, &["y", "medio"]))
+                        && unit_idx + 3 <= end
+                        && let Some(iv) = is_int
+                        && let Ok(parsed) = format!("{iv}.5").parse::<f64>()
+                    {
+                        val = parsed;
+                        is_int = None;
+                        num_end = unit_idx + 3;
+                    } else if starts_with_words(tokens, unit_idx + 1, &["and", "a", "half"])
+                        && unit_idx + 4 <= end
+                        && let Some(iv) = is_int
+                        && let Ok(parsed) = format!("{iv}.5").parse::<f64>()
+                    {
+                        val = parsed;
+                        is_int = None;
+                        num_end = unit_idx + 4;
+                    } else if starts_with_words(tokens, unit_idx + 1, &["and", "half"])
+                        && unit_idx + 3 <= end
+                        && let Some(iv) = is_int
+                        && let Ok(parsed) = format!("{iv}.5").parse::<f64>()
+                    {
+                        val = parsed;
+                        is_int = None;
+                        num_end = unit_idx + 3;
+                    } else if matches!(word_at(tokens, unit_idx + 1), Some("y" | "and"))
+                        && let Some(mins) = parse_simple_number(tokens, unit_idx + 2)
+                        && mins.end_idx < end
+                        && word_at(tokens, mins.end_idx).is_some_and(is_minute_unit)
+                    {
+                        // Solo convierte minutos añadidos a horas si la fracción es decimal exacta (múltiplo de 3 min)
+                        if mins
+                            .int_value
+                            .is_some_and(|m| m > 0 && m < 60 && m % 3 == 0)
+                        {
+                            val += mins.value / 60.0;
+                            is_int = None;
+                            num_end = mins.end_idx + 1;
+                        } else {
+                            return Some((f64::NAN, None, mins.end_idx + 1, false));
+                        }
+                    }
+                } else if is_unknown_unit_after_number(orig, tokens, num_end, end) {
+                    return Some((f64::NAN, None, num_end, false));
                 }
             }
 
+            let bad_tail = if has_hour_unit {
+                has_post_unit_unknown_tail(tokens, num_end, end)
+            } else {
+                false
+            };
             let bad_prefix = idx > 0 && is_non_clinical_prefix_word(word_at(tokens, idx - 1));
-            let local_ok = idx >= anchor_start || has_hour_unit;
-            if bad_prefix || !local_ok {
+            let local_ok = attribution_link_ok(
+                tokens,
+                seg_start,
+                anchor_start,
+                anchor_end,
+                idx,
+                num_end,
+                has_hour_unit,
+                time_mask,
+            );
+            if bad_prefix || bad_tail || !local_ok {
                 return Some((f64::NAN, None, num_end, false));
             }
             Some((val, is_int, num_end, true))
@@ -887,9 +1270,16 @@ fn extract_sleep_record(ctx: &SegmentCtx<'_>) -> (Option<ProposedRecord>, bool) 
         let mut candidates: Vec<(f64, Option<u64>, usize, usize)> = Vec::new();
         let mut i = ctx.start;
         while i < ctx.end {
-            if let Some((val, is_int, next_i, valid)) =
-                parse_sleep_hours_at(ctx.tokens, i, ctx.end, ctx.anchor_start, ctx.time_mask)
-            {
+            if let Some((val, is_int, next_i, valid)) = parse_sleep_hours_at(
+                ctx.orig,
+                ctx.tokens,
+                ctx.start,
+                i,
+                ctx.end,
+                ctx.anchor_start,
+                ctx.anchor_end,
+                ctx.time_mask,
+            ) {
                 if valid && val.is_finite() {
                     candidates.push((val, is_int, i, next_i));
                 }
@@ -901,7 +1291,6 @@ fn extract_sleep_record(ctx: &SegmentCtx<'_>) -> (Option<ProposedRecord>, bool) 
         if candidates.len() >= 2 {
             ambiguous = true;
         } else if let Some(&(val, is_int, h_start, h_end)) = candidates.first()
-            && val > 0.0
             && Hours::try_from(val).is_ok()
             && let Some(val_quote) = slice_tokens(ctx.orig, ctx.tokens, h_start, h_end)
         {
@@ -1020,10 +1409,12 @@ fn extract_symptom_record(ctx: &SegmentCtx<'_>) -> (Option<ProposedRecord>, bool
     let mut ambiguous = ctx.has_conflict;
     if !ctx.has_conflict {
         let search = find_unique_number(
+            ctx.orig,
             ctx.tokens,
             ctx.start,
             ctx.end,
             ctx.anchor_start,
+            ctx.anchor_end,
             ctx.time_mask,
             Indicator::Symptom,
         );
@@ -1056,11 +1447,14 @@ fn extract_symptom_record(ctx: &SegmentCtx<'_>) -> (Option<ProposedRecord>, bool
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn find_bp_pairs(
+    orig: &str,
     tokens: &[Token],
     start: usize,
     end: usize,
     anchor_start: usize,
+    anchor_end: usize,
     time_mask: &TimeMask,
     has_keyword: bool,
 ) -> (Option<(ParsedNumber, ParsedNumber)>, bool) {
@@ -1106,11 +1500,23 @@ fn find_bp_pairs(
                     let is_score_slash =
                         is_slash && n2.value == 10.0 && n1.value <= 10.0 && !has_keyword;
                     let plausible_standalone = n1_n2_bp_plausible(n1.value, n2.value);
-                    let unit_ok = match match_unit_at(tokens, n2.end_idx, end) {
-                        Some((u, _)) => u == UnitKind::BloodPressure,
-                        None => true,
+                    let (unit_ok, next_after_unit) = match match_unit_at(tokens, n2.end_idx, end) {
+                        Some((u, u_end)) => (u == UnitKind::BloodPressure, u_end),
+                        None => (
+                            !is_unknown_unit_after_number(orig, tokens, n2.end_idx, end),
+                            n2.end_idx,
+                        ),
                     };
-                    let local_ok = i >= anchor_start || unit_ok;
+                    let local_ok = attribution_link_ok(
+                        tokens,
+                        start,
+                        anchor_start,
+                        anchor_end,
+                        i,
+                        next_after_unit,
+                        unit_ok && n2.end_idx < next_after_unit,
+                        time_mask,
+                    );
                     if !is_score_slash
                         && (has_keyword || plausible_standalone)
                         && unit_ok
@@ -1152,10 +1558,12 @@ fn extract_bp_record(ctx: &SegmentCtx<'_>, has_keyword: bool) -> (Option<Propose
     }
 
     let (pair, pair_ambiguous) = find_bp_pairs(
+        ctx.orig,
         ctx.tokens,
         ctx.start,
         ctx.end,
         ctx.anchor_start,
+        ctx.anchor_end,
         ctx.time_mask,
         has_keyword,
     );
@@ -1201,10 +1609,12 @@ fn extract_bp_record(ctx: &SegmentCtx<'_>, has_keyword: bool) -> (Option<Propose
 
     if has_keyword {
         let search = find_unique_number(
+            ctx.orig,
             ctx.tokens,
             ctx.start,
             ctx.end,
             ctx.anchor_start,
+            ctx.anchor_end,
             ctx.time_mask,
             Indicator::BloodPressure,
         );
@@ -1245,10 +1655,12 @@ fn extract_single_numeric_record(
 
     if !ctx.has_conflict {
         let search = find_unique_number(
+            ctx.orig,
             ctx.tokens,
             ctx.start,
             ctx.end,
             ctx.anchor_start,
+            ctx.anchor_end,
             ctx.time_mask,
             indicator,
         );
@@ -1304,14 +1716,26 @@ fn is_negation_start_at(tokens: &[Token], idx: usize, end: usize) -> bool {
                 | "tampoco"
                 | "ningun"
                 | "ninguna"
+                | "nunca"
+                | "jamas"
                 | "dont"
                 | "doesnt"
                 | "didnt"
                 | "isnt"
                 | "arent"
                 | "havent"
+                | "hasnt"
+                | "hadnt"
                 | "wasnt"
+                | "werent"
                 | "couldnt"
+                | "cant"
+                | "cannot"
+                | "wont"
+                | "wouldnt"
+                | "shouldnt"
+                | "mustnt"
+                | "aint"
                 | "not"
                 | "without"
                 | "never"
@@ -1335,6 +1759,8 @@ fn is_safe_introducer_before_anchor(w: &str) -> bool {
             | "tampoco"
             | "ningun"
             | "ninguna"
+            | "nunca"
+            | "jamas"
             | "nada"
             | "de"
             | "en"
@@ -1353,6 +1779,8 @@ fn is_safe_introducer_before_anchor(w: &str) -> bool {
             | "the"
             | "a"
             | "an"
+            | "to"
+            | "able"
             | "i"
             | "im"
             | "ive"
@@ -1362,13 +1790,31 @@ fn is_safe_introducer_before_anchor(w: &str) -> bool {
             | "isnt"
             | "arent"
             | "havent"
+            | "hasnt"
+            | "hadnt"
             | "wasnt"
+            | "werent"
             | "couldnt"
+            | "cant"
+            | "cannot"
+            | "wont"
+            | "wouldnt"
+            | "shouldnt"
+            | "mustnt"
+            | "aint"
             | "not"
             | "without"
             | "never"
             | "nor"
             | "neither"
+            | "can"
+            | "will"
+            | "would"
+            | "should"
+            | "could"
+            | "did"
+            | "do"
+            | "does"
             | "tengo"
             | "siento"
             | "estoy"
@@ -1376,13 +1822,123 @@ fn is_safe_introducer_before_anchor(w: &str) -> bool {
             | "tome"
             | "registre"
             | "chequee"
+            | "medir"
+            | "tomar"
+            | "registrar"
+            | "chequear"
+            | "pude"
+            | "puedo"
             | "have"
+            | "has"
+            | "had"
             | "feel"
             | "felt"
+            | "measure"
             | "measured"
+            | "check"
             | "checked"
+            | "take"
             | "took"
+            | "record"
+            | "log"
+            | "get"
     )
+}
+
+fn is_measurement_action_word(w: &str) -> bool {
+    matches!(
+        w,
+        "medir"
+            | "medido"
+            | "medida"
+            | "tomar"
+            | "tomado"
+            | "tomada"
+            | "registrar"
+            | "registrado"
+            | "registrada"
+            | "confirmar"
+            | "confirmado"
+            | "confirmada"
+            | "chequear"
+            | "chequeado"
+            | "measure"
+            | "measured"
+            | "take"
+            | "taken"
+            | "check"
+            | "checked"
+            | "record"
+            | "recorded"
+            | "log"
+            | "logged"
+            | "detectado"
+            | "detectada"
+            | "detected"
+            | "presente"
+            | "present"
+    )
+}
+
+fn is_post_anchor_absence_predicate(w: &str) -> bool {
+    matches!(
+        w,
+        "gone" | "anymore" | "desaparecio" | "desaparecieron" | "subsided" | "resolved"
+    )
+}
+
+fn is_segment_negated(
+    tokens: &[Token],
+    seg_start: usize,
+    seg_end: usize,
+    anchor_end: usize,
+    time_mask: &TimeMask,
+) -> bool {
+    // 1. Negación previa o interna al ancla dentro del segmento (p. ej. "I can't measure pulse 72",
+    //    "no medí pulso 72", "sin dolor", "my head doesn't hurt").
+    for k in seg_start..anchor_end {
+        if time_mask.is_masked(k) {
+            continue;
+        }
+        if is_negation_start_at(tokens, k, anchor_end) {
+            return true;
+        }
+    }
+
+    // 2. Negación o resolución pospuesta que modifica al ancla/medición (p. ej. "pulso no medido",
+    //    "headache is gone", "fiebre no", pero NO "dormí bien no tuve pesadillas" ni "dormí bien sin interrupciones").
+    for k in anchor_end..seg_end {
+        if time_mask.is_masked(k) {
+            continue;
+        }
+        if word_at(tokens, k).is_some_and(is_post_anchor_absence_predicate) {
+            return true;
+        }
+        if is_negation_start_at(tokens, k, seg_end) {
+            let neg_len = if k + 1 < seg_end
+                && (starts_with_words(tokens, k, &["ya", "no"])
+                    || starts_with_words(tokens, k, &["nada", "de"]))
+            {
+                2
+            } else {
+                1
+            };
+            let after = k + neg_len;
+            if after >= seg_end
+                && matches!(
+                    word_at(tokens, k),
+                    Some("no" | "not" | "never" | "nunca" | "tampoco")
+                )
+            {
+                return true;
+            }
+            if word_at(tokens, after).is_some_and(is_measurement_action_word) {
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 /// Retrocede desde el ancla `anchor_start` del segmento `pos` (cuando `pos > 0`)
@@ -1430,8 +1986,9 @@ fn try_pure_sleep_duration_continuation(
     {
         idx += 1;
     }
-    let (val, is_int, num_end, valid) = parse_sleep_hours_at(tokens, idx, c_end, idx, time_mask)?;
-    if !valid || !val.is_finite() || val <= 0.0 || Hours::try_from(val).is_err() {
+    let (val, is_int, num_end, valid) =
+        parse_sleep_hours_at(orig, tokens, idx, idx, c_end, idx, idx, time_mask)?;
+    if !valid || !val.is_finite() || Hours::try_from(val).is_err() {
         return None;
     }
     // Exige que sea duración explícita en horas (no un número pelado) y que consuma toda la cláusula.
@@ -1451,6 +2008,51 @@ fn try_pure_sleep_duration_continuation(
         Number::from_f64(val).map(Value::Number)?
     };
     Some((val, jv, val_quote))
+}
+
+impl AnchorKind {
+    const fn to_indicator(self) -> Indicator {
+        match self {
+            Self::HeartRate => Indicator::HeartRate,
+            Self::BloodPressure => Indicator::BloodPressure,
+            Self::BodyTemperature => Indicator::BodyTemperature,
+            Self::Glucose => Indicator::Glucose,
+            Self::OxygenInBlood => Indicator::OxygenInBlood,
+            Self::Mood => Indicator::Mood,
+            Self::Sleep => Indicator::Sleep,
+            Self::Symptom => Indicator::Symptom,
+        }
+    }
+}
+
+fn starts_with_correction_at(tokens: &[Token], start: usize, end: usize) -> Option<usize> {
+    if start >= end {
+        return None;
+    }
+    if word_at(tokens, start).is_some_and(is_correction_word) {
+        return Some(start + 1);
+    }
+    if start + 1 < end
+        && (starts_with_words(tokens, start, &["mejor", "dicho"])
+            || starts_with_words(tokens, start, &["quise", "decir"])
+            || starts_with_words(tokens, start, &["quiero", "decir"])
+            || starts_with_words(tokens, start, &["o", "sea"])
+            || starts_with_words(tokens, start, &["en", "realidad"])
+            || starts_with_words(tokens, start, &["i", "mean"]))
+    {
+        return Some(start + 2);
+    }
+    None
+}
+
+fn clear_record_values(rec: &mut ProposedRecord) {
+    for f in &mut rec.fields {
+        if rec.indicator == Indicator::Symptom && f.key == "description" {
+            continue;
+        }
+        f.value = None;
+        f.quote = None;
+    }
 }
 
 fn process_clause(
@@ -1477,6 +2079,8 @@ fn process_clause(
     });
     if !has_non_time_word_or_num {
         out.last_was_open_sleep = false;
+        out.last_clause_rec = None;
+        out.pending_correction_from = None;
         return time_matches.first().cloned();
     }
 
@@ -1498,9 +2102,15 @@ fn process_clause(
         }
     }
 
+    let corr_after = starts_with_correction_at(tokens, c_start, c_end);
+    let clause_end_byte = tokens
+        .get(c_end.saturating_sub(1))
+        .map_or(orig.len(), |tk| tk.end);
+
     // Continuación inequívoca de sueño: "<dormí mal>, <5 horas>" sin otros verbos ni cambio de tiempo.
     if raw_anchors.is_empty()
         && clause.after_comma
+        && corr_after.is_none()
         && time_matches.is_empty()
         && carried_time.is_none()
         && out.last_was_open_sleep
@@ -1525,11 +2135,31 @@ fn process_clause(
             prev.quote = merged_quote;
         }
         out.last_was_open_sleep = false;
+        out.pending_correction_from = None;
         return None;
     }
 
     if raw_anchors.is_empty() {
         out.last_was_open_sleep = false;
+        if let Some(after_corr_idx) = corr_after
+            && let Some((prev_ind, rec_idx, prev_start_b)) = out.last_clause_rec
+        {
+            if let Some(prev_rec) = out.records.get_mut(rec_idx) {
+                clear_record_values(prev_rec);
+            }
+            if after_corr_idx >= c_end {
+                // "pulso 72, perdón, pulso 82": guardar inicio para combinarlo con la cláusula siguiente.
+                out.pending_correction_from =
+                    Some((prev_ind, rec_idx, prev_start_b, Some(clause_end_byte)));
+            } else if let Some(combined) = slice_from_bytes(orig, prev_start_b, clause_end_byte) {
+                out.uninterpreted.push(combined);
+                out.pending_correction_from = None;
+            }
+            out.last_clause_rec = None;
+            return None;
+        }
+        out.last_clause_rec = None;
+        out.pending_correction_from = None;
         if let Some(q) = slice_tokens(orig, tokens, c_start, c_end) {
             out.uninterpreted.push(q);
         }
@@ -1589,6 +2219,40 @@ fn process_clause(
         prev_anchor_end = a.end;
     }
 
+    // Corrección contigua entre cláusulas del mismo indicador ("pulso 72, perdón pulso 82" / "pulso 72, perdón, pulso 82"):
+    // consolida a un solo registro ambiguo (value: None) y el span completo en uninterpreted.
+    if let Some(first_group) = groups.first() {
+        let first_ind = first_group.kind.to_indicator();
+        let active_corr = out
+            .pending_correction_from
+            .take()
+            .map(|(ind, idx, start_b, _)| (ind, idx, start_b))
+            .filter(|(ind, _, _)| *ind == first_ind)
+            .or_else(|| {
+                if corr_after.is_some() {
+                    out.last_clause_rec.filter(|(ind, _, _)| *ind == first_ind)
+                } else {
+                    None
+                }
+            });
+        if let Some((_, rec_idx, prev_start_b)) = active_corr {
+            if let Some(prev_rec) = out.records.get_mut(rec_idx) {
+                clear_record_values(prev_rec);
+            }
+            if let Some(combined) = slice_from_bytes(orig, prev_start_b, clause_end_byte) {
+                out.uninterpreted.push(combined);
+            }
+            out.last_was_open_sleep = false;
+            out.last_clause_rec = None;
+            return None;
+        }
+    }
+    if let Some((_, _, prev_start_b, Some(corr_end_b))) = out.pending_correction_from.take()
+        && let Some(prev_uninterp) = slice_from_bytes(orig, prev_start_b, corr_end_b)
+    {
+        out.uninterpreted.push(prev_uninterp);
+    }
+
     // Calcular límites de cada segmento, retrocediendo por negaciones locales entre anclas.
     let group_count = groups.len();
     let mut seg_starts = Vec::with_capacity(group_count);
@@ -1604,6 +2268,7 @@ fn process_clause(
     }
 
     let mut emitted_open_sleep = false;
+    let mut last_emitted_in_clause: Option<(Indicator, usize, usize)> = None;
     for (pos, g) in groups.iter().enumerate() {
         let seg_start = seg_starts.get(pos).copied().unwrap_or(c_start);
         let seg_end = seg_starts.get(pos + 1).copied().unwrap_or(c_end);
@@ -1631,18 +2296,17 @@ fn process_clause(
             None => TimeHint::Unspecified,
         };
 
-        // Negación local por segmento (para todas las clases; excepción solo en Sleep bien/pude/nada).
-        let seg_words: Vec<&str> = (seg_start..seg_end)
-            .filter(|&k| !time_mask.is_masked(k))
-            .filter_map(|k| word_at(tokens, k))
-            .collect();
+        // Negación local posicional por segmento (para todas las clases; excepción solo en "no dormí bien").
         let sleep_exception =
             g.kind == AnchorKind::Sleep && is_negated_good_sleep(tokens, seg_start, seg_end);
-        if !sleep_exception && is_negation_cue_in_words(&seg_words) {
+        if !sleep_exception
+            && is_segment_negated(tokens, seg_start, seg_end, g.anchor_end, &time_mask)
+        {
             if let Some(q) = slice_tokens(orig, tokens, seg_start, seg_end) {
                 out.negated.push(q);
             }
             emitted_open_sleep = false;
+            last_emitted_in_clause = None;
             continue;
         }
 
@@ -1652,6 +2316,7 @@ fn process_clause(
             start: seg_start,
             end: seg_end,
             anchor_start: g.anchor_start,
+            anchor_end: g.anchor_end,
             time_mask: &time_mask,
             time_hint,
             has_conflict: g.has_conflict,
@@ -1687,16 +2352,222 @@ fn process_clause(
                 out.uninterpreted.push(q);
             }
             let start_b = tokens.get(seg_start).map_or(0, |t| t.start);
+            let rec_idx = out.records.len();
+            let ind = r.indicator;
             out.records.push(r);
             out.record_start_bytes.push(start_b);
+            last_emitted_in_clause = if group_count == 1 && !ambiguous {
+                Some((ind, rec_idx, start_b))
+            } else {
+                None
+            };
         } else if let Some(q) = slice_tokens(orig, tokens, seg_start, seg_end) {
             emitted_open_sleep = false;
+            last_emitted_in_clause = None;
             out.uninterpreted.push(q);
         }
     }
 
     out.last_was_open_sleep = emitted_open_sleep && group_count == 1;
+    out.last_clause_rec = last_emitted_in_clause;
     None
+}
+
+/// Comprueba que la cita del registro corresponda a una sola cláusula clínica:
+/// sin `;`, `.` ni conectores de cambio de cláusula, y solo acepta `,` si la capa 1 la
+/// interpreta como una única mención completa sin negaciones ni restos no interpretados
+/// (p. ej. continuación de duración de sueño `"dormí mal, 5 horas"`).
+pub(crate) fn is_single_clause_quote(quote: &str) -> bool {
+    let trimmed = quote.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let tokens = tokenize(trimmed);
+    if tokens.is_empty() {
+        return false;
+    }
+    let mut has_comma = false;
+    for (idx, tk) in tokens.iter().enumerate() {
+        match tk.kind {
+            TokenKind::ClauseSep => {
+                if tk.norm == "," {
+                    has_comma = true;
+                } else {
+                    return false;
+                }
+            }
+            TokenKind::Word => {
+                if is_clause_break_word(tk.norm.as_str()) {
+                    return false;
+                }
+                if idx + 1 < tokens.len()
+                    && (starts_with_words(&tokens, idx, &["y", "luego"])
+                        || starts_with_words(&tokens, idx, &["and", "then"]))
+                {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+    }
+    if has_comma {
+        let clauses = split_clauses(&tokens);
+        if clauses.len() > 2 {
+            return false;
+        }
+        let sub = interpret_within_limit(trimmed);
+        return sub.records.len() == 1 && sub.negated.is_empty() && sub.uninterpreted.is_empty();
+    }
+    true
+}
+
+/// Comprueba si la ocurrencia `occ` de una cita en `input` está negada por su contexto
+/// inmediato en la misma cláusula (antes o inmediatamente después) o en la propia mención.
+pub(crate) fn occurrence_is_negated_in_input(
+    input: &str,
+    input_tokens: &[Token],
+    occ: &super::lexicon::BoundedOccurrence,
+    indicator: Indicator,
+) -> bool {
+    let clauses = split_clauses(input_tokens);
+    let Some(clause) = clauses
+        .iter()
+        .copied()
+        .find(|c| occ.first_tok >= c.start && occ.last_tok < c.end)
+    else {
+        return false;
+    };
+
+    let time_matches = find_time_hints(input, input_tokens, clause.start, clause.end);
+    let time_mask = TimeMask::from_matches(clause.start, clause.end, &time_matches);
+
+    // 1. Negación previa en la misma cláusula antes de occ.first_tok, deteniéndose ante un corte
+    //    coordinado o ante otro ancla de distinto indicador ("no me duele pulso 72", "no tengo fiebre y pulso 72").
+    let mut prefix_min = clause.start;
+    let mut a_idx = clause.start;
+    while a_idx < occ.first_tok {
+        if time_mask.is_masked(a_idx) {
+            a_idx += 1;
+            continue;
+        }
+        if let Some(a) = detect_anchor(input_tokens, a_idx, occ.first_tok)
+            && !time_mask.any_masked(a.start, a.end)
+        {
+            if a.kind.to_indicator() != indicator {
+                prefix_min = prefix_min.max(a.end);
+            }
+            a_idx = a.end.max(a_idx + 1);
+        } else {
+            a_idx += 1;
+        }
+    }
+
+    let mut k = occ.first_tok;
+    while k > prefix_min {
+        k -= 1;
+        if time_mask.is_masked(k) {
+            continue;
+        }
+        if is_negation_start_at(input_tokens, k, occ.first_tok) {
+            return true;
+        }
+        if let Some(w) = word_at(input_tokens, k)
+            && matches!(w, "y" | "e" | "and" | "or" | "o")
+        {
+            break;
+        }
+    }
+
+    // 2. Negación o resolución pospuesta inmediatamente tras occ.last_tok que modifica al propio indicador.
+    let mut j = occ.last_tok + 1;
+    while j < clause.end {
+        if time_mask.is_masked(j) {
+            j += 1;
+            continue;
+        }
+        if input_tokens
+            .get(j)
+            .is_some_and(|tk| tk.kind == TokenKind::Other && tk.norm == ":")
+        {
+            j += 1;
+            continue;
+        }
+        if word_at(input_tokens, j).is_some_and(is_post_anchor_absence_predicate) {
+            return true;
+        }
+        if is_negation_start_at(input_tokens, j, clause.end) {
+            let neg_len = if j + 1 < clause.end
+                && (starts_with_words(input_tokens, j, &["ya", "no"])
+                    || starts_with_words(input_tokens, j, &["nada", "de"]))
+            {
+                2
+            } else {
+                1
+            };
+            let after = j + neg_len;
+            if after >= clause.end
+                && matches!(
+                    word_at(input_tokens, j),
+                    Some("no" | "not" | "never" | "nunca" | "tampoco")
+                )
+            {
+                return true;
+            }
+            if word_at(input_tokens, after).is_some_and(is_measurement_action_word) {
+                return true;
+            }
+        }
+        if matches!(
+            word_at(input_tokens, j),
+            Some("es" | "esta" | "fue" | "se" | "is" | "was" | "are" | "were")
+        ) && j + 1 < clause.end
+            && (word_at(input_tokens, j + 1).is_some_and(is_post_anchor_absence_predicate)
+                || (is_negation_start_at(input_tokens, j + 1, clause.end)
+                    && word_at(input_tokens, j + 2).is_some_and(is_measurement_action_word)))
+        {
+            return true;
+        }
+        break;
+    }
+
+    // 3. Si el indicador no es Sleep ("no dormí bien"), una negación explícita dentro de la
+    //    propia cita cuando no contiene otro predicado también cuenta.
+    if indicator != Indicator::Sleep
+        && let Some(sub_slice) = input.get(occ.start_byte..occ.end_byte)
+    {
+        let sub_tokens = tokenize(sub_slice);
+        if sub_tokens
+            .iter()
+            .any(|tk| tk.kind == TokenKind::Word && is_negation_word(tk.norm.as_str()))
+        {
+            let mut matching_anchors = Vec::new();
+            let mut sa = 0;
+            while sa < sub_tokens.len() {
+                if let Some(a) = detect_anchor(&sub_tokens, sa, sub_tokens.len()) {
+                    if a.kind.to_indicator() == indicator {
+                        matching_anchors.push(a);
+                    }
+                    sa = a.end.max(sa + 1);
+                } else {
+                    sa += 1;
+                }
+            }
+            if let (Some(_first_a), Some(last_a)) =
+                (matching_anchors.first(), matching_anchors.last())
+            {
+                let tm = TimeMask::from_matches(
+                    0,
+                    sub_tokens.len(),
+                    &find_time_hints(sub_slice, &sub_tokens, 0, sub_tokens.len()),
+                );
+                if is_segment_negated(&sub_tokens, 0, sub_tokens.len(), last_a.end, &tm) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
 }
 
 pub(super) fn interpret_within_limit(text: &str) -> Proposal {
@@ -1710,6 +2581,12 @@ pub(super) fn interpret_within_limit(text: &str) -> Proposal {
     for clause in clauses {
         let next_carried = process_clause(text, &tokens, clause, carried_time.as_ref(), &mut out);
         carried_time = next_carried;
+    }
+
+    if let Some((_, _, prev_start_b, Some(corr_end_b))) = out.pending_correction_from.take()
+        && let Some(prev_uninterp) = slice_from_bytes(text, prev_start_b, corr_end_b)
+    {
+        out.uninterpreted.push(prev_uninterp);
     }
 
     if let Some(leftover_time) = carried_time {

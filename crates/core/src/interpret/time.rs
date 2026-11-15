@@ -142,26 +142,44 @@ fn consume_clock_suffix(tokens: &[Token], mut idx: usize, end: usize) -> usize {
     idx
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ClockMode {
+    /// Hora suelta sin preposición previa ("08:05", "8pm", "08:").
+    Standalone,
+    /// Tras preposición que exige marcador explícito ("around 08:05", "before 8pm", "around 08:").
+    PrepExplicit,
+    /// Tras preposición española o inglesa que admite hora sin marcador ("a las 8", "at 8").
+    PrepLoose,
+}
+
 /// Analiza una hora del reloj empezando en `idx` dentro de `[idx..end)`.
-/// Si `require_explicit_marker` es `true`, exige `:mm`, `am/pm` u `o'clock`.
-fn parse_clock_time(
-    tokens: &[Token],
-    idx: usize,
-    end: usize,
-    require_explicit_marker: bool,
-) -> Option<usize> {
+fn parse_clock_time(tokens: &[Token], idx: usize, end: usize, mode: ClockMode) -> Option<usize> {
     let (hour, mut cur) = parse_int_word_or_digits(tokens, idx)?;
     if hour > 23 || cur > end {
         return None;
     }
 
-    // Formato "HH:MM[:SS]" (incluye minutos malformados tras "a las"/"at" para bloquear fragmentos).
+    // Formato "HH:MM[:SS]" e inicios de reloj incompletos ("a las 08:", "08:", "08:99").
     if cur < end && is_colon_at(tokens, cur) {
+        let attached_colon = tokens
+            .get(cur.saturating_sub(1))
+            .zip(tokens.get(cur))
+            .is_some_and(|(prev, colon)| prev.end == colon.start);
+        let attached_after_colon = tokens
+            .get(cur)
+            .zip(tokens.get(cur + 1))
+            .is_some_and(|(colon, next)| colon.end == next.start);
+        let two_digit_hour = tokens.get(idx).is_some_and(|tk| {
+            tk.kind == TokenKind::Number && !tk.norm.contains('.') && tk.norm.len() == 2
+        });
+
         if cur + 1 < end
             && tokens
                 .get(cur + 1)
                 .is_some_and(|tk| matches!(tk.kind, TokenKind::Number | TokenKind::InvalidNumber))
-            && (!require_explicit_marker || is_two_digit_minute(tokens, cur + 1))
+            && (mode != ClockMode::Standalone
+                || is_two_digit_minute(tokens, cur + 1)
+                || (attached_colon && attached_after_colon && two_digit_hour))
         {
             cur += 2;
             if cur + 1 < end
@@ -174,6 +192,10 @@ fn parse_clock_time(
             }
             return Some(consume_clock_suffix(tokens, cur, end));
         }
+
+        if mode != ClockMode::Standalone || (attached_colon && two_digit_hour) {
+            return Some(consume_clock_suffix(tokens, cur + 1, end));
+        }
         return None;
     }
 
@@ -185,7 +207,7 @@ fn parse_clock_time(
         return Some(consume_clock_suffix(tokens, cur, end));
     }
 
-    if require_explicit_marker {
+    if mode != ClockMode::PrepLoose {
         return None;
     }
 
@@ -323,13 +345,15 @@ pub(super) fn find_time_hints(
                         _ => false,
                     };
                     if is_es_clock_prefix
-                        && let Some(c_end) = parse_clock_time(tokens, i + prefix_len, end, false)
+                        && let Some(c_end) =
+                            parse_clock_time(tokens, i + prefix_len, end, ClockMode::PrepLoose)
                     {
                         // Si es "entre las <t1> y las <t2>", consume hasta <t2> también.
                         if starts_with_words(tokens, i, &["entre", "las"])
                             && c_end + 2 < end
                             && starts_with_words(tokens, c_end, &["y", "las"])
-                            && let Some(c_end2) = parse_clock_time(tokens, c_end + 2, end, false)
+                            && let Some(c_end2) =
+                                parse_clock_time(tokens, c_end + 2, end, ClockMode::PrepLoose)
                         {
                             break 'm Some(c_end2 - i);
                         }
@@ -342,10 +366,14 @@ pub(super) fn find_time_hints(
             if i + 1 < end
                 && let Some(prep) = word_at(tokens, i)
             {
-                let require_explicit = matches!(
+                let mode = if matches!(
                     prep,
                     "around" | "about" | "from" | "by" | "before" | "after"
-                );
+                ) {
+                    ClockMode::PrepExplicit
+                } else {
+                    ClockMode::PrepLoose
+                };
                 if matches!(
                     prep,
                     "at" | "since"
@@ -357,7 +385,7 @@ pub(super) fn find_time_hints(
                         | "by"
                         | "before"
                         | "after"
-                ) && let Some(c_end) = parse_clock_time(tokens, i + 1, end, require_explicit)
+                ) && let Some(c_end) = parse_clock_time(tokens, i + 1, end, mode)
                 {
                     break 'm Some(c_end - i);
                 }
@@ -438,8 +466,8 @@ pub(super) fn find_time_hints(
                 }
             }
 
-            // Hora explícita independiente: "08:05", "8:30 pm", "8pm"
-            if let Some(c_end) = parse_clock_time(tokens, i, end, true) {
+            // Hora explícita independiente: "08:05", "8:30 pm", "8pm", "08:"
+            if let Some(c_end) = parse_clock_time(tokens, i, end, ClockMode::Standalone) {
                 break 'm Some(c_end - i);
             }
 

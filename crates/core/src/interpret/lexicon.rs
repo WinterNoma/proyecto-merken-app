@@ -19,7 +19,7 @@ pub(super) enum TokenKind {
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct Token {
+pub(crate) struct Token {
     pub(super) norm: String,
     pub(super) kind: TokenKind,
     pub(super) start: usize,
@@ -90,7 +90,7 @@ fn is_sign_char(ch: char) -> bool {
     matches!(ch, '-' | '–' | '—' | '−' | '+')
 }
 
-pub(super) fn tokenize(text: &str) -> Vec<Token> {
+pub(crate) fn tokenize(text: &str) -> Vec<Token> {
     let mut tokens: Vec<Token> = Vec::new();
     let chars: Vec<(usize, char)> = text.char_indices().collect();
     let len = chars.len();
@@ -607,6 +607,13 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
         return Some((UnitKind::OxygenPercent, idx + 1));
     }
 
+    if tk.norm == "℃" {
+        return Some((UnitKind::TemperatureCelsius, idx + 1));
+    }
+    if matches!(tk.norm.as_str(), "℉" | "K" | "‰") {
+        return Some((UnitKind::Incompatible, idx + 1));
+    }
+
     // Grados con símbolo ° / º
     if matches!(tk.norm.as_str(), "°" | "º") {
         if idx + 1 < end
@@ -616,13 +623,17 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
                 "c" | "celsius" | "centigrados" | "centigrado" => {
                     Some((UnitKind::TemperatureCelsius, idx + 2))
                 }
-                "f" | "fahrenheit" | "k" | "kelvin" | "r" | "rankine" => {
-                    Some((UnitKind::Incompatible, idx + 2))
-                }
+                "f" | "fahrenheit" | "farenheit" | "k" | "kelvin" | "kelvins" | "r" | "rankine"
+                | "reaumur" => Some((UnitKind::Incompatible, idx + 2)),
                 _ => Some((UnitKind::Incompatible, idx + 1)),
             };
         }
         return Some((UnitKind::Incompatible, idx + 1));
+    }
+
+    // Barra seguida de letras tras número ("/min", "/h", "/kg"): unidad o tasa no admitida.
+    if tk.kind == TokenKind::Slash && idx + 1 < end && word_at(tokens, idx + 1).is_some() {
+        return Some((UnitKind::Incompatible, idx + 2));
     }
 
     let w = word_at(tokens, idx)?;
@@ -677,16 +688,52 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
                 "c" | "celsius" | "centigrados" | "centigrado" => {
                     Some((UnitKind::TemperatureCelsius, idx + 2))
                 }
-                "f" | "fahrenheit" | "k" | "kelvin" => Some((UnitKind::Incompatible, idx + 2)),
+                "f" | "fahrenheit" | "farenheit" | "k" | "kelvin" | "kelvins" | "r" | "rankine"
+                | "reaumur" => Some((UnitKind::Incompatible, idx + 2)),
                 _ => Some((UnitKind::TemperatureCelsius, idx + 1)),
             };
         }
         return Some((UnitKind::TemperatureCelsius, idx + 1));
     }
+    if matches!(w, "deg" | "degs") {
+        if idx + 1 < end
+            && word_at(tokens, idx + 1).is_some_and(|next| {
+                matches!(
+                    next,
+                    "f" | "fahrenheit"
+                        | "farenheit"
+                        | "k"
+                        | "kelvin"
+                        | "kelvins"
+                        | "r"
+                        | "rankine"
+                        | "reaumur"
+                        | "c"
+                        | "celsius"
+                        | "centigrados"
+                        | "centigrado"
+                )
+            })
+        {
+            return Some((UnitKind::Incompatible, idx + 2));
+        }
+        return Some((UnitKind::Incompatible, idx + 1));
+    }
     if matches!(w, "celsius" | "centigrados" | "centigrado" | "c") {
         return Some((UnitKind::TemperatureCelsius, idx + 1));
     }
-    if matches!(w, "f" | "fahrenheit" | "k" | "kelvin") {
+    if matches!(
+        w,
+        "f" | "fahrenheit"
+            | "farenheit"
+            | "k"
+            | "kelvin"
+            | "kelvins"
+            | "degf"
+            | "degc"
+            | "degk"
+            | "degr"
+    ) {
         return Some((UnitKind::Incompatible, idx + 1));
     }
 
@@ -723,13 +770,38 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
             | "milimol"
             | "milimoles"
             | "umol"
+            | "nmol"
+            | "pmol"
             | "mol"
             | "moles"
             | "meq"
+            | "osm"
+            | "mosm"
+            | "osmol"
+            | "mosmol"
             | "mg"
+            | "ug"
+            | "mcg"
+            | "ng"
+            | "pg"
             | "kg"
             | "g"
+            | "gr"
+            | "gramo"
+            | "gramos"
+            | "gram"
+            | "grams"
+            | "kilogramo"
+            | "kilogramos"
+            | "kilogram"
+            | "kilograms"
+            | "kilo"
+            | "kilos"
             | "ml"
+            | "dl"
+            | "cl"
+            | "fl"
+            | "cc"
             | "l"
             | "lt"
             | "litros"
@@ -738,15 +810,86 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
             | "liter"
             | "cm"
             | "mm"
+            | "um"
+            | "nm"
             | "m"
+            | "metro"
+            | "metros"
+            | "meter"
+            | "meters"
+            | "milla"
+            | "millas"
+            | "mile"
+            | "miles"
+            | "mi"
+            | "pie"
+            | "pies"
+            | "foot"
+            | "feet"
+            | "ft"
+            | "pulgada"
+            | "pulgadas"
+            | "inch"
+            | "inches"
+            | "yarda"
+            | "yardas"
+            | "yard"
+            | "yards"
+            | "yd"
             | "lb"
             | "lbs"
+            | "libra"
+            | "libras"
+            | "pound"
+            | "pounds"
             | "oz"
+            | "onza"
+            | "onzas"
+            | "ounce"
+            | "ounces"
             | "cal"
             | "kpa"
+            | "pa"
+            | "hpa"
             | "torr"
+            | "atm"
+            | "bar"
+            | "mbar"
+            | "psi"
             | "hz"
+            | "khz"
+            | "mhz"
+            | "ghz"
             | "hertz"
+            | "watt"
+            | "watts"
+            | "kw"
+            | "mw"
+            | "joule"
+            | "joules"
+            | "kj"
+            | "rpm"
+            | "mph"
+            | "kmh"
+            | "fps"
+            | "db"
+            | "gy"
+            | "mgy"
+            | "sv"
+            | "msv"
+            | "rem"
+            | "rad"
+            | "bq"
+            | "ci"
+            | "mci"
+            | "ppm"
+            | "ppb"
+            | "ui"
+            | "iu"
+            | "unidad"
+            | "unidades"
+            | "unit"
+            | "units"
             | "rankine"
             | "reaumur"
             | "ms"
@@ -781,6 +924,34 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
             | "ejercicios"
             | "exercise"
             | "exercises"
+            | "flexion"
+            | "flexiones"
+            | "pushup"
+            | "pushups"
+            | "sentadilla"
+            | "sentadillas"
+            | "squat"
+            | "squats"
+            | "abdominal"
+            | "abdominales"
+            | "situp"
+            | "situps"
+            | "rep"
+            | "reps"
+            | "repeticion"
+            | "repeticiones"
+            | "serie"
+            | "series"
+            | "set"
+            | "sets"
+            | "ronda"
+            | "rondas"
+            | "round"
+            | "rounds"
+            | "vuelta"
+            | "vueltas"
+            | "lap"
+            | "laps"
             | "paso"
             | "pasos"
             | "step"
@@ -799,6 +970,12 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
             | "tablets"
             | "capsula"
             | "capsulas"
+            | "capsule"
+            | "capsules"
+            | "gota"
+            | "gotas"
+            | "drop"
+            | "drops"
             | "dosis"
             | "dose"
             | "capitulo"
@@ -812,11 +989,115 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
     }
 
     // Cualquier otra abreviatura suelta de 1 letra ASCII que no sea conjunción/preposición ES/EN.
-    if w.len() == 1 && !matches!(w, "y" | "e" | "o" | "a" | "u" | "i") {
-        return Some((UnitKind::Incompatible, idx + 1));
+    // "u" solo actúa como conjunción disyuntiva ante "o..." / "ho..." / número.
+    if w.len() == 1 && !matches!(w, "y" | "e" | "o" | "a" | "i") {
+        let spanish_u_conj = w == "u"
+            && idx + 1 < end
+            && (tokens
+                .get(idx + 1)
+                .is_some_and(|n| n.kind == TokenKind::Number)
+                || word_at(tokens, idx + 1)
+                    .is_some_and(|nw| nw.starts_with('o') || nw.starts_with("ho")));
+        if !spanish_u_conj {
+            return Some((UnitKind::Incompatible, idx + 1));
+        }
     }
 
     None
+}
+
+fn is_closing_punct(tk: &Token) -> bool {
+    matches!(
+        tk.norm.as_str(),
+        ")" | "]" | "}" | "\"" | "'" | "”" | "’" | "»"
+    )
+}
+
+fn is_allowed_spaced_other_after_number(tk: &Token) -> bool {
+    matches!(
+        tk.norm.as_str(),
+        "(" | ")" | "[" | "]" | "{" | "}" | "\"" | "'" | "“" | "”" | "‘" | "’" | "«" | "»"
+    )
+}
+
+fn has_unit_mixed_case(raw: &str) -> bool {
+    let mut saw_lower = false;
+    for ch in raw.chars() {
+        if ch.is_ascii_lowercase() {
+            saw_lower = true;
+        } else if ch.is_ascii_uppercase() && saw_lower {
+            return true;
+        }
+    }
+    false
+}
+
+pub(super) fn has_post_unit_unknown_tail(tokens: &[Token], check_idx: usize, end: usize) -> bool {
+    if check_idx >= end {
+        return false;
+    }
+    let attached = check_idx
+        .checked_sub(1)
+        .and_then(|p| tokens.get(p))
+        .zip(tokens.get(check_idx))
+        .is_some_and(|(prev, next)| prev.end == next.start);
+    if attached
+        && tokens
+            .get(check_idx)
+            .is_some_and(|t| t.kind != TokenKind::ClauseSep && !is_closing_punct(t))
+    {
+        return true;
+    }
+    if tokens
+        .get(check_idx)
+        .is_some_and(|t| t.kind == TokenKind::Slash)
+        && word_at(tokens, check_idx + 1).is_some()
+    {
+        return true;
+    }
+    false
+}
+pub(super) fn is_unknown_unit_after_number(
+    orig: &str,
+    tokens: &[Token],
+    idx: usize,
+    end: usize,
+) -> bool {
+    let Some(tk) = tokens.get(idx) else {
+        return false;
+    };
+    if idx >= end {
+        return false;
+    }
+
+    let attached = idx
+        .checked_sub(1)
+        .and_then(|p| tokens.get(p))
+        .is_some_and(|prev| prev.end == tk.start);
+
+    if attached {
+        let is_range_hyphen = tk.kind == TokenKind::Hyphen
+            && tokens
+                .get(idx + 1)
+                .is_some_and(|n| matches!(n.kind, TokenKind::Number | TokenKind::InvalidNumber));
+        if tk.kind != TokenKind::ClauseSep && !is_closing_punct(tk) && !is_range_hyphen {
+            return true;
+        }
+    }
+
+    if tk.kind == TokenKind::Other && !is_allowed_spaced_other_after_number(tk) {
+        return true;
+    }
+
+    if tk.kind == TokenKind::Word
+        && !matches!(tk.norm.as_str(), "spo2")
+        && let Some(raw) = orig.get(tk.start..tk.end)
+        && has_unit_mixed_case(raw)
+    {
+        return true;
+    }
+
+    false
 }
 
 pub(super) fn sleep_quality_word(w: &str) -> Option<SleepQuality> {
@@ -834,65 +1115,195 @@ pub(super) fn sleep_quality_word(w: &str) -> Option<SleepQuality> {
     }
 }
 
+fn is_pre_sleep_aux_or_pronoun(w: &str) -> bool {
+    matches!(
+        w,
+        "he" | "ha"
+            | "han"
+            | "habia"
+            | "pude"
+            | "pudo"
+            | "podido"
+            | "podia"
+            | "puedo"
+            | "poder"
+            | "me"
+            | "se"
+            | "te"
+            | "i"
+            | "we"
+            | "you"
+            | "did"
+            | "do"
+            | "does"
+            | "have"
+            | "has"
+            | "had"
+            | "could"
+            | "can"
+            | "will"
+            | "would"
+            | "was"
+            | "were"
+            | "am"
+            | "is"
+            | "are"
+            | "been"
+            | "able"
+            | "to"
+            | "really"
+            | "very"
+            | "muy"
+            | "nada"
+            | "at"
+            | "all"
+            | "a"
+            | "para"
+    )
+}
+
 pub(super) fn is_negated_good_sleep(tokens: &[Token], start: usize, end: usize) -> bool {
-    let words: Vec<&str> = (start..end).filter_map(|i| word_at(tokens, i)).collect();
-    let has_sleep = words.iter().any(|w| is_sleep_word(w));
-    if !has_sleep {
-        return false;
+    for s in start..end {
+        if !word_at(tokens, s).is_some_and(is_sleep_word) {
+            continue;
+        }
+        let mut found_neg = false;
+        let mut has_can = false;
+        let mut k = s;
+        while k > start {
+            let prev = k - 1;
+            let Some(w) = word_at(tokens, prev) else {
+                break;
+            };
+            if matches!(
+                w,
+                "no" | "not"
+                    | "didnt"
+                    | "dont"
+                    | "doesnt"
+                    | "havent"
+                    | "hasnt"
+                    | "hadnt"
+                    | "couldnt"
+                    | "cant"
+                    | "cannot"
+                    | "wont"
+                    | "wouldnt"
+                    | "never"
+                    | "nunca"
+                    | "tampoco"
+            ) {
+                found_neg = true;
+                if matches!(w, "couldnt" | "cant" | "cannot") {
+                    has_can = true;
+                }
+                break;
+            }
+            if is_pre_sleep_aux_or_pronoun(w) {
+                if matches!(
+                    w,
+                    "pude"
+                        | "pudo"
+                        | "podido"
+                        | "podia"
+                        | "puedo"
+                        | "poder"
+                        | "could"
+                        | "can"
+                        | "able"
+                ) {
+                    has_can = true;
+                }
+                k = prev;
+            } else {
+                break;
+            }
+        }
+        if !found_neg {
+            continue;
+        }
+
+        let mut has_good_or_nada = false;
+        let mut m = s + 1;
+        while m < end {
+            let Some(w) = word_at(tokens, m) else {
+                break;
+            };
+            if matches!(w, "bien" | "well" | "good" | "nada") {
+                has_good_or_nada = true;
+                break;
+            }
+            if m + 1 < end && starts_with_words(tokens, m, &["at", "all"]) {
+                has_good_or_nada = true;
+                break;
+            }
+            if matches!(w, "muy" | "very" | "really" | "tan" | "so" | "del" | "todo") {
+                m += 1;
+            } else {
+                break;
+            }
+        }
+
+        if has_can || has_good_or_nada {
+            return true;
+        }
     }
-    let has_neg = words.iter().any(|w| {
-        matches!(
-            *w,
-            "no" | "not" | "didnt" | "dont" | "havent" | "couldnt" | "never" | "nada"
-        )
-    });
-    let has_good_or_can = words.iter().any(|w| {
-        matches!(
-            *w,
-            "bien" | "well" | "good" | "pude" | "podido" | "could" | "nada"
-        )
-    });
-    has_neg && has_good_or_can
+    false
+}
+
+pub(super) fn is_negation_word(w: &str) -> bool {
+    matches!(
+        w,
+        "no" | "ni"
+            | "sin"
+            | "tampoco"
+            | "ningun"
+            | "ninguna"
+            | "nunca"
+            | "jamas"
+            | "dont"
+            | "doesnt"
+            | "didnt"
+            | "isnt"
+            | "arent"
+            | "havent"
+            | "hasnt"
+            | "hadnt"
+            | "wasnt"
+            | "werent"
+            | "couldnt"
+            | "cant"
+            | "cannot"
+            | "wont"
+            | "wouldnt"
+            | "shouldnt"
+            | "mustnt"
+            | "aint"
+            | "not"
+            | "without"
+            | "never"
+            | "nor"
+            | "neither"
+            | "gone"
+            | "anymore"
+            | "desaparecio"
+    )
 }
 
 pub(super) fn is_negation_cue_in_words(words: &[&str]) -> bool {
-    words.iter().any(|w| {
-        matches!(
-            *w,
-            "no" | "ni"
-                | "sin"
-                | "tampoco"
-                | "ningun"
-                | "ninguna"
-                | "dont"
-                | "doesnt"
-                | "didnt"
-                | "isnt"
-                | "arent"
-                | "havent"
-                | "wasnt"
-                | "couldnt"
-                | "not"
-                | "without"
-                | "never"
-                | "nor"
-                | "neither"
-                | "gone"
-                | "anymore"
-                | "desaparecio"
-        )
-    }) || words.windows(2).any(|w| {
-        matches!(
-            w,
-            ["ya", "no"]
-                | ["nada", "de"]
-                | ["no", "longer"]
-                | ["no", "more"]
-                | ["me", "quito"]
-                | ["ha", "quitado"]
-                | ["pain", "free"]
-        )
-    })
+    words.iter().any(|w| is_negation_word(w))
+        || words.windows(2).any(|w| {
+            matches!(
+                w,
+                ["ya", "no"]
+                    | ["nada", "de"]
+                    | ["no", "longer"]
+                    | ["no", "more"]
+                    | ["me", "quito"]
+                    | ["ha", "quitado"]
+                    | ["pain", "free"]
+            )
+        })
 }
 
 fn parse_quote_number_with_unit(quote: &str) -> Option<(f64, Option<UnitKind>)> {
@@ -1143,6 +1554,7 @@ pub fn mentions_indicator(indicator: Indicator, quote: &str) -> bool {
                                 | "centigrado"
                         )
                     })
+                    || tokens.get(i).is_some_and(|tk| tk.norm == "℃")
                     || (tokens
                         .get(i)
                         .is_some_and(|tk| matches!(tk.norm.as_str(), "°" | "º"))
@@ -1150,7 +1562,16 @@ pub fn mentions_indicator(indicator: Indicator, quote: &str) -> bool {
                     || (matches!(word_at(&tokens, i), Some("grados" | "degrees"))
                         && !matches!(
                             word_at(&tokens, i + 1),
-                            Some("f" | "fahrenheit" | "k" | "kelvin" | "r" | "rankine")
+                            Some(
+                                "f" | "fahrenheit"
+                                    | "farenheit"
+                                    | "k"
+                                    | "kelvin"
+                                    | "kelvins"
+                                    | "r"
+                                    | "rankine"
+                                    | "reaumur"
+                            )
                         ))
             }
             Indicator::Glucose => {
@@ -1246,4 +1667,196 @@ pub fn mentions_indicator(indicator: Indicator, quote: &str) -> bool {
     }
 
     false
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BoundedOccurrence {
+    pub(crate) start_byte: usize,
+    pub(crate) end_byte: usize,
+    pub(crate) first_tok: usize,
+    pub(crate) last_tok: usize,
+}
+
+fn valid_numeric_occurrence_edges(
+    tokens: &[Token],
+    f_idx: usize,
+    l_idx: usize,
+    allow_bp_slash: bool,
+) -> bool {
+    let starts_with_num = tokens
+        .get(f_idx)
+        .is_some_and(|t| t.kind == TokenKind::Number);
+    let ends_with_num = tokens
+        .get(l_idx)
+        .is_some_and(|t| t.kind == TokenKind::Number);
+
+    if starts_with_num
+        && f_idx > 0
+        && let Some(prev) = tokens.get(f_idx - 1)
+    {
+        if prev.kind == TokenKind::Hyphen || prev.norm == "+" {
+            return false;
+        }
+        if prev.kind == TokenKind::Slash {
+            if !allow_bp_slash {
+                return false;
+            }
+            let two_part_bp = f_idx >= 2
+                && tokens
+                    .get(f_idx - 2)
+                    .is_some_and(|n| n.kind == TokenKind::Number)
+                && !tokens
+                    .get(l_idx + 1)
+                    .is_some_and(|n| n.kind == TokenKind::Slash);
+            if !two_part_bp {
+                return false;
+            }
+        }
+        if prev.kind == TokenKind::Other
+            && prev.norm == ":"
+            && f_idx >= 2
+            && tokens
+                .get(f_idx - 2)
+                .is_some_and(|n| n.kind == TokenKind::Number)
+        {
+            return false;
+        }
+    }
+
+    if ends_with_num && let Some(next) = tokens.get(l_idx + 1) {
+        if next.kind == TokenKind::Hyphen
+            && tokens
+                .get(l_idx + 2)
+                .is_some_and(|n| matches!(n.kind, TokenKind::Number | TokenKind::InvalidNumber))
+        {
+            return false;
+        }
+        if next.kind == TokenKind::Slash
+            && tokens
+                .get(l_idx + 2)
+                .is_some_and(|n| matches!(n.kind, TokenKind::Number | TokenKind::InvalidNumber))
+        {
+            if !allow_bp_slash {
+                return false;
+            }
+            let two_part_bp = !tokens
+                .get(l_idx + 3)
+                .is_some_and(|n| n.kind == TokenKind::Slash);
+            if !two_part_bp {
+                return false;
+            }
+        }
+        if next.kind == TokenKind::Other && next.norm == ":" {
+            let attached = tokens.get(l_idx).is_some_and(|t| t.end == next.start);
+            let followed_by_num = tokens
+                .get(l_idx + 2)
+                .is_some_and(|n| matches!(n.kind, TokenKind::Number | TokenKind::InvalidNumber));
+            if attached || followed_by_num {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+pub(crate) fn find_token_bounded_occurrences_with_tokens(
+    haystack: &str,
+    tokens: &[Token],
+    needle: &str,
+    allow_bp_slash: bool,
+) -> Vec<BoundedOccurrence> {
+    if needle.trim().is_empty() {
+        return Vec::new();
+    }
+    let lead_ws = needle.len() - needle.trim_start().len();
+    let trail_ws = needle.len() - needle.trim_end().len();
+    let mut out = Vec::new();
+
+    for (start, _) in haystack.match_indices(needle) {
+        let end = start + needle.len();
+        let t_start = start + lead_ws;
+        let t_end = end.saturating_sub(trail_ws);
+        if t_start >= t_end {
+            continue;
+        }
+        let Some(first_tok) = tokens.iter().position(|t| t.start == t_start) else {
+            continue;
+        };
+        let Some(last_tok) = tokens.iter().position(|t| t.end == t_end) else {
+            continue;
+        };
+        if first_tok > last_tok {
+            continue;
+        }
+        if !valid_numeric_occurrence_edges(tokens, first_tok, last_tok, allow_bp_slash) {
+            continue;
+        }
+        out.push(BoundedOccurrence {
+            start_byte: start,
+            end_byte: end,
+            first_tok,
+            last_tok,
+        });
+    }
+    out
+}
+
+pub(crate) fn has_token_bounded_occurrence(
+    haystack: &str,
+    needle: &str,
+    allow_bp_slash: bool,
+) -> bool {
+    let tokens = tokenize(haystack);
+    !find_token_bounded_occurrences_with_tokens(haystack, &tokens, needle, allow_bp_slash)
+        .is_empty()
+}
+
+pub(crate) fn check_numeric_unit_around_occurrence(
+    input: &str,
+    input_tokens: &[Token],
+    indicator: Indicator,
+    fq: &str,
+    fq_last_tok: usize,
+) -> bool {
+    let Some((_, fq_unit)) = parse_quote_number_with_unit(fq) else {
+        return false;
+    };
+    if let Some(u) = fq_unit
+        && !u.matches_indicator(indicator)
+    {
+        return false;
+    }
+
+    let mut check_idx = fq_last_tok + 1;
+    let len = input_tokens.len();
+    if check_idx >= len {
+        return true;
+    }
+
+    // Para presión arterial sistólica ("120" en "120/80"), la unidad sigue tras el segundo número.
+    if indicator == Indicator::BloodPressure
+        && fq_unit.is_none()
+        && input_tokens
+            .get(check_idx)
+            .is_some_and(|t| t.kind == TokenKind::Slash)
+        && input_tokens
+            .get(check_idx + 1)
+            .is_some_and(|t| t.kind == TokenKind::Number)
+    {
+        check_idx += 2;
+        if check_idx >= len {
+            return true;
+        }
+    }
+
+    if fq_unit.is_some() {
+        return !has_post_unit_unknown_tail(input_tokens, check_idx, len);
+    }
+
+    if let Some((unit, _)) = match_unit_at(input_tokens, check_idx, len) {
+        return unit.matches_indicator(indicator);
+    }
+
+    !is_unknown_unit_after_number(input, input_tokens, check_idx, len)
 }
