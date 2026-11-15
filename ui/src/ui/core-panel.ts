@@ -1,4 +1,4 @@
-import { core, isCoreError, type Evaluation, type ExplainResponse, type Indicator, type NoteStatus, type ProfileResponse, type RecordItem, type StatusResponse, type RaiseEventResult, type EventItem, type LogResult } from "../core-api";
+import { core, isCoreError, type DemoScenario, type Evaluation, type ExplainResponse, type Indicator, type NoteStatus, type ProfileResponse, type RecordItem, type StatusResponse, type RaiseEventResult, type EventItem, type LogResult } from "../core-api";
 import { element, el, setText, timestamp, utc } from "./dom";
 import { evaluationCopy, statusCopy, escalationCopy, paintBadge, badge } from "./status-copy";
 import { indicatorName, recordValue } from "./core-format";
@@ -156,6 +156,7 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
   const availability = element("#core-availability");
   const retry = element<HTMLButtonElement>("#core-retry");
   const demoButton = element<HTMLButtonElement>("#load-demo");
+  const demoScenario = element<HTMLSelectElement>("#demo-scenario");
   const indicatorViews = new Map<string, EvaluationView>();
   const symptomViews = new Map<string, EvaluationView>();
   const alertViews = new Map<string, HTMLElement>();
@@ -264,7 +265,8 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
         && eventResult.status === "fulfilled" && eventResult.value.events.length === 0
         && !status.value.is_demo && !status.value.alerts.length && !status.value.symptoms.length
         && status.value.indicators.every(evaluation => evaluation.latest_value === null);
-      element("#demo-empty").hidden = !empty || demoBlocked;
+      // Also shown over DEMO data so another scenario can replace it.
+      showDemoChooser(!(empty || status.value.is_demo) || demoBlocked, status.value.is_demo);
       const history = await Promise.allSettled(chartIndicators.map(indicator => core.listRecords({ indicator, limit: 40 })));
       if (stopped || startedAtRevision !== revision) return status.value;
       chartIndicators.forEach((indicator, index) => {
@@ -300,21 +302,31 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
     pending = request;
     try { return await request; } finally { if (pending === request) pending = null; }
   }
+  function demoButtonText(): string { return current?.is_demo ? "Load scenario" : "Load demo data"; }
+  function showDemoChooser(hidden: boolean, demo: boolean): void {
+    element("#demo-empty").hidden = hidden;
+    setText(element("#demo-empty-title"), demo ? "DEMO scenario" : "No on-device records");
+    setText(element("#demo-empty-copy"), demo
+      ? "Load another simulated scenario. It replaces the current DEMO data."
+      : "Explore the app with clearly marked simulated records.");
+    if (!actionBusy) setText(demoButton, demoButtonText());
+  }
   retry.addEventListener("click", () => { void refresh(true); });
   demoButton.disabled = !available;
   demoButton.addEventListener("click", async () => {
     if (!available || stopped || actionBusy) return;
-    actionBusy = true; demoButton.disabled = true;
+    actionBusy = true; demoButton.disabled = true; demoScenario.disabled = true;
     demoButton.setAttribute("aria-busy", "true"); setText(demoButton, "Loading demo data…");
     setText(element("#core-action-result"), "");
     try {
       // Wait out any older poll before mutating the store.
       if (pending) await pending;
-      const status = await core.loadDemo("routine");
+      const scenario = demoScenario.value as DemoScenario;
+      const status = await core.loadDemo(scenario);
       revision += 1;
       render(status);
-      element("#demo-empty").hidden = true;
-      setText(element("#core-action-result"), "Demo data loaded. Simulated records are not uploaded to ground.");
+      const name = demoScenario.selectedOptions[0]?.textContent?.split(" · ")[0] ?? "Demo";
+      setText(element("#core-action-result"), name + " demo data loaded. Simulated records are not uploaded to ground.");
     } catch (error) {
       if (isCoreError(error) && error.code === "real_data_present") {
         demoBlocked = true;
@@ -323,8 +335,8 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
       } else setText(element("#core-action-result"), "Demo data could not be loaded. Try again.");
     } finally {
       await refresh(true);
-      actionBusy = false; demoButton.disabled = false;
-      demoButton.setAttribute("aria-busy", "false"); setText(demoButton, "Load demo data");
+      actionBusy = false; demoButton.disabled = false; demoScenario.disabled = false;
+      demoButton.setAttribute("aria-busy", "false"); setText(demoButton, demoButtonText());
     }
   });
   if (available) { void refresh(); }

@@ -261,3 +261,7 @@ input { display: block; width: 100%; min-width: 0; min-height: 44px; padding: 10
   .body-zone[aria-pressed="true"], .body-zone:focus-visible { stroke: Highlight; }
   .page-dot[aria-current="page"], .crew-dot[aria-pressed="true"] { outline: 2px solid Highlight; }
 }
+
+/* Demo scenario chooser: one control per line at phone width. */
+#demo-empty label, #demo-empty select { display: block; width: 100%; }
+#demo-empty select { min-height: 44px; margin: 4px 0 12px; }

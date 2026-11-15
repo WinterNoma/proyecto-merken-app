@@ -61,7 +61,7 @@
               <dl class="record-list"><div><dt>Escalation</dt><dd id="core-escalation">--</dd></div><div><dt>Indicators to review</dt><dd id="core-worst">--</dd></div><div><dt>Mission elapsed time</dt><dd id="core-met" class="data">--</dd></div><div><dt>Synchronization</dt><dd id="core-sync">--</dd></div></dl>
               <p id="core-evaluated" class="caption"></p>
             </div>
-            <div id="demo-empty" class="notice" data-tone="neutral" hidden><h3>No on-device records</h3><p>Explore the app with clearly marked simulated records.</p><button id="load-demo" class="button secondary" type="button">Load demo data</button></div>
+            <div id="demo-empty" class="notice" data-tone="neutral" hidden><h3 id="demo-empty-title">No on-device records</h3><p id="demo-empty-copy">Explore the app with clearly marked simulated records.</p><label class="caption" for="demo-scenario">Demo scenario</label><select id="demo-scenario"><option value="routine">Routine · 7 days of stable readings</option><option value="persistent_change">Persistent change · higher heart rate and short sleep for 3 days</option><option value="alarm_event">Alarm event · foot symptom and a help request</option></select><button id="load-demo" class="button secondary" type="button">Load demo data</button></div>
             <p id="core-action-result" class="action-result" role="status"></p>
             <div class="subsection-heading"><h3>Indicator evaluations</h3><p class="caption">Evaluated by the local core.</p></div>
             <div id="core-indicators" class="evaluation-list"></div>
