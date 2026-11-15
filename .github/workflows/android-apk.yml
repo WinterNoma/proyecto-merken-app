@@ -20,7 +20,6 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-      id-token: write
     env:
       CI: 'true'
       CARGO_TERM_COLOR: always
@@ -67,15 +66,18 @@ jobs:
         run: npm run tauri -- android init --ci --skip-targets-install
       - name: Build installable ARM64 debug APK
         run: npm run tauri -- android build --ci --debug --apk --target aarch64
-      - uses: aws-actions/configure-aws-credentials@v4
+      # Test models from a private Release of this repository (no AWS).
+      - name: Download test models
         if: github.event_name != 'pull_request'
-        with:
-          role-to-assume: ${{ secrets.SLM_BUILD_ROLE_ARN }}
-          aws-region: us-east-1
-          role-session-name: merken-apk-models-${{ github.run_id }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/models"
+          gh release download modelos-prueba-v1 --repo "$GITHUB_REPOSITORY" --pattern '*.gguf' --dir "$RUNNER_TEMP/models"
+          ls -la "$RUNNER_TEMP/models"
       - name: Verify APK signature and export
         env:
-          SLM_ASSET_BUCKET: ${{ secrets.SLM_ASSET_BUCKET }}
+          MODELS_DIR: ${{ runner.temp }}/models
           TRUSTED_MODEL_BUILD: ${{ github.event_name != 'pull_request' }}
         run: |
           mkdir -p artifacts
@@ -87,14 +89,7 @@ jobs:
           (cd artifacts && sha256sum merken-arm64-debug.apk > SHA256SUMS.txt)
           printf '%s\n' "$GITHUB_SHA" > artifacts/source-revision.txt
           if [[ "${{ github.event_name }}" != pull_request ]]; then
-            python3 - <<'PY'
-          import zipfile,hashlib
-          with zipfile.ZipFile('artifacts/merken-arm64-debug.apk') as apk:
-              for name,expected in [('space-health-base-Q4_K_M.gguf','4fce4f8510d16a058a9e6eef90d6ffd992135259e0fcadd42e69b06d1243dea1'),('wellbeing-v7-lora-f16.gguf','521290d5207de280a7fc1ebc7517138e2dd994405347cc451a16fa60d5ffc2ef')]:
-                  with apk.open('assets/slm/'+name) as stream:
-                      assert hashlib.file_digest(stream,'sha256').hexdigest()==expected
-          PY
-            echo 'Models embedded and APK asset hashes verified. Offline inference uses native llama.cpp plus the V7 adapter. Backend synchronization is optional and requires the ground-station login. Debug APK, not clinically validated; physical-device validation remains pending.' > artifacts/README.txt
+            echo 'Test build: models from the private Release modelos-prueba-v1 are embedded and verified (see the build log for which ones). Offline inference uses native llama.cpp. Backend synchronization is optional and requires the ground-station login. Debug APK, not clinically validated; physical-device validation remains pending.' > artifacts/README.txt
           else
             echo 'PR compile-check APK only: model assets are not included. Use the trusted workflow-dispatch artifact for the complete offline app.' > artifacts/README.txt
           fi

@@ -346,8 +346,24 @@ pub(crate) fn directory(
                 .map_err(|_| "Set MERKEN_SLM_MODEL_DIR to the verified offline bundle")?,
         )
     };
-    merken_slm::runtime::verify(&path)?;
+    // La verificación de V7 va aparte (`verified_v7_directory`): una APK de prueba
+    // puede traer solo la base y el v5, y el servicio SLM no debe depender de V7.
     *cached = Some(path.clone());
+    Ok(path)
+}
+
+static V7_VERIFIED: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Carpeta preparada y con base + adaptador V7 verificados (una vez por ejecución).
+fn verified_v7_directory(
+    app: &tauri::AppHandle,
+    cache: &Mutex<Option<PathBuf>>,
+) -> Result<PathBuf, String> {
+    let path = directory(app, cache)?;
+    if V7_VERIFIED.get() != Some(&path) {
+        merken_slm::runtime::verify(&path)?;
+        let _ = V7_VERIFIED.set(path.clone());
+    }
     Ok(path)
 }
 /// Copia y verifica una sola vez los modelos incluidos en la APK (base + V7).
@@ -439,7 +455,7 @@ pub async fn recommendations_generate(
             let (recommendation, elapsed) = if urgent {
                 (contract::expected(&packet).map_err(err)?, 0)
             } else {
-                let path = directory(&app, &model_cache).map_err(err)?;
+                let path = verified_v7_directory(&app, &model_cache).map_err(err)?;
                 release_service_model(&app).map_err(err)?;
                 let (response, _, elapsed) =
                     merken_slm::runtime::generate(&path, &packet, &cancel).map_err(err)?;

@@ -15,8 +15,10 @@ class SlmAssetsPlugin(private val activity: Activity) : Plugin(activity) {
     private val busy = AtomicBoolean(false)
     private val files = mapOf(
         "space-health-base-Q4_K_M.gguf" to "4fce4f8510d16a058a9e6eef90d6ffd992135259e0fcadd42e69b06d1243dea1",
-        "wellbeing-v7-lora-f16.gguf" to "521290d5207de280a7fc1ebc7517138e2dd994405347cc451a16fa60d5ffc2ef"
+        "wellbeing-v7-lora-f16.gguf" to "521290d5207de280a7fc1ebc7517138e2dd994405347cc451a16fa60d5ffc2ef",
+        "space-health-lora-f16.gguf" to "ca3d2b23e39547d0ebafb2e47793b4fba3a2943978e59205328dac47f5dd750f"
     )
+    private val base = "space-health-base-Q4_K_M.gguf"
     private fun hash(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { input ->
@@ -37,7 +39,12 @@ class SlmAssetsPlugin(private val activity: Activity) : Plugin(activity) {
         Thread {
             try {
                 val directory = File(activity.filesDir, "slm-v7"); directory.mkdirs()
+                // Solo se instalan los modelos incluidos en esta APK (la base es obligatoria);
+                // así una APK de prueba puede llevar base + v5 sin el adaptador V7.
+                val bundled = activity.assets.list("slm")?.toSet() ?: emptySet()
+                if (base !in bundled) throw IllegalStateException("Base model is not bundled")
                 for ((name, expected) in files) {
+                    if (name !in bundled) continue
                     val target = File(directory, name)
                     if (target.isFile && hash(target) == expected) continue
                     val temporary = File(directory, "$name.pending")
