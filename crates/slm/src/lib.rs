@@ -45,7 +45,9 @@ pub use interpreter::{
     MAX_QUOTE_BYTES, MAX_QUOTE_ITEMS, PROPOSAL_GBNF, SlmInterpreter,
 };
 #[cfg(feature = "llama")]
-pub use llama::{DEFAULT_CONTEXT_SIZE, DEFAULT_THREADS, LlamaEngine, LlamaEngineConfig};
+pub use llama::{
+    ChatTemplate, DEFAULT_CONTEXT_SIZE, DEFAULT_THREADS, LlamaEngine, LlamaEngineConfig,
+};
 pub use manifest::{
     ModelFile, ModelManifest, ModelPackage, ModelRole, VerifiedFile, VerifiedModel,
 };

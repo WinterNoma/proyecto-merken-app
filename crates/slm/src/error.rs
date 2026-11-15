@@ -40,6 +40,8 @@ impl fmt::Display for OutputIssue {
 pub enum EngineErrorCode {
     /// Fallo al inicializar o cargar el modelo en el motor.
     LoadFailed,
+    /// La arquitectura GGUF no tiene plantilla de chat soportada.
+    UnsupportedArchitecture,
     /// El adaptador LoRA no cumple los requisitos del paquete.
     AdapterInvalid,
     /// Fallo durante la generación de salida en el motor.
@@ -63,6 +65,7 @@ impl EngineErrorCode {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::LoadFailed => "load_failed",
+            Self::UnsupportedArchitecture => "unsupported_architecture",
             Self::AdapterInvalid => "adapter_invalid",
             Self::GenerationFailed => "generation_failed",
             Self::InvalidGrammar => "invalid_grammar",

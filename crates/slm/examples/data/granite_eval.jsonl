@@ -1,0 +1,47 @@
+{"class":"words","text":"Se me disparó el pulso a ciento veintitrés latidos por minuto","expect":[{"indicator":"heart_rate","value":123}]}
+{"class":"words","text":"My ticker is racing at seventy eight beats per minute","expect":[{"indicator":"heart_rate","value":78}]}
+{"class":"words","text":"Anoche dormí siete horas y cuarto","expect":[{"indicator":"sleep","value":7.25}]}
+{"class":"words","text":"I got six hours and forty five minutes of sleep","expect":[{"indicator":"sleep","value":6.75}]}
+{"class":"words","text":"El oxímetro marcó noventa y siete por ciento de oxígeno","expect":[{"indicator":"oxygen_in_blood","value":97}]}
+{"class":"words","text":"My blood oxygen is ninety eight percent after exercise","expect":[{"indicator":"oxygen_in_blood","value":98}]}
+{"class":"words","text":"La temperatura llegó a treinta y siete coma cinco grados Celsius","expect":[{"indicator":"body_temperature","value":37.5}]}
+{"class":"words","text":"Body temperature is ninety eight degrees Fahrenheit","expect":[]}
+{"class":"literal","text":"Mi glucosa está en 5 mmol/L","expect":[]}
+{"class":"literal","text":"Blood glucose came back at 110 mg/dL and I feel wiped out","expect":[{"indicator":"glucose","value":110}]}
+{"class":"literal","text":"Pulso 83, y el oxígeno 96%, pero no me duele la cabeza","expect":[{"indicator":"heart_rate","value":83},{"indicator":"oxygen_in_blood","value":96}]}
+{"class":"literal","text":"Sleep was 6 hours; mood is 4 out of 10; no chest pain","expect":[{"indicator":"sleep","value":6},{"indicator":"mood","value":4}]}
+{"class":"literal","text":"No tengo fiebre ni dolor de cabeza","expect":[]}
+{"class":"literal","text":"No pulse reading today, the sensor is broken","expect":[]}
+{"class":"literal","text":"Hoy me siento como una pasa flotando","expect":[]}
+{"class":"literal","text":"Just another quiet day on the station","expect":[]}
+{"class":"literal","text":"Dormí 90 minutos en la siesta","expect":[{"indicator":"sleep","value":1.5}]}
+{"class":"literal","text":"I slept for 120 minutes","expect":[{"indicator":"sleep","value":2}]}
+{"class":"words","text":"La presión salió ciento veinte sobre ochenta","expect":[{"indicator":"blood_pressure","value":120},{"indicator":"blood_pressure","value":80}]}
+{"class":"literal","text":"My blood pressure was 120 over 80 after the run","expect":[{"indicator":"blood_pressure","value":120},{"indicator":"blood_pressure","value":80}]}
+{"class":"words","text":"El ánimo está por el suelo, un tres de diez","expect":[{"indicator":"mood","value":3}]}
+{"class":"words","text":"Mood is a solid seven out of ten, despite the headache","expect":[{"indicator":"mood","value":7}]}
+{"class":"literal","text":"La radiación espacial fue 0,4 microsieverts por hora","expect":[{"indicator":"space_radiation","value":0.4}]}
+{"class":"literal","text":"Space radiation was 400 nanosieverts per hour","expect":[]}
+{"class":"literal","text":"Estamos a 400000 km de la Tierra y comí 2100 kcal","expect":[{"indicator":"distance_from_earth","value":400000},{"indicator":"nutrition","value":2100}]}
+{"class":"literal","text":"Distance from Earth: 250 miles","expect":[]}
+{"class":"literal","text":"El pulso no fue 90, fue 72","expect":[{"indicator":"heart_rate","value":72}]}
+{"class":"literal","text":"Not oxygen 95: oxygen 98 percent","expect":[{"indicator":"oxygen_in_blood","value":98}]}
+{"class":"words","text":"Creo que dormí entre seis y ocho horas","expect":[]}
+{"class":"words","text":"I might have slept either five or seven hours","expect":[]}
+{"class":"literal","text":"Me late la cabeza, pero no sé ponerle número al dolor","expect":[]}
+{"class":"literal","text":"My heart is thumping and I have no number to report","expect":[]}
+{"class":"literal","text":"El monitor indicó frecuencia cardíaca de 88 bpm durante el ejercicio","expect":[{"indicator":"heart_rate","value":88}]}
+{"class":"literal","text":"After walking the heart rate reading reached 104 bpm","expect":[{"indicator":"heart_rate","value":104}]}
+{"class":"literal","text":"La saturación de oxígeno registrada fue 94% tras subir","expect":[{"indicator":"oxygen_in_blood","value":94}]}
+{"class":"literal","text":"The oxygen saturation reading came to 97 percent after lunch","expect":[{"indicator":"oxygen_in_blood","value":97}]}
+{"class":"literal","text":"Según el informe mi glucosa fue 112 mg/dL esta mañana","expect":[{"indicator":"glucose","value":112}]}
+{"class":"literal","text":"The glucose result was 105 mg/dL before breakfast","expect":[{"indicator":"glucose","value":105}]}
+{"class":"literal","text":"El termómetro mostró temperatura de 37,2 °C esta tarde","expect":[{"indicator":"body_temperature","value":37.2}]}
+{"class":"literal","text":"The temperature reading showed 36.7 C after resting","expect":[{"indicator":"body_temperature","value":36.7}]}
+{"class":"literal","text":"Anoche el sueño duró 6,5 horas según mi reloj","expect":[{"indicator":"sleep","value":6.5}]}
+{"class":"literal","text":"Last night my sleep duration was 7.5 hours","expect":[{"indicator":"sleep","value":7.5}]}
+{"class":"literal","text":"Hoy mi estado de ánimo es 5 de 10","expect":[{"indicator":"mood","value":5}]}
+{"class":"literal","text":"My mood score today was 8 out of 10","expect":[{"indicator":"mood","value":8}]}
+{"class":"literal","text":"La presión arterial registrada fue 118/76 después de descansar","expect":[{"indicator":"blood_pressure","value":118}]}
+{"class":"literal","text":"The blood pressure reading showed 125/82 after rest","expect":[{"indicator":"blood_pressure","value":125}]}
+{"class":"literal","text":"El consumo de nutrición fue 1950 kcal en el día","expect":[{"indicator":"nutrition","value":1950}]}

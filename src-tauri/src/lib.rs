@@ -525,7 +525,12 @@ pub fn run() {
                 std::sync::Arc::new(move |event: merken_slm::service::ServiceProgress| {
                     let _ = handle.emit("slm-progress", event);
                 });
-            let (service, fichas) = SlmService::start(root, factory, Some(progress))?;
+            let (service, fichas) = SlmService::start_with_interpreter(
+                root,
+                factory,
+                Some(progress),
+                Some(merken_slm::service::granite_interpreter_manifest()),
+            )?;
             app.manage(SlmState { service, fichas });
             Ok(())
         })

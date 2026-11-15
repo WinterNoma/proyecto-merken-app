@@ -4,8 +4,7 @@
 //! por [`crate::ModelStore`] o [`crate::ModelSlot`]:
 //! - Carga `Single` (solo GGUF) o `BaseWithAdapter` (base + adaptador LoRA
 //!   aplicado en runtime con su `lora_scale`, sin fusionar pesos).
-//! - Construye el prompt ChatML exacto de la plantilla Qwen3 con pensamiento
-//!   desactivado (`<|im_start|>assistant\n<think>\n\n</think>\n\n`).
+//! - Selecciona la plantilla de chat de Qwen3 o Granite según la arquitectura GGUF.
 //! - Rechaza cualquier entrada cuyo total de tokens más `max_tokens` supere el
 //!   tamaño de contexto configurado.
 //! - Soporta gramáticas GBNF, muestreo *greedy* determinista, comprobación de
@@ -82,6 +81,37 @@ impl LlamaEngineConfig {
     }
 }
 
+/// Plantilla de chat correspondiente a la arquitectura del modelo cargado.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChatTemplate {
+    Qwen3ChatmlNoThink,
+    Granite,
+}
+
+impl ChatTemplate {
+    /// Construye el prompt completo con los delimitadores del modelo.
+    pub fn format(self, system: &str, prompt: &str) -> String {
+        match self {
+            Self::Qwen3ChatmlNoThink => format!(
+                "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+            ),
+            Self::Granite => format!(
+                "<|start_of_role|>system<|end_of_role|>{system}<|end_of_text|>\n<|start_of_role|>user<|end_of_role|>{prompt}<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>"
+            ),
+        }
+    }
+
+    pub(crate) fn from_gguf(path: &std::path::Path) -> Result<Self, SlmError> {
+        let architecture = crate::gguf::architecture(path)
+            .map_err(|()| SlmError::Engine(EngineErrorCode::LoadFailed))?;
+        match architecture.as_str() {
+            "qwen3" => Ok(Self::Qwen3ChatmlNoThink),
+            "granite" => Ok(Self::Granite),
+            _ => Err(SlmError::Engine(EngineErrorCode::UnsupportedArchitecture)),
+        }
+    }
+}
+
 struct LoadedLora {
     adapter: LlamaLoraAdapter,
     scale: f32,
@@ -102,6 +132,7 @@ struct LlamaEngineInner {
 pub struct LlamaEngine {
     model_id: String,
     config: LlamaEngineConfig,
+    template: ChatTemplate,
     inner: Mutex<LlamaEngineInner>,
 }
 
@@ -149,19 +180,19 @@ impl LlamaEngine {
             return Err(SlmError::Engine(EngineErrorCode::LoadFailed));
         }
 
-        let backend = global_backend().map_err(|_| load_error(ctl))?;
-
-        let cancel = ctl.cancel.clone();
-        let deadline = ctl.deadline.clone();
-        let model_params = LlamaModelParams::default().with_progress_callback(move |_progress| {
-            !cancel.is_cancelled() && !deadline.is_expired()
-        });
-
         if let Some(adapter) = verified.adapter_file() {
             let result = crate::gguf::validate_adapter(verified.base_file().path(), adapter.path());
             ctl.check()?;
             result.map_err(|()| SlmError::Engine(EngineErrorCode::AdapterInvalid))?;
         }
+        let template = ChatTemplate::from_gguf(verified.base_file().path())?;
+        ctl.check()?;
+        let backend = global_backend().map_err(|_| load_error(ctl))?;
+        let cancel = ctl.cancel.clone();
+        let deadline = ctl.deadline.clone();
+        let model_params = LlamaModelParams::default().with_progress_callback(move |_progress| {
+            !cancel.is_cancelled() && !deadline.is_expired()
+        });
 
         let mut model =
             match LlamaModel::load_from_file(backend, verified.base_file().path(), &model_params) {
@@ -205,6 +236,7 @@ impl LlamaEngine {
         Ok(Self {
             model_id: verified.model_id().to_string(),
             config,
+            template,
             inner: Mutex::new(LlamaEngineInner { model, lora }),
         })
     }
@@ -217,9 +249,7 @@ impl LlamaEngine {
     /// Formatea el prompt siguiendo exactamente la plantilla ChatML del v5 con
     /// `enable_thinking = false`.
     pub fn format_prompt(system: &str, prompt: &str) -> String {
-        format!(
-            "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
-        )
+        ChatTemplate::Qwen3ChatmlNoThink.format(system, prompt)
     }
 
     /// Verifica que una gramática GBNF compila sin errores contra el vocabulario
@@ -257,7 +287,7 @@ impl Engine for LlamaEngine {
         }
 
         let backend = global_backend()?;
-        let prompt_str = Self::format_prompt(&req.system, &req.prompt);
+        let prompt_str = self.template.format(&req.system, &req.prompt);
 
         let inner = self
             .inner
@@ -508,6 +538,14 @@ mod tests {
         assert_eq!(
             formatted,
             "<|im_start|>system\nSYS<|im_end|>\n<|im_start|>user\nUSR<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        );
+    }
+
+    #[test]
+    fn format_granite() {
+        assert_eq!(
+            ChatTemplate::Granite.format("SYS", "USR"),
+            "<|start_of_role|>system<|end_of_role|>SYS<|end_of_text|>\n<|start_of_role|>user<|end_of_role|>USR<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>"
         );
     }
 

@@ -103,15 +103,13 @@ string ::= "\"" ( [^"\\\x7F\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9
 ws ::= [ \t\n\r]*
 "#;
 
-const INTERPRETER_SYSTEM_PROMPT: &str = "\
-You extract structured astronaut health log proposals from free text (English or Spanish).
-Return ONLY valid JSON matching the Proposal grammar.
-Rules:
-1. Every extracted record, field value, ambiguous time, negated phrase, and uninterpreted segment MUST carry a verbatim substring quote copied from the user input text.
-2. Never invent numbers, timestamps, or quotes. If a value is uncertain or missing, set \"value\": null and \"quote\": null.
-3. For relative or vague time expressions (such as \"this morning\" or \"last night\"), use {\"kind\":\"ambiguous\",\"quote\":\"...\"}. Otherwise use {\"kind\":\"unspecified\"}.
-4. Put negated symptoms or readings in \"negated\" and unparsed fragments in \"uninterpreted\".
-5. Never assign health statuses, diagnoses, treatments, or advice.";
+const INTERPRETER_SYSTEM_PROMPT: &str = r#"Extract health records as Proposal JSON only. Do not diagnose or give advice.
+Copy every quote exactly from the input; field quotes must be inside the record quote.
+Never invent numbers or quotes. Use null for uncertain values. Put negations in negated and unknown text in uninterpreted. Use ambiguous time only with its literal quote.
+Input: nutrition 1850 kcal
+Output: {"schema_version":1,"interpreter":"slm","interpreter_version":"example","records":[{"indicator":"nutrition","fields":[{"key":"kcal","value":1850,"quote":"1850 kcal"}],"time":{"kind":"unspecified"},"quote":"nutrition 1850 kcal"}],"negated":[],"uninterpreted":[]}
+Input: no back pain
+Output: {"schema_version":1,"interpreter":"slm","interpreter_version":"example","records":[],"negated":["no back pain"],"uninterpreted":[]}"#;
 
 /// Trait para intérpretes de texto libre hacia una [`Proposal`] validable por `merken-core`.
 pub trait Interpreter {

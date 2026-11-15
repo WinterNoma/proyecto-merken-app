@@ -47,6 +47,22 @@ pub fn v5_manifest() -> ModelManifest {
     }
 }
 
+/// Trusted interpreter manifest embedded in the application.
+pub fn granite_interpreter_manifest() -> ModelManifest {
+    ModelManifest {
+        model_id: "granite-4.0-350m".into(),
+        role: ModelRole::Interpreter,
+        version: "4.0-350m-q4_k_m".into(),
+        package: ModelPackage::Single {
+            file: ModelFile {
+                name: "granite-4.0-350m-Q4_K_M.gguf".into(),
+                bytes: 236_985_760,
+                sha256: "771c588a49607f274a2bba3185733607ebe6f74b996ab90e2d6bee0d98bcec52".into(),
+            },
+        },
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ServiceError {
     Busy,
@@ -798,6 +814,24 @@ mod tests {
     use super::*;
     use merken_core::{evaluate::evaluate_all, time::Timestamp};
 
+    #[test]
+    fn granite_manifest_is_embedded_and_valid() {
+        let manifest = granite_interpreter_manifest();
+        assert_eq!(manifest.model_id, "granite-4.0-350m");
+        assert_eq!(manifest.version, "4.0-350m-q4_k_m");
+        assert_eq!(manifest.role, ModelRole::Interpreter);
+        assert!(manifest.validate().is_ok());
+        let ModelPackage::Single { file } = manifest.package else {
+            panic!("expected single model")
+        };
+        assert_eq!(file.name, "granite-4.0-350m-Q4_K_M.gguf");
+        assert_eq!(file.bytes, 236_985_760);
+        assert_eq!(
+            file.sha256,
+            "771c588a49607f274a2bba3185733607ebe6f74b996ab90e2d6bee0d98bcec52"
+        );
+    }
+
     fn next_id() -> String {
         static ID: AtomicUsize = AtomicUsize::new(0);
         format!("test-{}", ID.fetch_add(1, Ordering::SeqCst))
@@ -1232,11 +1266,33 @@ mod tests {
         ("me duele la cabeza un 6 y dormí mal", &[]),
         ("heart rate 72 and glucose 95 mg/dL", &[]),
         ("pulse 72 I feel exhausted", &["I feel exhausted"]),
+        ("no dormí bien estoy agotado", &["estoy agotado"]),
+        (
+            "I did not sleep well I feel exhausted",
+            &["I feel exhausted"],
+        ),
+        ("NO DORMÍ BIEN ESTOY AGOTADO", &["ESTOY AGOTADO"]),
+        ("no dormi\u{0301} bien estoy agotado", &["estoy agotado"]),
+        ("dormí mal", &[]),
+        ("I slept poorly", &[]),
+        ("temperatura -0,5", &["-0,5"]),
+        ("pulse -72", &["-72"]),
+        ("pulse −72", &["−72"]),
+        ("pulse +72", &["+72"]),
+        ("temperatura −0.5", &["−0.5"]),
+        ("temperatura +36,6", &["+36,6"]),
+        ("temperatura 36,6", &[]),
+        ("temperatura 36.6", &[]),
+        ("blood glucose 95", &[]),
+        ("estado de ánimo 6", &[]),
+        ("BLOOD   GLUCOSE 95", &[]),
+        ("estado de a\u{0301}nimo 6", &[]),
+        ("frecuencia cardíaca 72", &[]),
     ];
 
-    // Run with --nocapture BEFORE accepting the core-backed residual expectations.
-    // Process creation was denied in the implementation environment; these are the
-    // handwritten task contract, not a claim of observed layer-1 output.
+    // Process creation is denied (Access denied / EPERM) in this environment.
+    // Expectations are derived from core's extract/lexicon/numbers, not observed runs.
+    // Run with --nocapture to inspect ALL layer-1 citations before the assertions.
     #[test]
     fn layer1_citations_and_residual_contract() {
         let proposals: Vec<_> = RESIDUAL_CASES
@@ -1255,6 +1311,181 @@ mod tests {
             let needed =
                 !unresolved.is_empty() || proposal.uninterpreted.iter().any(|u| has_content(u));
             assert_eq!(needed, !expected.is_empty(), "{text}: core={proposal:?}");
+        }
+    }
+
+    #[test]
+    fn layer1_sleep_field_citations_follow_the_core_extractor() {
+        for (text, value, quote) in [
+            (
+                "no dormí bien estoy agotado",
+                "poor",
+                "no dormí bien estoy agotado",
+            ),
+            (
+                "I did not sleep well I feel exhausted",
+                "poor",
+                "I did not sleep well I feel exhausted",
+            ),
+            ("dormí mal", "poor", "mal"),
+            ("I slept poorly", "poor", "poorly"),
+        ] {
+            let proposal = interpret(text);
+            assert_eq!(proposal.records.len(), 1, "{text}: {proposal:?}");
+            assert_eq!(proposal.records[0].quote, text);
+            let quality = proposal.records[0]
+                .fields
+                .iter()
+                .find(|field| field.key == "quality")
+                .unwrap();
+            assert_eq!(quality.value, Some(serde_json::json!(value)), "{text}");
+            assert_eq!(quality.quote.as_deref(), Some(quote), "{text}");
+            assert!(proposal.negated.is_empty(), "{text}: {proposal:?}");
+            assert!(proposal.uninterpreted.is_empty(), "{text}: {proposal:?}");
+        }
+    }
+
+    #[test]
+    fn layer1_numeric_and_compound_citations_follow_the_core_extractor() {
+        for (text, key, value, quote) in [
+            ("temperatura -0,5", "celsius", None, None),
+            ("pulse -72", "bpm", None, None),
+            ("pulse −72", "bpm", None, None),
+            ("pulse +72", "bpm", None, None),
+            ("temperatura −0.5", "celsius", None, None),
+            ("temperatura +36,6", "celsius", None, None),
+            ("temperatura 36,6", "celsius", Some(36.6), Some("36,6")),
+            ("temperatura 36.6", "celsius", Some(36.6), Some("36.6")),
+            ("blood glucose 95", "mg_dl", Some(95.0), Some("95")),
+            ("estado de ánimo 6", "score", Some(6.0), Some("6")),
+        ] {
+            let proposal = interpret(text);
+            assert_eq!(proposal.records.len(), 1, "{text}: {proposal:?}");
+            assert_eq!(proposal.records[0].quote, text);
+            let field = proposal.records[0]
+                .fields
+                .iter()
+                .find(|field| field.key == key)
+                .unwrap();
+            assert_eq!(
+                field.value.as_ref().and_then(|v| v.as_f64()),
+                value,
+                "{text}"
+            );
+            assert_eq!(field.quote.as_deref(), quote, "{text}");
+            assert!(proposal.negated.is_empty(), "{text}: {proposal:?}");
+            assert!(proposal.uninterpreted.is_empty(), "{text}: {proposal:?}");
+        }
+    }
+
+    #[test]
+    fn broad_scalar_quotes_only_cover_value_expressions() {
+        use merken_core::proposal::ProposedField;
+        // Deliberately widen real layer-1 field quotes, keeping the original value.
+        for (text, key, expected) in [
+            ("pulso 72 estoy agotado", "bpm", vec!["estoy agotado"]),
+            ("dormí bien estoy agotado", "quality", vec!["estoy agotado"]),
+            (
+                "dormí más o menos estoy agotado",
+                "quality",
+                vec!["estoy agotado"],
+            ),
+            (
+                "I slept so so I feel exhausted",
+                "quality",
+                vec!["I feel exhausted"],
+            ),
+            (
+                "dolor en brazo izquierdo estoy agotado",
+                "body_zone",
+                vec!["estoy agotado"],
+            ),
+        ] {
+            let mut proposal = interpret(text);
+            let record = &mut proposal.records[0];
+            let field = record.fields.iter().find(|field| field.key == key).unwrap();
+            assert!(field.value.is_some(), "{text}: {field:?}");
+            record.fields = vec![ProposedField {
+                quote: Some(record.quote.clone()),
+                ..field.clone()
+            }];
+            proposal.uninterpreted.clear();
+            assert_eq!(unresolved_fragments(text, &proposal), expected, "{text}");
+        }
+        // A null scalar and a description differing from its quote consume no
+        // arbitrary text. A literal free-text value DOES transport that text.
+        let text = "headache I feel exhausted";
+        let original = interpret(text);
+        let description = original.records[0]
+            .fields
+            .iter()
+            .find(|field| field.key == "description")
+            .unwrap();
+        assert_eq!(description.quote.as_deref(), Some(text));
+        assert_eq!(description.value, Some(serde_json::json!(text)));
+        assert!(unresolved_fragments(text, &original).is_empty());
+        for value in [None, Some(serde_json::json!("headache"))] {
+            let mut proposal = original.clone();
+            proposal.records[0].fields = vec![ProposedField {
+                key: "description".into(),
+                value,
+                quote: Some(text.into()),
+            }];
+            assert_eq!(unresolved_fragments(text, &proposal), ["I feel exhausted"]);
+        }
+    }
+
+    #[test]
+    fn compound_mentions_cover_aliases_without_consuming_neighbours() {
+        use merken_core::{
+            catalog::Indicator,
+            proposal::{ProposedRecord, TimeHint},
+        };
+        for (indicator, alias) in [
+            (Indicator::HeartRate, "heart rate"),
+            (Indicator::HeartRate, "frecuencia cardiaca"),
+            (Indicator::Glucose, "blood glucose"),
+            (Indicator::Glucose, "blood sugar"),
+            (Indicator::Glucose, "azúcar en sangre"),
+            (Indicator::Mood, "estado de ánimo"),
+            (Indicator::OxygenInBlood, "blood oxygen"),
+            (Indicator::SpaceRadiation, "radiación espacial"),
+            (Indicator::DistanceFromEarth, "distancia desde la tierra"),
+        ] {
+            assert!(merken_core::interpret::mentions_indicator(indicator, alias));
+            let text = format!("misterio {alias} exhausted");
+            let mut proposal = interpret("");
+            proposal.records.push(ProposedRecord {
+                indicator,
+                fields: Vec::new(),
+                time: TimeHint::Unspecified,
+                quote: text.clone(),
+            });
+            assert_eq!(
+                unresolved_fragments(&text, &proposal),
+                ["misterio", "exhausted"]
+            );
+        }
+        for (indicator, text, expected) in [
+            (
+                Indicator::Glucose,
+                "misterio glucose exhausted",
+                vec!["misterio", "exhausted"],
+            ),
+            (
+                Indicator::Mood,
+                "misterio de ánimo exhausted",
+                vec!["misterio", "exhausted"],
+            ),
+        ] {
+            let mut proposal = interpret("");
+            proposal.records.push(ProposedRecord {
+                indicator,
+                fields: Vec::new(),
+                time: TimeHint::Unspecified,
+                quote: text.into(),
+            });
+            assert_eq!(unresolved_fragments(text, &proposal), expected, "{text}");
         }
     }
 
