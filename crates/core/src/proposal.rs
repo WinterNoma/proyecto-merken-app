@@ -1866,6 +1866,595 @@ mod tests {
         assert!(pulse72.check(input).is_empty());
     }
 
+    fn revision6_symptom(quote: &str, zone: &str, zone_quote: &str, score: u8) -> Proposal {
+        let score_quote = score.to_string();
+        let mut proposal = slm_numeric(
+            Indicator::Symptom,
+            "score",
+            json!(score),
+            quote,
+            &score_quote,
+        );
+        for field in &mut proposal.records[0].fields {
+            match field.key.as_str() {
+                "body_zone" => {
+                    field.value = Some(json!(zone));
+                    field.quote = Some(zone_quote.into());
+                }
+                "description" => {
+                    field.value = Some(json!(quote));
+                    field.quote = Some(quote.into());
+                }
+                _ => {}
+            }
+        }
+        proposal
+    }
+
+    #[test]
+    fn revision6_symptom_corrections_follow_zone_in_both_languages_and_orders() {
+        // Cada fila declara literalmente la mención corregida y la que conserva su valor.
+        for (
+            input,
+            old,
+            new,
+            kept,
+            zone,
+            zone_quote,
+            old_score,
+            kept_zone,
+            kept_zone_quote,
+            kept_score,
+        ) in [
+            (
+                "dolor de cabeza 6 y dolor de espalda 4, perdón dolor de cabeza 7",
+                "dolor de cabeza 6",
+                "dolor de cabeza 7",
+                "dolor de espalda 4",
+                "head",
+                "cabeza",
+                6,
+                "back",
+                "espalda",
+                4,
+            ),
+            (
+                "dolor de espalda 4 y dolor de cabeza 6, perdón dolor de cabeza 7",
+                "dolor de cabeza 6",
+                "dolor de cabeza 7",
+                "dolor de espalda 4",
+                "head",
+                "cabeza",
+                6,
+                "back",
+                "espalda",
+                4,
+            ),
+            (
+                "dolor de espalda 4 y dolor de cabeza 6, perdón dolor de espalda 7",
+                "dolor de espalda 4",
+                "dolor de espalda 7",
+                "dolor de cabeza 6",
+                "back",
+                "espalda",
+                4,
+                "head",
+                "cabeza",
+                6,
+            ),
+            (
+                "dolor de cabeza 6 y dolor de espalda 4, perdón dolor de espalda 7",
+                "dolor de espalda 4",
+                "dolor de espalda 7",
+                "dolor de cabeza 6",
+                "back",
+                "espalda",
+                4,
+                "head",
+                "cabeza",
+                6,
+            ),
+            (
+                "dolor de pie izquierdo 6 y dolor de pie derecho 4, perdón dolor de pie izquierdo 7",
+                "dolor de pie izquierdo 6",
+                "dolor de pie izquierdo 7",
+                "dolor de pie derecho 4",
+                "left_foot",
+                "pie izquierdo",
+                6,
+                "right_foot",
+                "pie derecho",
+                4,
+            ),
+            (
+                "right foot pain 4 and left foot pain 6, sorry left foot pain 7",
+                "left foot pain 6",
+                "left foot pain 7",
+                "right foot pain 4",
+                "left_foot",
+                "left foot",
+                6,
+                "right_foot",
+                "right foot",
+                4,
+            ),
+            (
+                "headache 6 and back pain 4, sorry headache 7",
+                "headache 6",
+                "headache 7",
+                "back pain 4",
+                "head",
+                "headache",
+                6,
+                "back",
+                "back",
+                4,
+            ),
+            (
+                "back pain 4 and headache 6, sorry headache 7",
+                "headache 6",
+                "headache 7",
+                "back pain 4",
+                "head",
+                "headache",
+                6,
+                "back",
+                "back",
+                4,
+            ),
+            (
+                "back pain 4 and headache 6, I mean back pain 7",
+                "back pain 4",
+                "back pain 7",
+                "headache 6",
+                "back",
+                "back",
+                4,
+                "head",
+                "headache",
+                6,
+            ),
+            (
+                "headache 6 and back pain 4, I mean back pain 7",
+                "back pain 4",
+                "back pain 7",
+                "headache 6",
+                "back",
+                "back",
+                4,
+                "head",
+                "headache",
+                6,
+            ),
+        ] {
+            for (quote, score) in [(old, old_score), (new, 7)] {
+                let proposal = revision6_symptom(quote, zone, zone_quote, score);
+                assert!(proposal.records[0].is_complete());
+                assert!(proposal.check(quote).is_empty(), "{quote:?}");
+                assert!(
+                    proposal
+                        .check(input)
+                        .iter()
+                        .any(|i| i.error.field == "score"),
+                    "{input:?}: {quote:?}"
+                );
+            }
+            let unaffected = revision6_symptom(kept, kept_zone, kept_zone_quote, kept_score);
+            assert!(unaffected.check(input).is_empty(), "{input:?}");
+            let rules = crate::interpret::interpret(input);
+            assert!(rules.check(input).is_empty(), "{input:?}");
+            assert_eq!(rules.records.len(), 2, "{input:?}");
+            for record in &rules.records {
+                if record.quote == kept {
+                    assert_eq!(
+                        record.value(),
+                        json!({
+                            "body_zone": kept_zone, "score": kept_score, "description": kept
+                        })
+                    );
+                    assert!(record.is_complete());
+                } else {
+                    assert_eq!(record.quote, old);
+                    assert_eq!(record.value(), json!({"description": old}));
+                    assert!(!record.is_complete());
+                }
+            }
+            assert!(rules.records.iter().any(|r| r.quote == kept));
+            assert!(rules.uninterpreted.iter().any(|q| q.contains(new)));
+        }
+    }
+
+    #[test]
+    fn revision6_symptom_zone_aliases_and_enumerated_symptoms() {
+        for (input, old_quote, new_quote, old_zone_quote, new_zone_quote, kept) in [
+            (
+                "cefalea 6 y dolor de espalda 4, mejor dicho migraña 7",
+                "cefalea 6",
+                "migraña 7",
+                "cefalea",
+                "migraña",
+                "dolor de espalda 4",
+            ),
+            (
+                "back pain 4 and headache 6, sorry head pain 7",
+                "headache 6",
+                "head pain 7",
+                "headache",
+                "head",
+                "back pain 4",
+            ),
+        ] {
+            for (quote, zone_quote, score) in [
+                (old_quote, old_zone_quote, 6),
+                (new_quote, new_zone_quote, 7),
+            ] {
+                let proposal = revision6_symptom(quote, "head", zone_quote, score);
+                assert!(proposal.check(quote).is_empty());
+                assert!(
+                    proposal
+                        .check(input)
+                        .iter()
+                        .any(|i| i.error.field == "score")
+                );
+            }
+            let rules = crate::interpret::interpret(input);
+            assert!(rules.check(input).is_empty());
+            assert_eq!(rules.records.len(), 2);
+            assert_eq!(
+                rules
+                    .records
+                    .iter()
+                    .find(|r| r.quote == old_quote)
+                    .unwrap()
+                    .value(),
+                json!({"description": old_quote})
+            );
+            assert_eq!(
+                rules
+                    .records
+                    .iter()
+                    .find(|r| r.quote == kept)
+                    .unwrap()
+                    .value(),
+                json!({"body_zone": "back", "score": 4, "description": kept})
+            );
+        }
+        // Integración de ambos P1: cada identidad participa en la rectificación enumerada.
+        for input in [
+            "dolor de cabeza 6 y dolor de espalda 4 y pulso 72, corrijo dolor de cabeza 7 y dolor de espalda 5",
+            "dolor de espalda 4 y dolor de cabeza 6 y pulso 72, corrijo dolor de espalda 5, dolor de cabeza 7",
+            "headache 6 and back pain 4 and pulse 72, sorry headache 7 and back pain 5",
+            "back pain 4 and headache 6 and pulse 72, I mean back pain 5, headache 7",
+        ] {
+            let rules = crate::interpret::interpret(input);
+            assert!(rules.check(input).is_empty(), "{input:?}");
+            assert_eq!(rules.records.len(), 3);
+            for record in &rules.records {
+                if record.indicator == Indicator::HeartRate {
+                    assert_eq!(record.value(), json!({"bpm": 72}));
+                } else {
+                    assert_eq!(record.indicator, Indicator::Symptom);
+                    assert_eq!(record.value(), json!({"description": record.quote}));
+                    assert!(!record.is_complete());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn revision6_unlocalized_symptom_corrections_use_description() {
+        // "other" es una categoría compartida, no la identidad de náuseas y fatiga.
+        for (input, old, new, kept) in [
+            (
+                "náuseas 6 y fatiga 4, perdón náuseas 7",
+                "náuseas 6",
+                "náuseas 7",
+                "fatiga 4",
+            ),
+            (
+                "fatiga 4 y náuseas 6, perdón náuseas 7",
+                "náuseas 6",
+                "náuseas 7",
+                "fatiga 4",
+            ),
+            (
+                "nausea 6 and fatigue 4, sorry nausea 7",
+                "nausea 6",
+                "nausea 7",
+                "fatigue 4",
+            ),
+            (
+                "fatigue 4 and nausea 6, sorry nausea 7",
+                "nausea 6",
+                "nausea 7",
+                "fatigue 4",
+            ),
+            (
+                "fatiga 6 y náuseas 4, mejor dicho fatiga 7",
+                "fatiga 6",
+                "fatiga 7",
+                "náuseas 4",
+            ),
+            (
+                "náuseas 4 y fatiga 6, mejor dicho fatiga 7",
+                "fatiga 6",
+                "fatiga 7",
+                "náuseas 4",
+            ),
+            (
+                "fatigue 6 and nausea 4, I mean fatigue 7",
+                "fatigue 6",
+                "fatigue 7",
+                "nausea 4",
+            ),
+            (
+                "nausea 4 and fatigue 6, I mean fatigue 7",
+                "fatigue 6",
+                "fatigue 7",
+                "nausea 4",
+            ),
+        ] {
+            for (quote, score) in [(old, 6), (new, 7)] {
+                let proposal = slm_numeric(
+                    Indicator::Symptom,
+                    "score",
+                    json!(score),
+                    quote,
+                    &score.to_string(),
+                );
+                assert!(proposal.check(quote).is_empty());
+                assert!(
+                    proposal
+                        .check(input)
+                        .iter()
+                        .any(|i| i.error.field == "score"),
+                    "{input:?}"
+                );
+            }
+            let unaffected = slm_numeric(Indicator::Symptom, "score", json!(4), kept, "4");
+            assert!(unaffected.check(input).is_empty(), "{input:?}");
+            let rules = crate::interpret::interpret(input);
+            assert!(rules.check(input).is_empty(), "{input:?}");
+            assert_eq!(rules.records.len(), 2);
+            let corrected = rules.records.iter().find(|r| r.quote == old).unwrap();
+            assert_eq!(corrected.value(), json!({"description": old}));
+            let retained = rules.records.iter().find(|r| r.quote == kept).unwrap();
+            assert_eq!(
+                retained.value(),
+                json!({"body_zone": "other", "score": 4, "description": kept})
+            );
+        }
+    }
+
+    #[test]
+    fn revision6_unresolved_symptom_identity_keeps_all_candidates_pending() {
+        for (input, candidates, correction) in [
+            (
+                "dolor de cabeza 6 y dolor de espalda 4, perdón dolor 7",
+                ["dolor de cabeza 6", "dolor de espalda 4"],
+                "dolor 7",
+            ),
+            (
+                "dolor de espalda 4 y dolor de cabeza 6, perdón síntoma 7",
+                ["dolor de cabeza 6", "dolor de espalda 4"],
+                "síntoma 7",
+            ),
+            (
+                "headache 6 and back pain 4, sorry pain 7",
+                ["headache 6", "back pain 4"],
+                "pain 7",
+            ),
+            (
+                "back pain 4 and headache 6, I mean symptom 7",
+                ["headache 6", "back pain 4"],
+                "symptom 7",
+            ),
+            (
+                "náuseas 6 y fatiga 4, perdón síntoma 7",
+                ["náuseas 6", "fatiga 4"],
+                "síntoma 7",
+            ),
+            (
+                "fatigue 4 and nausea 6, sorry symptom 7",
+                ["nausea 6", "fatigue 4"],
+                "symptom 7",
+            ),
+        ] {
+            for (quote, score) in [(candidates[0], 6), (candidates[1], 4), (correction, 7)] {
+                let proposal = slm_numeric(
+                    Indicator::Symptom,
+                    "score",
+                    json!(score),
+                    quote,
+                    &score.to_string(),
+                );
+                assert!(
+                    proposal
+                        .check(input)
+                        .iter()
+                        .any(|i| i.error.field == "score"),
+                    "{input:?}"
+                );
+            }
+            let rules = crate::interpret::interpret(input);
+            assert!(rules.check(input).is_empty(), "{input:?}");
+            assert_eq!(rules.records.len(), 2);
+            for record in &rules.records {
+                assert!(candidates.contains(&record.quote.as_str()));
+                assert_eq!(record.value(), json!({"description": record.quote}));
+                assert!(!record.is_complete());
+            }
+        }
+    }
+
+    #[test]
+    fn revision6_enumerated_corrections_keep_every_named_indicator_pending() {
+        // Los esperados son constantes: pulso y glucosa pendientes; temperatura previa = 37.
+        // Ambos órdenes iniciales y rectificados se combinan independientemente.
+        for (pulse, glucose, temperature, new_pulse, new_glucose) in [
+            (
+                "pulso 72",
+                "glucosa 95 mg/dL",
+                "temperatura 37",
+                "pulso 82",
+                "glucosa 105 mg/dL",
+            ),
+            (
+                "pulse 72",
+                "glucose 95 mg/dL",
+                "body temperature 37",
+                "pulse 82",
+                "glucose 105 mg/dL",
+            ),
+        ] {
+            for separator in [" y ", " and ", ", "] {
+                for marker in [
+                    "corrijo",
+                    "perdón",
+                    "sorry",
+                    "I mean",
+                    "mejor dicho",
+                    "rectifico",
+                    "perdón,",
+                ] {
+                    for (first, second) in [(pulse, glucose), (glucose, pulse)] {
+                        for (new_first, new_second) in
+                            [(new_pulse, new_glucose), (new_glucose, new_pulse)]
+                        {
+                            for with_temperature in [false, true] {
+                                let initial = format!("{first}{separator}{second}");
+                                let initial = if with_temperature {
+                                    format!("{initial}{separator}{temperature}")
+                                } else {
+                                    initial
+                                };
+                                let input = format!(
+                                    "{initial}, {marker} {new_first}{separator}{new_second}"
+                                );
+                                for (indicator, key, value, quote, field_quote) in [
+                                    (Indicator::HeartRate, "bpm", 72, pulse, "72"),
+                                    (Indicator::HeartRate, "bpm", 82, new_pulse, "82"),
+                                    (Indicator::Glucose, "mg_dl", 95, glucose, "95 mg/dL"),
+                                    (Indicator::Glucose, "mg_dl", 105, new_glucose, "105 mg/dL"),
+                                ] {
+                                    let proposal = slm_numeric(
+                                        indicator,
+                                        key,
+                                        json!(value),
+                                        quote,
+                                        field_quote,
+                                    );
+                                    assert!(proposal.check(quote).is_empty(), "{quote:?}");
+                                    assert!(
+                                        proposal.check(&input).iter().any(|i| i.error.field == key),
+                                        "{input:?}: {quote:?}"
+                                    );
+                                }
+                                let rules = crate::interpret::interpret(&input);
+                                assert!(rules.check(&input).is_empty(), "{input:?}");
+                                assert_eq!(
+                                    rules.records.len(),
+                                    if with_temperature { 3 } else { 2 }
+                                );
+                                for indicator in [Indicator::HeartRate, Indicator::Glucose] {
+                                    let records: Vec<_> = rules
+                                        .records
+                                        .iter()
+                                        .filter(|r| r.indicator == indicator)
+                                        .collect();
+                                    assert_eq!(records.len(), 1, "{input:?}");
+                                    assert_eq!(records[0].value(), json!({}), "{input:?}");
+                                    assert!(!records[0].is_complete());
+                                }
+                                if with_temperature {
+                                    let unaffected = slm_numeric(
+                                        Indicator::BodyTemperature,
+                                        "celsius",
+                                        json!(37),
+                                        temperature,
+                                        "37",
+                                    );
+                                    assert!(unaffected.check(&input).is_empty(), "{input:?}");
+                                    let record = rules
+                                        .records
+                                        .iter()
+                                        .find(|r| r.indicator == Indicator::BodyTemperature)
+                                        .unwrap();
+                                    assert_eq!(record.value(), json!({"celsius": 37}));
+                                    assert!(record.is_complete());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn revision6_new_measurements_do_not_end_the_correction_scope() {
+        for input in [
+            "pulso 72 y glucosa 95 mg/dL, corrijo pulso 82 y temperatura 37 y glucosa 105 mg/dL",
+            "glucosa 95 mg/dL y pulso 72, perdón glucosa 105 mg/dL, temperatura 37, pulso 82",
+            "pulse 72 and glucose 95 mg/dL, sorry pulse 82 and temperatura 37 and glucose 105 mg/dL",
+            "glucose 95 mg/dL and pulse 72, I mean glucose 105 mg/dL, temperatura 37, pulse 82",
+        ] {
+            let rules = crate::interpret::interpret(input);
+            assert!(rules.check(input).is_empty(), "{input:?}");
+            assert_eq!(rules.records.len(), 3);
+            for indicator in [Indicator::HeartRate, Indicator::Glucose] {
+                let record = rules
+                    .records
+                    .iter()
+                    .find(|r| r.indicator == indicator)
+                    .unwrap();
+                assert_eq!(record.value(), json!({}), "{input:?}");
+            }
+            let temperature = rules
+                .records
+                .iter()
+                .find(|r| r.indicator == Indicator::BodyTemperature)
+                .unwrap();
+            assert_eq!(temperature.value(), json!({"celsius": 37}));
+            let proposal = slm_numeric(
+                Indicator::BodyTemperature,
+                "celsius",
+                json!(37),
+                "temperatura 37",
+                "37",
+            );
+            assert!(proposal.check(input).is_empty());
+        }
+    }
+
+    #[test]
+    fn revision6_correction_enumeration_stops_at_clause_changes() {
+        for boundary in [". ", "; ", " pero ", " but ", " luego ", " then "] {
+            let input = format!(
+                "pulso 72 y glucosa 95 mg/dL, corrijo pulso 82 y glucosa 105 mg/dL{boundary}temperatura 37"
+            );
+            let rules = crate::interpret::interpret(&input);
+            assert!(rules.check(&input).is_empty(), "{input:?}");
+            assert_eq!(rules.records.len(), 3);
+            for record in &rules.records {
+                let expected = if record.indicator == Indicator::BodyTemperature {
+                    json!({"celsius": 37})
+                } else {
+                    json!({})
+                };
+                assert_eq!(record.value(), expected, "{input:?}");
+            }
+            let temperature = slm_numeric(
+                Indicator::BodyTemperature,
+                "celsius",
+                json!(37),
+                "temperatura 37",
+                "37",
+            );
+            assert!(temperature.check(&input).is_empty());
+        }
+    }
+
     #[test]
     fn revision5_score_aliases_do_not_authorize_trimmed_temperature_or_pressure() {
         for (input, temperature_quote) in [
