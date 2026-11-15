@@ -393,6 +393,19 @@ export interface VerifyTelemetryResult {
   checked_through_reading_id: number | null;
 }
 
+export interface ExportJsonInput {
+  include_telemetry?: boolean;
+  astronaut_key?: string;
+}
+
+export interface ExportJsonResult {
+  path: string;
+  file_name: string;
+  bytes: number;
+  exported_at: Iso;
+  counts: { records: number; events: number; evaluations: number; telemetry_readings: number; outbox_pending: number };
+}
+
 export const core = {
   getProfile: () => invoke<ProfileResponse>("get_profile"),
   logRecord: (input: LogRecordInput) => invoke<LogResult>("log_record", { input }),
@@ -419,6 +432,9 @@ export const core = {
   /** Lista lecturas de telemetría local de la más reciente a la más antigua. */
   listTelemetry: (input: ListTelemetryInput) =>
     invoke<TelemetryItem[]>("list_telemetry", { input }),
+  /** Exporta los datos locales a un archivo JSON. */
+  exportJson: (input?: ExportJsonInput) =>
+    input === undefined ? invoke<ExportJsonResult>("export_json") : invoke<ExportJsonResult>("export_json", { input }),
   /** Verifica la integridad de la cadena de hashes de telemetría local. */
   verifyTelemetry: (input: VerifyTelemetryInput = {}) =>
     invoke<VerifyTelemetryResult>("verify_telemetry", { input }),

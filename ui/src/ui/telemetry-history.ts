@@ -402,9 +402,30 @@ export function mountTelemetryHistory(
 
   traceBox.append(traceRow, helpLine);
 
+  const exportBox = el("div", "tele-hist-export");
+  const exportRow = el("div", "tele-hist-export-row");
+  const exportLabel = el("span", "tele-hist-label", "Export");
+  const exportButton = el("button", "button secondary tele-hist-export-button", "Export JSON");
+  exportButton.type = "button";
+  const includeLabel = el("label", "tele-hist-export-include");
+  const includeTelemetry = el("input", "tele-hist-export-checkbox");
+  includeTelemetry.type = "checkbox";
+  includeTelemetry.checked = true;
+  includeLabel.append(includeTelemetry, "Include telemetry");
+  exportRow.append(exportLabel, includeLabel, exportButton);
+  const exportHelp = el("p", "tele-hist-export-help", "Saves a JSON file on this device. It is not uploaded.");
+  const exportStatus = el("p", "tele-hist-export-status");
+  exportStatus.setAttribute("role", "status");
+  exportStatus.setAttribute("aria-live", "polite");
+  const exportPath = el("p", "tele-hist-export-path");
+  const copyButton = el("button", "button secondary tele-hist-export-copy", "Copy path");
+  copyButton.type = "button";
+  copyButton.hidden = true;
+  exportBox.append(exportRow, exportHelp, exportStatus, exportPath, copyButton);
+
   const body = el("div", "tele-hist-body");
 
-  panel.append(header, controls, statusLine, persistLine, traceBox, body);
+  panel.append(header, controls, statusLine, persistLine, traceBox, exportBox, body);
   host.replaceChildren(panel);
 
   let selectedCrewId = "";
@@ -416,6 +437,7 @@ export function mountTelemetryHistory(
   let pendingRefresh = false;
   let pendingRefreshPromise: Promise<void> | null = null;
   let resolvePendingRefresh: (() => void) | null = null;
+  let exportInFlight = false;
   let verifyInFlight = false;
   let pendingVerifyCrewId: string | null = null;
   let lastTrackedCrewId = "";
@@ -819,6 +841,43 @@ export function mountTelemetryHistory(
     void runVerify(selectedCrewId);
   }
 
+  exportButton.disabled = !isTauriRuntime();
+  includeTelemetry.disabled = !isTauriRuntime();
+
+  async function onExportClick(): Promise<void> {
+    if (destroyed || !isTauriRuntime() || exportInFlight) return;
+    exportInFlight = true;
+    exportButton.disabled = true;
+    includeTelemetry.disabled = true;
+    setText(exportStatus, "Exporting…");
+    setText(exportPath, "");
+    copyButton.hidden = true;
+    try {
+      const result = await core.exportJson({ include_telemetry: includeTelemetry.checked });
+      if (destroyed) return;
+      const c = result.counts;
+      setText(exportStatus, "Exported " + result.file_name + " · " + c.records + " records · " + c.events + " events · " + c.evaluations + " evaluations · " + c.telemetry_readings + " telemetry readings");
+      setText(exportPath, result.path);
+      copyButton.hidden = typeof navigator === "undefined" || !navigator.clipboard;
+    } catch (error) {
+      if (!destroyed) setText(exportStatus, "Export failed: " + formatError(error));
+    } finally {
+      exportInFlight = false;
+      if (!destroyed) {
+        exportButton.disabled = !isTauriRuntime();
+        includeTelemetry.disabled = !isTauriRuntime();
+      }
+    }
+  }
+
+  function onCopyPathClick(): void {
+    if (typeof navigator !== "undefined" && navigator.clipboard && exportPath.textContent) {
+      void navigator.clipboard.writeText(exportPath.textContent).catch(() => {});
+    }
+  }
+
+  exportButton.addEventListener("click", onExportClick);
+  copyButton.addEventListener("click", onCopyPathClick);
   crewSelect.addEventListener("change", onCrewChange);
   indicatorSelect.addEventListener("change", onIndicatorChange);
   refreshButton.addEventListener("click", onRefreshClick);
@@ -845,6 +904,8 @@ export function mountTelemetryHistory(
         window.clearTimeout(selectorTimer);
         selectorTimer = null;
       }
+      exportButton.removeEventListener("click", onExportClick);
+      copyButton.removeEventListener("click", onCopyPathClick);
       crewSelect.removeEventListener("change", onCrewChange);
       indicatorSelect.removeEventListener("change", onIndicatorChange);
       refreshButton.removeEventListener("click", onRefreshClick);
