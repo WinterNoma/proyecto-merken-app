@@ -875,6 +875,251 @@ fn revision4_context_mention_boundaries_leave_values_to_layer2() {
     }
 }
 
+#[test]
+fn revision5_score_links_keep_symptom_score_without_extra_indicators() {
+    // Cada variante tiene score=6 y zona head, nunca temperatura, pulso ni presión.
+    for text in [
+        "dolor de cabeza grado 6",
+        "dolor de cabeza grado nivel 6",
+        "dolor de cabeza grados 6",
+        "dolor de cabeza nivel 6",
+        "dolor de cabeza punto 6",
+        "dolor de cabeza puntos 6",
+        "dolor de cabeza puntuación 6",
+        "dolor de cabeza ritmo 6",
+        "dolor de cabeza presión 6",
+        "headache degree 6",
+        "headache degrees 6",
+        "headache grade 6",
+        "headache level 6",
+        "headache point 6",
+        "headache points 6",
+        "headache rate 6",
+        "headache rating 6",
+        "headache under pressure level 6",
+    ] {
+        let p = assert_valid(text);
+        assert_eq!(p.records.len(), 1, "{text:?}: {p:?}");
+        assert_eq!(p.records[0].indicator, Indicator::Symptom, "{text:?}");
+        assert_eq!(
+            p.records[0].value(),
+            json!({"body_zone": "head", "score": 6, "description": text}),
+            "{text:?}"
+        );
+        assert_eq!(field_quote(&p.records[0], "score"), Some("6"), "{text:?}");
+        assert!(p.uninterpreted.is_empty(), "{text:?}");
+        assert!(p.negated.is_empty(), "{text:?}");
+    }
+}
+
+#[test]
+fn revision5_generic_links_stay_with_current_indicator() {
+    // Pares indicador/valor esperados escritos a mano, sin usar interpret como oráculo.
+    for (text, indicator, expected) in [
+        ("ánimo grado 6", Indicator::Mood, json!({"score": 6})),
+        ("ánimo nivel 6", Indicator::Mood, json!({"score": 6})),
+        (
+            "ánimo bajo presión nivel 6",
+            Indicator::Mood,
+            json!({"score": 6}),
+        ),
+        ("mood degree 6", Indicator::Mood, json!({"score": 6})),
+        (
+            "mood under pressure level 6",
+            Indicator::Mood,
+            json!({"score": 6}),
+        ),
+        ("pulso ritmo 72", Indicator::HeartRate, json!({"bpm": 72})),
+        ("pulse rate 72", Indicator::HeartRate, json!({"bpm": 72})),
+        ("glucosa grado 95", Indicator::Glucose, json!({"mg_dl": 95})),
+        ("glucosa nivel 95", Indicator::Glucose, json!({"mg_dl": 95})),
+        (
+            "saturación nivel 98",
+            Indicator::OxygenInBlood,
+            json!({"percentage": 98}),
+        ),
+        (
+            "temperatura nivel 37",
+            Indicator::BodyTemperature,
+            json!({"celsius": 37}),
+        ),
+    ] {
+        let p = assert_valid(text);
+        assert_eq!(p.records.len(), 1, "{text:?}: {p:?}");
+        assert_eq!(p.records[0].indicator, indicator, "{text:?}");
+        assert_eq!(p.records[0].value(), expected, "{text:?}");
+    }
+
+    // Una acción clínica/negación introduce otra medición aunque la anterior no tenga valor.
+    for text in ["pulso sin medir presión", "pulse without pressure"] {
+        let p = assert_valid(text);
+        assert_eq!(p.records.len(), 1, "{text:?}");
+        assert_eq!(p.records[0].indicator, Indicator::HeartRate);
+        assert_eq!(p.records[0].value(), json!({}));
+        assert_eq!(p.negated.len(), 1, "{text:?}");
+    }
+
+    // Ningún enlace aislado crea una medida; tampoco sustantivos cardíacos incompletos.
+    for text in [
+        "grado 6",
+        "grados 6",
+        "degree 6",
+        "degrees 6",
+        "nivel 6",
+        "level 6",
+        "punto 6",
+        "point 6",
+        "rate 6",
+        "ritmo 6",
+        "frecuencia 6",
+        "bajo presión 6",
+        "under pressure 6",
+        "presión mental 6",
+    ] {
+        let p = assert_valid(text);
+        assert!(p.records.is_empty(), "{text:?}: {p:?}");
+        assert_eq!(p.uninterpreted, vec![text], "{text:?}");
+        for indicator in Indicator::ALL {
+            assert!(
+                !mentions_indicator(indicator, text),
+                "{indicator:?}: {text:?}"
+            );
+        }
+    }
+
+    // Una unidad ambigua pospuesta en una puntuación queda pendiente, sin crear temperatura.
+    for text in [
+        "dolor de cabeza 6 grados",
+        "headache 6 degrees",
+        "dolor de cabeza grado 6 grados",
+        "dolor de cabeza frecuencia 6",
+    ] {
+        let p = assert_valid(text);
+        assert_eq!(p.records.len(), 1, "{text:?}");
+        assert_eq!(p.records[0].indicator, Indicator::Symptom);
+        assert_eq!(field_val(&p.records[0], "score"), None, "{text:?}");
+        assert_eq!(field_val(&p.records[0], "body_zone"), Some(&json!("head")));
+    }
+}
+
+#[test]
+fn revision5_alias_audit_keeps_qualified_medical_mentions() {
+    for (text, indicator, expected) in [
+        (
+            "temperatura 37 grados",
+            Indicator::BodyTemperature,
+            json!({"celsius": 37}),
+        ),
+        (
+            "temperatura 37 grados ahora",
+            Indicator::BodyTemperature,
+            json!({"celsius": 37}),
+        ),
+        ("37 °C", Indicator::BodyTemperature, json!({"celsius": 37})),
+        (
+            "37 degrees",
+            Indicator::BodyTemperature,
+            json!({"celsius": 37}),
+        ),
+        (
+            "fiebre de 38",
+            Indicator::BodyTemperature,
+            json!({"celsius": 38}),
+        ),
+        (
+            "body temperature 37",
+            Indicator::BodyTemperature,
+            json!({"celsius": 37}),
+        ),
+        (
+            "frecuencia cardíaca 72",
+            Indicator::HeartRate,
+            json!({"bpm": 72}),
+        ),
+        (
+            "ritmo cardiaco 72",
+            Indicator::HeartRate,
+            json!({"bpm": 72}),
+        ),
+        ("heart rate 72", Indicator::HeartRate, json!({"bpm": 72})),
+        (
+            "presión 130",
+            Indicator::BloodPressure,
+            json!({"systolic": 130}),
+        ),
+        (
+            "presión 120/80",
+            Indicator::BloodPressure,
+            json!({"systolic": 120, "diastolic": 80}),
+        ),
+        (
+            "presión arterial 120/80",
+            Indicator::BloodPressure,
+            json!({"systolic": 120, "diastolic": 80}),
+        ),
+        (
+            "blood pressure 120 over 80",
+            Indicator::BloodPressure,
+            json!({"systolic": 120, "diastolic": 80}),
+        ),
+        ("blood glucose 95", Indicator::Glucose, json!({"mg_dl": 95})),
+        ("blood sugar 95", Indicator::Glucose, json!({"mg_dl": 95})),
+        (
+            "oxygen saturation 98",
+            Indicator::OxygenInBlood,
+            json!({"percentage": 98}),
+        ),
+        (
+            "blood oxygen 98",
+            Indicator::OxygenInBlood,
+            json!({"percentage": 98}),
+        ),
+        ("estado de ánimo 6", Indicator::Mood, json!({"score": 6})),
+        ("dormí 5 horas", Indicator::Sleep, json!({"hours": 5})),
+    ] {
+        let p = assert_valid(text);
+        assert_eq!(p.records.len(), 1, "{text:?}: {p:?}");
+        assert_eq!(p.records[0].indicator, indicator, "{text:?}");
+        assert_eq!(p.records[0].value(), expected, "{text:?}");
+    }
+
+    // Un indicador explícito sigue delimitando segmentos después de un síntoma puntuado.
+    for text in [
+        "dolor de cabeza grado 6 y temperatura 37 grados",
+        "temperatura 37 grados y dolor de cabeza grado 6",
+        "dolor de cabeza grado 6 temperatura 37 °C",
+        "temperatura 37 °C dolor de cabeza grado 6",
+    ] {
+        let p = assert_valid(text);
+        assert_eq!(p.records.len(), 2, "{text:?}: {p:?}");
+        let symptom = p
+            .records
+            .iter()
+            .find(|r| r.indicator == Indicator::Symptom)
+            .unwrap();
+        let temperature = p
+            .records
+            .iter()
+            .find(|r| r.indicator == Indicator::BodyTemperature)
+            .unwrap();
+        assert_eq!(field_val(symptom, "score"), Some(&json!(6)), "{text:?}");
+        assert_eq!(temperature.value(), json!({"celsius": 37}), "{text:?}");
+    }
+
+    for text in [
+        "temperatura 37 fahrenheits",
+        "temperatura 37 farenheit",
+        "temperatura 37 grados f",
+        "temperatura 37 °C/kg",
+    ] {
+        let p = assert_valid(text);
+        assert!(
+            p.records.iter().all(|r| field_val(r, "celsius").is_none()),
+            "{text:?}"
+        );
+    }
+}
+
 fn check_proposal_invariants(s: &str) -> Result<(), proptest::test_runner::TestCaseError> {
     let p = interpret(s);
     let issues = p.check(s);

@@ -1461,6 +1461,118 @@ mod tests {
                 );
             }
             assert!(crate::interpret::interpret(input).check(input).is_empty());
+
+            // Tres indicadores intermedios, distintos del corregido; ambos órdenes de valores.
+            let intermediate = if matches!(
+                indicator,
+                Indicator::HeartRate | Indicator::Glucose | Indicator::Mood
+            ) {
+                "temperatura 36 °C y distancia 420 km y nutrición 2000 kcal"
+            } else {
+                "pulso 72 y glucosa 95 mg/dL y ánimo 6/10"
+            };
+            for (old, new) in [(first, second), (second, first)] {
+                for marker in [
+                    ", perdón ",
+                    " sorry ",
+                    ", mejor dicho ",
+                    ", I mean ",
+                    ", quiero decir ",
+                    ", perdón, ",
+                ] {
+                    let interleaved = format!("{old} y {intermediate}{marker}{new}");
+                    for proposal in [&first_proposal, &second_proposal] {
+                        assert!(
+                            proposal
+                                .check(&interleaved)
+                                .iter()
+                                .any(|issue| issue.error.field == key),
+                            "corrected value accepted: {interleaved:?}: {proposal:?}"
+                        );
+                    }
+                    let rules = crate::interpret::interpret(&interleaved);
+                    assert!(rules.check(&interleaved).is_empty(), "{interleaved:?}");
+                    assert!(
+                        rules
+                            .records
+                            .iter()
+                            .filter(|r| r.indicator == indicator)
+                            .all(|r| r
+                                .fields
+                                .iter()
+                                .filter(|f| f.key != "description")
+                                .all(|f| f.value.is_none()))
+                    );
+                    // Valores intermedios escritos a mano, independientes del resultado de interpret.
+                    let preserved = if matches!(
+                        indicator,
+                        Indicator::HeartRate | Indicator::Glucose | Indicator::Mood
+                    ) {
+                        [
+                            slm_numeric(
+                                Indicator::BodyTemperature,
+                                "celsius",
+                                json!(36),
+                                "temperatura 36 °C",
+                                "36 °C",
+                            ),
+                            slm_numeric(
+                                Indicator::DistanceFromEarth,
+                                "km",
+                                json!(420),
+                                "distancia 420 km",
+                                "420 km",
+                            ),
+                            slm_numeric(
+                                Indicator::Nutrition,
+                                "kcal",
+                                json!(2000),
+                                "nutrición 2000 kcal",
+                                "2000 kcal",
+                            ),
+                        ]
+                    } else {
+                        [
+                            slm_numeric(Indicator::HeartRate, "bpm", json!(72), "pulso 72", "72"),
+                            slm_numeric(
+                                Indicator::Glucose,
+                                "mg_dl",
+                                json!(95),
+                                "glucosa 95 mg/dL",
+                                "95 mg/dL",
+                            ),
+                            slm_numeric(Indicator::Mood, "score", json!(6), "ánimo 6/10", "6/10"),
+                        ]
+                    };
+                    for expected in preserved {
+                        assert!(
+                            expected.check(&interleaved).is_empty(),
+                            "{interleaved:?}: {expected:?}"
+                        );
+                        let expected_rec = &expected.records[0];
+                        if !matches!(
+                            expected_rec.indicator,
+                            Indicator::DistanceFromEarth | Indicator::Nutrition
+                        ) {
+                            let actual = rules
+                                .records
+                                .iter()
+                                .find(|r| r.indicator == expected_rec.indicator)
+                                .unwrap();
+                            assert_eq!(
+                                actual
+                                    .fields
+                                    .iter()
+                                    .find(|f| f.key == expected_rec.fields[0].key)
+                                    .unwrap()
+                                    .value,
+                                expected_rec.fields[0].value,
+                                "{interleaved:?}"
+                            );
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1526,6 +1638,262 @@ mod tests {
                 );
                 assert!(crate::interpret::interpret(input).check(input).is_empty());
             }
+        }
+    }
+
+    #[test]
+    fn revision5_radiation_correction_orders_keep_pulse_72() {
+        let old = slm_numeric(
+            Indicator::SpaceRadiation,
+            "usv_h",
+            json!(0.42),
+            "radiación 0.42 uSv/h",
+            "0.42 uSv/h",
+        );
+        let new = slm_numeric(
+            Indicator::SpaceRadiation,
+            "usv_h",
+            json!(0.84),
+            "radiación 0.84 uSv/h",
+            "0.84 uSv/h",
+        );
+        let pulse = slm_numeric(Indicator::HeartRate, "bpm", json!(72), "pulso 72", "72");
+        // Valores y órdenes literales; ningún esperado procede del intérprete.
+        for input in [
+            "radiación 0.42 uSv/h y pulso 72, perdón radiación 0.84 uSv/h",
+            "radiación 0.84 uSv/h y pulso 72, perdón radiación 0.42 uSv/h",
+            "pulso 72 y radiación 0.42 uSv/h, perdón radiación 0.84 uSv/h",
+            "pulso 72 y radiación 0.84 uSv/h, perdón radiación 0.42 uSv/h",
+            "radiación 0.42 uSv/h y pulso 72 y glucosa 95 mg/dL y ánimo 6/10, perdón radiación 0.84 uSv/h",
+            "radiación 0.84 uSv/h y ánimo 6/10 y glucosa 95 mg/dL y pulso 72, perdón radiación 0.42 uSv/h",
+            "radiación 0.42 uSv/h pulso 72 glucosa 95 mg/dL ánimo 6/10 perdón radiación 0.84 uSv/h",
+            "radiación 0.84 uSv/h ánimo 6/10 glucosa 95 mg/dL pulso 72 sorry radiación 0.42 uSv/h",
+            "radiación 0.42 uSv/h y pulso 72, perdón, radiación 0.84 uSv/h",
+            "radiación 0.84 uSv/h y pulso 72, I mean, radiación 0.42 uSv/h",
+        ] {
+            for proposal in [&old, &new] {
+                assert!(
+                    proposal
+                        .check(input)
+                        .iter()
+                        .any(|issue| issue.error.field == "usv_h"),
+                    "{input:?}"
+                );
+            }
+            assert!(pulse.check(input).is_empty(), "{input:?}");
+            let rules = crate::interpret::interpret(input);
+            assert!(rules.check(input).is_empty(), "{input:?}");
+            let rec = rules
+                .records
+                .iter()
+                .find(|r| r.indicator == Indicator::HeartRate)
+                .unwrap();
+            assert_eq!(rec.value(), json!({"bpm": 72}), "{input:?}");
+            assert!(
+                rules
+                    .records
+                    .iter()
+                    .all(|r| r.indicator != Indicator::SpaceRadiation)
+            );
+        }
+    }
+
+    #[test]
+    fn revision5_corrections_use_latest_matching_segment_and_keep_ambiguity() {
+        let rad21 = slm_numeric(
+            Indicator::SpaceRadiation,
+            "usv_h",
+            json!(0.21),
+            "radiación 0.21 uSv/h",
+            "0.21 uSv/h",
+        );
+        let rad42 = slm_numeric(
+            Indicator::SpaceRadiation,
+            "usv_h",
+            json!(0.42),
+            "radiación 0.42 uSv/h",
+            "0.42 uSv/h",
+        );
+        let rad84 = slm_numeric(
+            Indicator::SpaceRadiation,
+            "usv_h",
+            json!(0.84),
+            "radiación 0.84 uSv/h",
+            "0.84 uSv/h",
+        );
+        let pulse72 = slm_numeric(Indicator::HeartRate, "bpm", json!(72), "pulso 72", "72");
+        let glucose95 = slm_numeric(
+            Indicator::Glucose,
+            "mg_dl",
+            json!(95),
+            "glucosa 95 mg/dL",
+            "95 mg/dL",
+        );
+        let input =
+            "radiación 0.21 uSv/h y radiación 0.42 uSv/h y pulso 72, perdón radiación 0.84 uSv/h";
+        assert!(rad21.check(input).is_empty());
+        assert!(pulse72.check(input).is_empty());
+        for p in [&rad42, &rad84] {
+            assert!(p.check(input).iter().any(|i| i.error.field == "usv_h"));
+        }
+
+        // Sin etiqueta: solo se invalida la última mención, incluso si ya era ambigua.
+        for input in [
+            "radiación 0.42 uSv/h y pulso 72, perdón 82",
+            "radiación 0.42 uSv/h y pulso 72, perdón, 82",
+            "radiación 0.42 uSv/h y pulso 72, perdón",
+            "radiación 0.42 uSv/h y pulso 72 o 73, sorry 82 o 83",
+        ] {
+            assert!(rad42.check(input).is_empty(), "{input:?}");
+            assert!(
+                pulse72.check(input).iter().any(|i| i.error.field == "bpm"),
+                "{input:?}"
+            );
+            let rules = crate::interpret::interpret(input);
+            assert!(rules.check(input).is_empty(), "{input:?}");
+            assert_eq!(rules.records.len(), 1, "{input:?}");
+            assert_eq!(rules.records[0].indicator, Indicator::HeartRate);
+            assert_eq!(rules.records[0].value(), json!({}), "{input:?}");
+        }
+
+        // Una corrección explícita no recurre al último indicador si no existe su destino.
+        let input = "pulso 72, perdón radiación 0.84 uSv/h";
+        assert!(pulse72.check(input).is_empty());
+        assert!(rad84.check(input).iter().any(|i| i.error.field == "usv_h"));
+
+        for input in [
+            "radiación 0.42 uSv/h y glucosa 95 mg/dL y pulso 72, perdón radiación 0.84 uSv/h o glucosa 105 mg/dL",
+            "radiación 0.42 uSv/h y glucosa 95 mg/dL y pulso 72, I mean glucosa 105 mg/dL or radiación 0.84 uSv/h",
+        ] {
+            let glucose105 = slm_numeric(
+                Indicator::Glucose,
+                "mg_dl",
+                json!(105),
+                "glucosa 105 mg/dL",
+                "105 mg/dL",
+            );
+            for p in [&rad42, &rad84, &glucose95, &glucose105] {
+                let key = &p.records[0].fields[0].key;
+                assert!(
+                    p.check(input).iter().any(|i| i.error.field == *key),
+                    "{input:?}: {p:?}"
+                );
+            }
+            assert!(pulse72.check(input).is_empty(), "{input:?}");
+            let rules = crate::interpret::interpret(input);
+            assert!(rules.check(input).is_empty(), "{input:?}");
+            assert_eq!(
+                rules
+                    .records
+                    .iter()
+                    .find(|r| r.indicator == Indicator::HeartRate)
+                    .unwrap()
+                    .value(),
+                json!({"bpm": 72})
+            );
+            assert!(
+                rules
+                    .records
+                    .iter()
+                    .filter(|r| r.indicator == Indicator::Glucose)
+                    .all(|r| r.value() == json!({}))
+            );
+        }
+
+        // Corrección sin etiqueta: se aplica a la última mención (glucosa), que
+        // queda pendiente junto con la alternativa explícita; el pulso anterior
+        // no se corrige y conserva 72.
+        let input = "pulso 72 y glucosa 95 mg/dL, perdón 82 o glucosa 105 mg/dL";
+        assert!(pulse72.check(input).is_empty());
+        for p in [
+            glucose95.clone(),
+            slm_numeric(Indicator::HeartRate, "bpm", json!(82), "perdón 82", "82"),
+            slm_numeric(
+                Indicator::Glucose,
+                "mg_dl",
+                json!(105),
+                "glucosa 105 mg/dL",
+                "105 mg/dL",
+            ),
+        ] {
+            let key = &p.records[0].fields[0].key;
+            assert!(
+                p.check(input).iter().any(|i| i.error.field == *key),
+                "{input:?}"
+            );
+        }
+        let rules = crate::interpret::interpret(input);
+        assert!(rules.check(input).is_empty());
+        assert_eq!(rules.records.len(), 2);
+        for r in &rules.records {
+            let expected = match r.indicator {
+                Indicator::HeartRate => json!({"bpm": 72}),
+                _ => json!({}),
+            };
+            assert_eq!(r.value(), expected);
+        }
+
+        // Alternativas de indicadores previas a una corrección implícita.
+        let input = "pulso 72 o glucosa 95 mg/dL, perdón 82";
+        for p in [&pulse72, &glucose95] {
+            let key = &p.records[0].fields[0].key;
+            assert!(p.check(input).iter().any(|i| i.error.field == *key));
+        }
+        let rules = crate::interpret::interpret(input);
+        assert!(rules.check(input).is_empty());
+        assert_eq!(rules.records.len(), 2);
+        assert!(rules.records.iter().all(|r| r.value() == json!({})));
+
+        // Las alternativas previas tampoco se resuelven por el último número encontrado.
+        let input = "radiación 0.42 o 0.50 uSv/h y pulso 72, perdón radiación 0.84 uSv/h";
+        let ambiguous42 = slm_numeric(
+            Indicator::SpaceRadiation,
+            "usv_h",
+            json!(0.42),
+            "radiación 0.42",
+            "0.42",
+        );
+        let ambiguous50 = slm_numeric(
+            Indicator::SpaceRadiation,
+            "usv_h",
+            json!(0.50),
+            "radiación 0.42 o 0.50 uSv/h",
+            "0.50 uSv/h",
+        );
+        for p in [&ambiguous42, &ambiguous50, &rad84] {
+            assert!(p.check(input).iter().any(|i| i.error.field == "usv_h"));
+        }
+        assert!(pulse72.check(input).is_empty());
+    }
+
+    #[test]
+    fn revision5_score_aliases_do_not_authorize_trimmed_temperature_or_pressure() {
+        for (input, temperature_quote) in [
+            ("dolor de cabeza grado 6", "grado 6"),
+            ("dolor de cabeza grados 6", "grados 6"),
+            ("headache degree 6", "degree 6"),
+            ("headache degrees 6", "degrees 6"),
+            ("ánimo grado 6", "grado 6"),
+        ] {
+            let p = slm_numeric(
+                Indicator::BodyTemperature,
+                "celsius",
+                json!(6),
+                temperature_quote,
+                "6",
+            );
+            assert!(!p.check(input).is_empty(), "{input:?}");
+        }
+        for input in [
+            "ánimo bajo presión nivel 6",
+            "mood under pressure level 6",
+            "dolor de cabeza presión 6",
+        ] {
+            let p = slm_numeric(Indicator::BloodPressure, "systolic", json!(6), input, "6");
+            assert!(
+                p.check(input).iter().any(|i| i.error.field == "systolic"),
+                "{input:?}"
+            );
         }
     }
 

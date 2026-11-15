@@ -1920,9 +1920,192 @@ pub fn mentions_indicator(indicator: Indicator, quote: &str) -> bool {
     (0..tokens.len()).any(|i| indicator_mention_end(indicator, &tokens, i, tokens.len()).is_some())
 }
 
+/// Enlaces de puntuación/valor: nunca constituyen por sí solos una mención clínica.
+pub(super) fn is_value_link_word(w: &str) -> bool {
+    matches!(
+        w,
+        "nivel"
+            | "level"
+            | "niveles"
+            | "levels"
+            | "intensidad"
+            | "intensity"
+            | "valor"
+            | "value"
+            | "score"
+            | "puntuacion"
+            | "rating"
+            | "grado"
+            | "grados"
+            | "grade"
+            | "grades"
+            | "degree"
+            | "degrees"
+            | "punto"
+            | "puntos"
+            | "point"
+            | "points"
+            | "rate"
+            | "ritmo"
+            | "scale"
+            | "escala"
+    )
+}
+
+/// Busca el indicador abierto más próximo, sin volver a llamar al filtro contextual.
+fn open_indicator_before(tokens: &[Token], i: usize, end: usize) -> Option<Indicator> {
+    for k in (0..i).rev() {
+        let tk = tokens.get(k)?;
+        if tk.kind == TokenKind::ClauseSep
+            || matches!(word_at(tokens, k), Some("y" | "e" | "and" | "pero" | "but"))
+        {
+            break;
+        }
+        // Un enlace rechazado no puede convertirse en el contexto de un enlace posterior.
+        if matches!(
+            word_at(tokens, k),
+            Some("grado" | "grados" | "degree" | "degrees")
+        ) && !matches!(
+            word_at(tokens, k + 1),
+            Some("c" | "celsius" | "centigrado" | "centigrados")
+        ) {
+            continue;
+        }
+        if let Some(indicator) = Indicator::ALL
+            .iter()
+            .copied()
+            .find(|&indicator| indicator_mention_end_raw(indicator, tokens, k, end).is_some())
+        {
+            let mention_end = indicator_mention_end_raw(indicator, tokens, k, end)?;
+            return (!(mention_end..i).any(|n| {
+                tokens
+                    .get(n)
+                    .is_some_and(|tk| tk.kind == TokenKind::InvalidNumber)
+                    || parse_simple_number(tokens, n).is_some()
+            }))
+            .then_some(indicator);
+        }
+    }
+    None
+}
+
+/// Aplica la misma decisión antes de segmentar, extraer o validar menciones.
+pub(super) fn ambiguous_alias_is_link(tokens: &[Token], i: usize, end: usize) -> bool {
+    let Some(tokens) = tokens.get(..end) else {
+        return false;
+    };
+    let w = word_at(tokens, i);
+    if matches!(w, Some("grado" | "grados" | "degree" | "degrees")) {
+        if matches!(
+            word_at(tokens, i + 1),
+            Some("c" | "celsius" | "centigrado" | "centigrados")
+        ) {
+            return false;
+        }
+        // Unidad pospuesta ("37 degrees"), nunca etiqueta antepuesta ("grado 6").
+        let number_start =
+            (0..i).find(|&k| parse_simple_number(tokens, k).is_some_and(|num| num.end_idx == i));
+        return number_start.is_none_or(|start| {
+            open_indicator_before(tokens, start, end)
+                .is_some_and(|indicator| indicator != Indicator::BodyTemperature)
+        });
+    }
+    if w == Some("frecuencia") && !starts_with_words(tokens, i, &["frecuencia", "cardiaca"]) {
+        return true;
+    }
+    if matches!(w, Some("presion" | "tension" | "pressure"))
+        && is_bp_keyword_at(tokens, i, end) == Some(1)
+    {
+        // "bajo presión" / "under pressure" no son una medición arterial.
+        if i.checked_sub(1)
+            .and_then(|k| word_at(tokens, k))
+            .is_some_and(|prev| matches!(prev, "bajo" | "under" | "por"))
+            || matches!(
+                word_at(tokens, i + 1),
+                Some("mental" | "emocional" | "emotional" | "laboral")
+            )
+        {
+            return true;
+        }
+        if i.checked_sub(1)
+            .and_then(|k| word_at(tokens, k))
+            .is_some_and(|prev| {
+                matches!(
+                    prev,
+                    "medir"
+                        | "medi"
+                        | "mido"
+                        | "tomar"
+                        | "tome"
+                        | "measure"
+                        | "measured"
+                        | "check"
+                        | "checked"
+                        | "sin"
+                        | "no"
+                        | "not"
+                        | "without"
+                )
+            })
+        {
+            return false;
+        }
+        // Un par o una unidad arterial aporta evidencia independiente del sustantivo ambiguo.
+        let mut value_start = i + 1;
+        while value_start < end
+            && matches!(
+                word_at(tokens, value_start),
+                Some("de" | "es" | "en" | "is" | "at" | "of")
+            )
+        {
+            value_start += 1;
+        }
+        let has_bp_value = parse_simple_number(tokens, value_start).is_some_and(|n1| {
+            matches!(word_at(tokens, n1.end_idx), Some("mmhg"))
+                || starts_with_words(tokens, n1.end_idx, &["mm", "hg"])
+                || ((tokens
+                    .get(n1.end_idx)
+                    .is_some_and(|tk| tk.kind == TokenKind::Slash)
+                    || matches!(word_at(tokens, n1.end_idx), Some("sobre" | "over")))
+                    && parse_simple_number(tokens, n1.end_idx + 1)
+                        .is_some_and(|n2| n1_n2_bp_plausible(n1.value, n2.value)))
+        });
+        return !has_bp_value
+            && open_indicator_before(tokens, i, end)
+                .is_some_and(|indicator| indicator != Indicator::BloodPressure);
+    }
+    // Un número con "grados" sin escala no inicia otra medida en un indicador abierto.
+    if let Some(num) = parse_simple_number(tokens, i)
+        && matches!(
+            word_at(tokens, num.end_idx),
+            Some("grado" | "grados" | "degree" | "degrees")
+        )
+        && !matches!(
+            word_at(tokens, num.end_idx + 1),
+            Some("c" | "celsius" | "centigrado" | "centigrados")
+        )
+    {
+        return open_indicator_before(tokens, i, end)
+            .is_some_and(|indicator| indicator != Indicator::BodyTemperature);
+    }
+    false
+}
+
+pub(crate) fn indicator_mention_end(
+    indicator: Indicator,
+    tokens: &[Token],
+    i: usize,
+    end: usize,
+) -> Option<usize> {
+    if ambiguous_alias_is_link(tokens, i, end) {
+        return None;
+    }
+    indicator_mention_end_raw(indicator, tokens, i, end)
+}
+
 /// Reconoce menciones del contrato completo, independientemente de los extractores de valores.
 /// Devuelve el fin exclusivo de la mención, respetando el límite de la cláusula.
-pub(crate) fn indicator_mention_end(
+fn indicator_mention_end_raw(
     indicator: Indicator,
     tokens: &[Token],
     i: usize,
@@ -2019,7 +2202,7 @@ pub(crate) fn indicator_mention_end(
     let matched = match indicator {
         Indicator::HeartRate => matches!(
             w,
-            "pulso" | "pulse" | "hr" | "bpm" | "lpm" | "pulsaciones" | "latidos" | "frecuencia"
+            "pulso" | "pulse" | "hr" | "bpm" | "lpm" | "pulsaciones" | "latidos"
         ),
         Indicator::BloodPressure => w == "mmhg",
         Indicator::BodyTemperature => {

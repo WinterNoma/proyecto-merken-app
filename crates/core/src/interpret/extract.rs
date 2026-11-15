@@ -3,10 +3,11 @@
 use super::{
     RULES_INTERPRETER_VERSION,
     lexicon::{
-        BoundedOccurrence, Token, TokenKind, UnitKind, has_post_unit_unknown_tail,
-        indicator_mention_end, is_bp_keyword_at, is_general_symptom_zone_word, is_hour_unit,
-        is_minute_unit, is_negated_good_sleep, is_negation_word, is_sleep_word, is_symptom_cue,
-        is_unknown_unit_after_number, match_body_zone_phrase, match_unit_at, n1_n2_bp_plausible,
+        BoundedOccurrence, Token, TokenKind, UnitKind, ambiguous_alias_is_link,
+        has_post_unit_unknown_tail, indicator_mention_end, is_bp_keyword_at,
+        is_general_symptom_zone_word, is_hour_unit, is_minute_unit, is_negated_good_sleep,
+        is_negation_word, is_sleep_word, is_symptom_cue, is_unknown_unit_after_number,
+        is_value_link_word, match_body_zone_phrase, match_unit_at, n1_n2_bp_plausible,
         parse_body_zone, parse_quote_number_with_unit, sleep_quality_word, slice_from_bytes,
         slice_tokens, starts_with_words, tokenize, truncate_chars, word_at,
     },
@@ -162,9 +163,8 @@ struct ProposalOut {
     clauses: Vec<ClauseInfo>,
     segments: Vec<AnalyzedSegment>,
     last_was_open_sleep: bool,
-    // Indicador, índice del segmento (haya o no registro L1), byte inicial.
-    last_clause_mention: Option<(Indicator, usize, usize)>,
-    pending_correction_from: Option<(Indicator, usize, usize, Option<usize>)>,
+    // Un marcador separado por comas aún no decide qué indicador se corrige.
+    pending_correction: Option<ClauseSpan>,
 }
 
 fn field_some(key: &str, value: Value, quote: String) -> ProposedField {
@@ -202,6 +202,9 @@ fn is_clause_break_word(w: &str) -> bool {
 
 fn is_indicator_or_symptom_start(tokens: &[Token], idx: usize, end: usize) -> bool {
     if idx >= end {
+        return false;
+    }
+    if ambiguous_alias_is_link(tokens, idx, end) {
         return false;
     }
     if Indicator::ALL
@@ -420,6 +423,16 @@ fn split_clauses(tokens: &[Token]) -> Vec<ClauseSpan> {
     let n = tokens.len();
 
     for (idx, tk) in tokens.iter().enumerate() {
+        // También separar correcciones sin coma: el destino puede estar varios indicadores atrás.
+        if idx > start && starts_with_correction_at(tokens, idx, n).is_some() {
+            rough.push(ClauseSpan {
+                start,
+                end: idx,
+                after_comma: next_after_comma,
+            });
+            start = idx;
+            next_after_comma = false;
+        }
         let is_sep = tk.kind == TokenKind::ClauseSep
             || (tk.kind == TokenKind::Word && is_clause_break_word(&tk.norm));
         if is_sep {
@@ -486,6 +499,9 @@ fn split_clauses(tokens: &[Token]) -> Vec<ClauseSpan> {
 
 /// Toda mención delimita segmentos, aunque no haya soporte de extracción para ella.
 fn detect_anchor(orig: &str, tokens: &[Token], idx: usize, end: usize) -> Option<RawAnchor> {
+    if ambiguous_alias_is_link(tokens, idx, end) {
+        return None;
+    }
     if let Some(anchor) = detect_extraction_anchor(orig, tokens, idx, end) {
         return Some(anchor);
     }
@@ -838,160 +854,153 @@ fn is_non_clinical_prefix_word(w: Option<&str>) -> bool {
 }
 
 fn is_safe_attribution_word(w: &str) -> bool {
-    matches!(
-        w,
-        "a" | "al"
-            | "de"
-            | "del"
-            | "en"
-            | "con"
-            | "por"
-            | "para"
-            | "como"
-            | "unos"
-            | "unas"
-            | "un"
-            | "una"
-            | "el"
-            | "la"
-            | "lo"
-            | "los"
-            | "las"
-            | "es"
-            | "fue"
-            | "era"
-            | "esta"
-            | "estuvo"
-            | "estan"
-            | "sido"
-            | "hay"
-            | "tiene"
-            | "tengo"
-            | "tenia"
-            | "tuve"
-            | "is"
-            | "are"
-            | "was"
-            | "were"
-            | "be"
-            | "been"
-            | "at"
-            | "of"
-            | "in"
-            | "on"
-            | "around"
-            | "about"
-            | "like"
-            | "for"
-            | "to"
-            | "with"
-            | "as"
-            | "the"
-            | "an"
-            | "had"
-            | "have"
-            | "got"
-            | "aproximadamente"
-            | "approx"
-            | "approximately"
-            | "casi"
-            | "cerca"
-            | "alrededor"
-            | "solo"
-            | "solamente"
-            | "only"
-            | "just"
-            | "nivel"
-            | "level"
-            | "intensidad"
-            | "intensity"
-            | "valor"
-            | "value"
-            | "score"
-            | "puntuacion"
-            | "rating"
-            | "grado"
-            | "grade"
-            | "scale"
-            | "escala"
-            | "hoy"
-            | "today"
-            | "ahora"
-            | "now"
-            | "actual"
-            | "actualmente"
-            | "currently"
-            | "muy"
-            | "bastante"
-            | "algo"
-            | "mucho"
-            | "very"
-            | "quite"
-            | "pretty"
-            | "reposo"
-            | "resting"
-            | "rest"
-            | "ayunas"
-            | "ayuno"
-            | "fasting"
-            | "postprandial"
-            | "leve"
-            | "ligero"
-            | "ligera"
-            | "suave"
-            | "moderado"
-            | "moderada"
-            | "fuerte"
-            | "intenso"
-            | "intensa"
-            | "severo"
-            | "severa"
-            | "agudo"
-            | "aguda"
-            | "mild"
-            | "slight"
-            | "moderate"
-            | "severe"
-            | "strong"
-            | "intense"
-            | "baja"
-            | "alta"
-            | "lower"
-            | "upper"
-            | "izquierda"
-            | "izquierdo"
-            | "derecha"
-            | "derecho"
-            | "left"
-            | "right"
-            | "bien"
-            | "mal"
-            | "regular"
-            | "bueno"
-            | "buena"
-            | "malo"
-            | "mala"
-            | "terrible"
-            | "horrible"
-            | "genial"
-            | "excelente"
-            | "poco"
-            | "nada"
-            | "pesimo"
-            | "pesima"
-            | "good"
-            | "well"
-            | "bad"
-            | "badly"
-            | "poor"
-            | "poorly"
-            | "fair"
-            | "ok"
-            | "okay"
-            | "great"
-            | "fine"
-            | "awful"
-    )
+    is_value_link_word(w)
+        || matches!(
+            w,
+            "a" | "al"
+                | "de"
+                | "del"
+                | "en"
+                | "con"
+                | "por"
+                | "para"
+                | "como"
+                | "unos"
+                | "unas"
+                | "un"
+                | "una"
+                | "el"
+                | "la"
+                | "lo"
+                | "los"
+                | "las"
+                | "es"
+                | "fue"
+                | "era"
+                | "esta"
+                | "estuvo"
+                | "estan"
+                | "sido"
+                | "hay"
+                | "tiene"
+                | "tengo"
+                | "tenia"
+                | "tuve"
+                | "is"
+                | "are"
+                | "was"
+                | "were"
+                | "be"
+                | "been"
+                | "at"
+                | "of"
+                | "in"
+                | "on"
+                | "around"
+                | "about"
+                | "like"
+                | "for"
+                | "to"
+                | "with"
+                | "as"
+                | "the"
+                | "an"
+                | "had"
+                | "have"
+                | "got"
+                | "aproximadamente"
+                | "approx"
+                | "approximately"
+                | "casi"
+                | "cerca"
+                | "alrededor"
+                | "solo"
+                | "solamente"
+                | "only"
+                | "just"
+                | "hoy"
+                | "today"
+                | "ahora"
+                | "now"
+                | "actual"
+                | "actualmente"
+                | "currently"
+                | "muy"
+                | "bastante"
+                | "algo"
+                | "mucho"
+                | "very"
+                | "quite"
+                | "pretty"
+                | "reposo"
+                | "resting"
+                | "rest"
+                | "ayunas"
+                | "ayuno"
+                | "fasting"
+                | "postprandial"
+                | "leve"
+                | "ligero"
+                | "ligera"
+                | "suave"
+                | "moderado"
+                | "moderada"
+                | "fuerte"
+                | "intenso"
+                | "intensa"
+                | "severo"
+                | "severa"
+                | "agudo"
+                | "aguda"
+                | "mild"
+                | "slight"
+                | "moderate"
+                | "severe"
+                | "strong"
+                | "intense"
+                | "presion"
+                | "pressure"
+                | "tension"
+                | "bajo"
+                | "under"
+                | "baja"
+                | "alta"
+                | "lower"
+                | "upper"
+                | "izquierda"
+                | "izquierdo"
+                | "derecha"
+                | "derecho"
+                | "left"
+                | "right"
+                | "bien"
+                | "mal"
+                | "regular"
+                | "bueno"
+                | "buena"
+                | "malo"
+                | "mala"
+                | "terrible"
+                | "horrible"
+                | "genial"
+                | "excelente"
+                | "poco"
+                | "nada"
+                | "pesimo"
+                | "pesima"
+                | "good"
+                | "well"
+                | "bad"
+                | "badly"
+                | "poor"
+                | "poorly"
+                | "fair"
+                | "ok"
+                | "okay"
+                | "great"
+                | "fine"
+                | "awful"
+        )
 }
 
 fn is_tight_pre_anchor_connector(w: &str) -> bool {
@@ -2346,6 +2355,41 @@ fn clear_segment_by_correction(out: &mut ProposalOut, segment_idx: usize) {
     }
 }
 
+/// Última ocurrencia original, incluso negada, ambigua o sin registro L1.
+fn previous_mention(
+    out: &ProposalOut,
+    tokens: &[Token],
+    indicator: Option<Indicator>,
+) -> Option<(usize, usize)> {
+    out.segments
+        .iter()
+        .enumerate()
+        .rev()
+        .find(|(_, seg)| indicator.is_none_or(|ind| seg.indicator == ind))
+        .and_then(|(idx, seg)| tokens.get(seg.seg_start).map(|tk| (idx, tk.start)))
+}
+
+/// Sin etiqueta, la corrección alcanza solo la última mención, sin elegir un valor nuevo.
+fn clear_implicit_correction(
+    orig: &str,
+    tokens: &[Token],
+    correction: ClauseSpan,
+    out: &mut ProposalOut,
+) {
+    let start_byte = if let Some((idx, start_byte)) = previous_mention(out, tokens, None) {
+        clear_segment_by_correction(out, idx);
+        start_byte
+    } else {
+        tokens.get(correction.start).map_or(0, |tk| tk.start)
+    };
+    let end_byte = tokens
+        .get(correction.end.saturating_sub(1))
+        .map_or(orig.len(), |tk| tk.end);
+    if let Some(quote) = slice_from_bytes(orig, start_byte, end_byte) {
+        out.uninterpreted.push(quote);
+    }
+}
+
 fn process_clause(
     orig: &str,
     tokens: &[Token],
@@ -2375,8 +2419,9 @@ fn process_clause(
     });
     if !has_non_time_word_or_num {
         out.last_was_open_sleep = false;
-        out.last_clause_mention = None;
-        out.pending_correction_from = None;
+        if let Some(correction) = out.pending_correction.take() {
+            clear_implicit_correction(orig, tokens, correction, out);
+        }
         return time_matches.first().cloned();
     }
 
@@ -2441,29 +2486,26 @@ fn process_clause(
             seg.cont_end = Some(c_end);
         }
         out.last_was_open_sleep = false;
-        out.pending_correction_from = None;
         return None;
     }
 
     if raw_anchors.is_empty() {
         out.last_was_open_sleep = false;
-        if let Some(after_corr_idx) = corr_after
-            && let Some((prev_ind, prev_seg_idx, prev_start_b)) = out.last_clause_mention
-        {
-            clear_segment_by_correction(out, prev_seg_idx);
-            if after_corr_idx >= c_end {
-                // "pulso 72, perdón, pulso 82": guardar inicio para combinarlo con la cláusula siguiente.
-                out.pending_correction_from =
-                    Some((prev_ind, prev_seg_idx, prev_start_b, Some(clause_end_byte)));
-            } else if let Some(combined) = slice_from_bytes(orig, prev_start_b, clause_end_byte) {
-                out.uninterpreted.push(combined);
-                out.pending_correction_from = None;
+        let pending = out.pending_correction.take();
+        if let Some(correction_start) = corr_after.map(|_| c_start).or(pending.map(|c| c.start)) {
+            let correction = ClauseSpan {
+                start: correction_start,
+                end: c_end,
+                after_comma: clause.after_comma,
+            };
+            if corr_after.is_some_and(|after| after >= c_end) {
+                // "perdón, radiación ...": esperar la etiqueta antes de invalidar una mención.
+                out.pending_correction = Some(correction);
+            } else {
+                clear_implicit_correction(orig, tokens, correction, out);
             }
-            out.last_clause_mention = None;
             return None;
         }
-        out.last_clause_mention = None;
-        out.pending_correction_from = None;
         if let Some(q) = slice_tokens(orig, tokens, c_start, c_end) {
             out.uninterpreted.push(q);
         }
@@ -2527,57 +2569,54 @@ fn process_clause(
         prev_anchor_end = a.end;
     }
 
-    // Corrección contigua: invalida las dos menciones originales aunque no tengan registro L1.
-    // Los demás indicadores de la cláusula conservan sus segmentos y su extracción.
-    let mut skip_corrected_first = false;
-    if let Some(first_group) = groups.first() {
-        let first_ind = first_group.kind.to_indicator();
-        let active_corr = out
-            .pending_correction_from
-            .take()
-            .map(|(ind, idx, start_b, _)| (ind, idx, start_b))
-            .filter(|(ind, _, _)| *ind == first_ind)
-            .or_else(|| {
-                if corr_after.is_some() {
-                    out.last_clause_mention
-                        .filter(|(ind, _, _)| *ind == first_ind)
-                } else {
-                    None
-                }
-            });
-        if let Some((_, prev_seg_idx, prev_start_b)) = active_corr {
-            clear_segment_by_correction(out, prev_seg_idx);
-            let corr_seg_starts = compute_seg_starts(tokens, c_start, &groups, &time_mask);
-            let seg_end = corr_seg_starts.get(1).copied().unwrap_or(c_end);
-            out.segments.push(AnalyzedSegment {
-                clause_idx,
-                seg_start: c_start,
-                seg_end,
-                cont_start: None,
-                cont_end: None,
-                anchor_start: first_group.anchor_start,
-                anchor_end: first_group.anchor_end,
-                indicator: first_ind,
-                negated: false,
-                ambiguity: SegmentAmbiguity {
-                    cleared_by_correction: true,
-                    ..Default::default()
-                },
-                record_idx: None,
-            });
-            let correction_end_byte = tokens
-                .get(seg_end.saturating_sub(1))
-                .map_or(clause_end_byte, |tk| tk.end);
-            if let Some(combined) = slice_from_bytes(orig, prev_start_b, correction_end_byte) {
-                out.uninterpreted.push(combined);
-            }
-            skip_corrected_first = true;
+    let pending = out.pending_correction.take();
+    let is_correction = corr_after.is_some() || pending.is_some();
+    // "perdón pulso ... o glucosa ..." no permite escoger entre indicadores alternativos.
+    // Una conjunción aditiva ya delimita otra cláusula y conserva sus valores.
+    let alternative_indicators = groups.windows(2).any(|pair| {
+        pair.first().zip(pair.get(1)).is_some_and(|(left, right)| {
+            (left.anchor_end..right.anchor_start)
+                .any(|k| matches!(word_at(tokens, k), Some("o" | "or")))
+        })
+    });
+    // En "perdón 82 o glucosa 105", la primera alternativa no lleva etiqueta.
+    let implicit_alternative = is_correction
+        && groups.first().is_some_and(|first| {
+            let payload_start = corr_after.unwrap_or(c_start);
+            (payload_start..first.anchor_start).any(|k| parse_simple_number(tokens, k).is_some())
+                && (payload_start..first.anchor_start)
+                    .any(|k| matches!(word_at(tokens, k), Some("o" | "or")))
+        });
+    if alternative_indicators || implicit_alternative {
+        for group in &mut groups {
+            group.has_conflict = true;
         }
     }
-    if let Some((_, _, prev_start_b, Some(corr_end_b))) = out.pending_correction_from.take()
-        && let Some(prev_uninterp) = slice_from_bytes(orig, prev_start_b, corr_end_b)
-    {
-        out.uninterpreted.push(prev_uninterp);
+    let implicit_target = if implicit_alternative {
+        previous_mention(out, tokens, None)
+    } else {
+        None
+    };
+    let corrected_count = if is_correction {
+        if alternative_indicators || implicit_alternative {
+            groups.len()
+        } else {
+            1
+        }
+    } else {
+        0
+    };
+    // Resolver todos los destinos ANTES de añadir segmentos de la corrección.
+    let correction_targets: Vec<Option<(usize, usize)>> = groups
+        .iter()
+        .take(corrected_count)
+        .map(|g| previous_mention(out, tokens, Some(g.kind.to_indicator())))
+        .collect();
+    for &(idx, _) in correction_targets.iter().flatten() {
+        clear_segment_by_correction(out, idx);
+    }
+    if let Some((idx, _)) = implicit_target {
+        clear_segment_by_correction(out, idx);
     }
 
     // Calcular límites de cada segmento, retrocediendo por negaciones locales entre anclas.
@@ -2585,15 +2624,44 @@ fn process_clause(
     let seg_starts = compute_seg_starts(tokens, c_start, &groups, &time_mask);
 
     let mut emitted_open_sleep = false;
-    let mut last_mention_in_clause: Option<(Indicator, usize, usize)> = None;
-    for (pos, g) in groups
-        .iter()
-        .enumerate()
-        .skip(usize::from(skip_corrected_first))
-    {
+    for (pos, g) in groups.iter().enumerate() {
         let seg_start = seg_starts.get(pos).copied().unwrap_or(c_start);
         let seg_end = seg_starts.get(pos + 1).copied().unwrap_or(c_end);
         if seg_start >= seg_end {
+            continue;
+        }
+        if pos < corrected_count {
+            out.segments.push(AnalyzedSegment {
+                clause_idx,
+                seg_start,
+                seg_end,
+                cont_start: None,
+                cont_end: None,
+                anchor_start: g.anchor_start,
+                anchor_end: g.anchor_end,
+                indicator: g.kind.to_indicator(),
+                negated: false,
+                ambiguity: SegmentAmbiguity {
+                    cleared_by_correction: true,
+                    ..Default::default()
+                },
+                record_idx: None,
+            });
+            let start_byte = correction_targets
+                .get(pos)
+                .copied()
+                .flatten()
+                .map(|(_, start)| start)
+                .or_else(|| pending.and_then(|c| tokens.get(c.start).map(|tk| tk.start)))
+                .or_else(|| tokens.get(seg_start).map(|tk| tk.start));
+            let end_byte = tokens
+                .get(seg_end.saturating_sub(1))
+                .map_or(clause_end_byte, |tk| tk.end);
+            if let Some(quote) =
+                start_byte.and_then(|start| slice_from_bytes(orig, start, end_byte))
+            {
+                out.uninterpreted.push(quote);
+            }
             continue;
         }
 
@@ -2643,7 +2711,6 @@ fn process_clause(
                 record_idx: None,
             });
             emitted_open_sleep = false;
-            last_mention_in_clause = None;
             continue;
         }
 
@@ -2680,7 +2747,6 @@ fn process_clause(
             AnchorKind::MentionOnly(_) => analyze_mention_only(&ctx),
         };
 
-        let seg_idx = out.segments.len();
         let seg_rec_idx = rec.as_ref().map(|_| out.records.len());
         out.segments.push(AnalyzedSegment {
             clause_idx,
@@ -2706,28 +2772,15 @@ fn process_clause(
                 out.uninterpreted.push(q);
             }
             let start_b = tokens.get(seg_start).map_or(0, |t| t.start);
-            let ind = r.indicator;
             out.records.push(r);
             out.record_start_bytes.push(start_b);
-            last_mention_in_clause = if !ambiguous {
-                Some((ind, seg_idx, start_b))
-            } else {
-                None
-            };
         } else if let Some(q) = slice_tokens(orig, tokens, seg_start, seg_end) {
             emitted_open_sleep = false;
-            last_mention_in_clause = if !ambiguous {
-                let start_b = tokens.get(seg_start).map_or(0, |t| t.start);
-                Some((g.kind.to_indicator(), seg_idx, start_b))
-            } else {
-                None
-            };
             out.uninterpreted.push(q);
         }
     }
 
     out.last_was_open_sleep = emitted_open_sleep && group_count == 1;
-    out.last_clause_mention = last_mention_in_clause;
     None
 }
 
@@ -3108,10 +3161,8 @@ fn analyze_within_limit(text: &str) -> InputAnalysis {
         carried_time = next_carried;
     }
 
-    if let Some((_, _, prev_start_b, Some(corr_end_b))) = out.pending_correction_from.take()
-        && let Some(prev_uninterp) = slice_from_bytes(text, prev_start_b, corr_end_b)
-    {
-        out.uninterpreted.push(prev_uninterp);
+    if let Some(correction) = out.pending_correction.take() {
+        clear_implicit_correction(text, &tokens, correction, &mut out);
     }
 
     if let Some(leftover_time) = carried_time {
