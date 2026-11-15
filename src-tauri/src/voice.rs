@@ -340,6 +340,8 @@ impl Drop for SttReservation {
 #[cfg(feature = "voice-stt")]
 fn stt_voice_error(error: merken_voice::VoiceError) -> StoreError {
     use merken_voice::VoiceError;
+    // Only the error kind (no audio, text or paths): visible in logcat on Android.
+    eprintln!("merken dictation error: {error:?}");
     match error {
         VoiceError::ModelMissing => slm_error("model_missing", None, strings::STT_MODEL_MISSING),
         VoiceError::AudioInvalid => slm_error("audio_invalid", None, strings::STT_AUDIO_INVALID),

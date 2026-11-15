@@ -217,17 +217,16 @@ impl KokoroPaths {
         Ok(())
     }
 }
+/// The model folder and each model file must be real entries (no symlinks).
+/// Only the entry itself is inspected: the folders above it belong to the OS, and
+/// inside an Android app SELinux blocks `lstat` on some of them (`/data/user`…),
+/// which made every model look missing on the phone.
 fn check_path(path: &Path, directory: bool) -> Result<(), VoiceError> {
-    let mut current = PathBuf::new();
-    for component in path.components() {
-        current.push(component.as_os_str());
-        let meta = std::fs::symlink_metadata(&current).map_err(|_| VoiceError::ModelMissing)?;
-        if meta.file_type().is_symlink() {
-            return Err(VoiceError::ModelMissing);
-        }
-    }
     let meta = std::fs::symlink_metadata(path).map_err(|_| VoiceError::ModelMissing)?;
-    if (directory && !meta.is_dir()) || (!directory && !meta.is_file()) {
+    if meta.file_type().is_symlink()
+        || (directory && !meta.is_dir())
+        || (!directory && !meta.is_file())
+    {
         return Err(VoiceError::ModelMissing);
     }
     Ok(())
