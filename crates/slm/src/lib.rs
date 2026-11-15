@@ -25,8 +25,9 @@ pub use engine::{
 };
 pub use error::{OutputIssue, SlmError};
 pub use explain::{
-    AI_SUGGESTION_LABEL, Document, Explainer, Explanation, MAX_EXPLANATION_CHARS, SlmExplainer,
-    validate_explanation,
+    AI_SUGGESTION_LABEL, AiNote, Document, Explainer, Explanation, FactId, FactLine,
+    MAX_NOTE_CHARS, MAX_NOTE_SENTENCES, MAX_WORDS_PER_SENTENCE, PlainEnglishPromptFormat,
+    PromptFormat, SlmExplainer, render_facts, validate_note,
 };
 pub use interpreter::{Interpreter, PROPOSAL_GBNF, SlmInterpreter};
 pub use manifest::{
