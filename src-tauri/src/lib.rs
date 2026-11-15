@@ -5,6 +5,8 @@
 //! `merken-store` y `merken-core` como argumento (RNF-03).
 //! Contrato de los comandos: `docs/api/comandos-core.md` y `ui/src/core-api.ts`.
 
+mod recommendations;
+
 use merken_core::time::Timestamp;
 use merken_slm::{
     Ficha,
@@ -139,11 +141,28 @@ async fn slm_blocking<T: Send + 'static>(
 }
 #[tauri::command]
 async fn interpret_text(
+    app: tauri::AppHandle,
     state: tauri::State<'_, SlmState>,
     input: InterpretInput,
 ) -> Result<InterpretResponse, StoreError> {
     let service = state.service.clone();
-    slm_blocking(move || handle_interpret(&service, input)).await
+    slm_blocking(move || {
+        prepare_shared_models(&app)?;
+        handle_interpret(&service, input)
+    })
+    .await
+}
+
+/// La base Qwen3 es compartida con las recomendaciones V7: nunca dos copias en
+/// memoria. En Android, además, los modelos de la APK se copian una sola vez.
+fn prepare_shared_models(app: &tauri::AppHandle) -> Result<(), StoreError> {
+    if recommendations::recommendation_busy(app) {
+        return Err(slm_error("busy", None, strings::SLM_BUSY));
+    }
+    #[cfg(target_os = "android")]
+    recommendations::ensure_models(app)
+        .map_err(|_| slm_error("model_missing", None, strings::SLM_UNAVAILABLE))?;
+    Ok(())
 }
 #[tauri::command]
 async fn explain_indicator(
@@ -154,6 +173,7 @@ async fn explain_indicator(
     let service = state.service.clone();
     let fichas = state.fichas.clone();
     slm_blocking(move || {
+        prepare_shared_models(&app)?;
         let request_id = input.request_id.clone();
         // Both mutex acquisition and SQLite/evaluation run on the blocking pool.
         let eval = with_store(&app.state::<AppState>(), |s| {
@@ -645,9 +665,16 @@ fn open_store(app: &tauri::App) -> Result<Store, Box<dyn std::error::Error>> {
 pub fn run() {
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_slm_assets::init())
         .setup(|app| {
             let store = open_store(app)?;
             app.manage(AppState(Mutex::new(store)));
+            // En Android la raíz es la carpeta donde el plugin slm-assets deja la
+            // base compartida (y el adaptador V7) copiados desde la APK.
+            #[cfg(target_os = "android")]
+            let root =
+                recommendations::android_model_root(app.handle()).map_err(std::io::Error::other)?;
+            #[cfg(not(target_os = "android"))]
             let root = if cfg!(debug_assertions) {
                 std::env::var_os("MERKEN_SLM_MODELS_DIR")
                     .map(std::path::PathBuf::from)
@@ -669,9 +696,10 @@ pub fn run() {
                 root,
                 factory,
                 Some(progress),
-                Some(merken_slm::service::granite_interpreter_manifest()),
+                Some(merken_slm::service::base_interpreter_manifest()),
             )?;
             app.manage(SlmState { service, fichas });
+            app.manage(recommendations::RecommendationState::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -698,6 +726,10 @@ pub fn run() {
             record_telemetry,
             list_telemetry,
             verify_telemetry,
+            recommendations::recommendations_cached_crew,
+            recommendations::recommendations_sync_backend,
+            recommendations::recommendations_generate,
+            recommendations::recommendations_cancel,
             export_json
         ])
         .run(tauri::generate_context!());

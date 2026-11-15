@@ -70,13 +70,13 @@ export function createVitals() {
       }
     },
     feed(state: FeedState): void {
-      const label = state.preview ? "DEMO · Fixed sample readings" : state.loading ? "Connecting…" : state.live ? "Live · " + (state.lastSuccess ? utc(state.lastSuccess, true) : "Awaiting feed")
+      const label = state.cached ? "Saved backend replay · " + (state.lastSuccess ? utc(state.lastSuccess, true) : "Synchronize a snapshot") : state.preview ? "DEMO · Fixed sample readings" : state.loading ? "Connecting…" : state.live ? "Live · " + (state.lastSuccess ? utc(state.lastSuccess, true) : "Awaiting feed")
         : state.lastSuccess ? "Last update " + utc(state.lastSuccess, true) : "Connection unavailable";
       setText(element("#feed-status"), label);
       setText(element("#feed-time"), state.lastSuccess ? "Received " + utc(state.lastSuccess) : "No data received.");
       const notice = element("#feed-notice");
       notice.hidden = state.loading || (state.live && state.crew.length > 0);
-      setText(element("#feed-message"), state.live ? "No crew available. The feed returned no crew records."
+      setText(element("#feed-message"), state.cached ? "Saved backend replay. Synchronize manually to refresh; receipt time does not establish measurement timing or health readiness." : state.live ? "No crew available. The feed returned no crew records."
         : state.lastSuccess ? "Connection unavailable. Showing the last successfully received readings." : "Connection unavailable. No crew readings have been received.");
     },
   };

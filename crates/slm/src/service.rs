@@ -48,6 +48,23 @@ pub fn v5_manifest() -> ModelManifest {
 }
 
 /// Trusted interpreter manifest embedded in the application.
+/// Intérprete con la base Qwen3 del v5 sin LoRA: es el mismo archivo que usan el
+/// v5 y las recomendaciones V7, así que en el teléfono no añade espacio.
+pub fn base_interpreter_manifest() -> ModelManifest {
+    ModelManifest {
+        model_id: "space-health-base".into(),
+        role: ModelRole::Interpreter,
+        version: "base-q4_k_m".into(),
+        package: ModelPackage::Single {
+            file: ModelFile {
+                name: "space-health-base-Q4_K_M.gguf".into(),
+                bytes: 1_107_409_120,
+                sha256: BASE_HASH.into(),
+            },
+        },
+    }
+}
+
 pub fn granite_interpreter_manifest() -> ModelManifest {
     ModelManifest {
         model_id: "granite-4.0-350m".into(),

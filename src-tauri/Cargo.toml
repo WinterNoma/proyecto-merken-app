@@ -21,13 +21,17 @@ tauri-plugin-opener = "2"
 serde.workspace = true
 serde_json.workspace = true
 merken-core.workspace = true
-merken-slm = { path = "../crates/slm" }
+merken-slm = { path = "../crates/slm", features = ["native"] }
 merken-voice = { path = "../crates/voice", optional = true }
 merken-store.workspace = true
 merken-seed.workspace = true
 merken-sync.workspace = true
+tauri-plugin-slm-assets = { path = "../plugins/slm-assets" }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [features]
-default = []
+# Rama de integración: el motor llama.cpp va activado por defecto, porque las
+# recomendaciones V7 (PR #3) lo necesitan siempre y comparten la base con el v5.
+default = ["slm-llama"]
 slm-llama = ["merken-slm/llama"]
 voice-tts = ["dep:merken-voice", "merken-voice/tts"]

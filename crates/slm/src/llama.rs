@@ -138,7 +138,9 @@ pub struct LlamaEngine {
 
 static BACKEND_STATE: OnceLock<Result<LlamaBackend, EngineErrorCode>> = OnceLock::new();
 
-fn global_backend() -> Result<&'static LlamaBackend, SlmError> {
+/// Backend único del proceso: llama.cpp solo admite un `LlamaBackend::init`,
+/// así que el motor del servicio y las recomendaciones V7 lo comparten.
+pub(crate) fn global_backend() -> Result<&'static LlamaBackend, SlmError> {
     let state = BACKEND_STATE.get_or_init(|| {
         // Silencia todos los logs de llama.cpp y ggml para no filtrar
         // prompts, salidas ni detalles internos del backend.

@@ -12,6 +12,7 @@
 //! El SLM ayuda, no decide: nunca asigna estados, ni recomienda tratamientos,
 //! ni redacta texto libre en la nota clínica.
 
+pub mod contract;
 pub mod control;
 pub mod engine;
 pub mod error;
@@ -24,6 +25,8 @@ pub mod interpreter;
 #[cfg(feature = "llama")]
 pub mod llama;
 pub mod manifest;
+#[cfg(feature = "llama")]
+pub mod runtime;
 pub mod service;
 pub mod slot;
 pub mod store;
