@@ -914,12 +914,84 @@ mod tests {
     fn deadline_expiring_inside_sanitization_loop_returns_timeout() {
         use std::sync::{
             Arc,
-            atomic::{AtomicU64, Ordering},
+            atomic::{AtomicBool, AtomicU64, Ordering},
         };
         use std::time::Instant;
 
         let input = "pulse 72";
-        // Propuesta con varios campos inválidos para forzar iteraciones en `sanitize_proposal`.
+
+        // 1. Prueba directa sobre `sanitize_proposal`: verifica que ocurre al menos una
+        // reparación antes de que venza el plazo en la siguiente iteración del bucle.
+        let mut proposal = Proposal {
+            schema_version: PROPOSAL_SCHEMA_VERSION,
+            interpreter: InterpreterKind::Slm,
+            interpreter_version: "granite-4.0-350m".to_owned(),
+            records: vec![ProposedRecord {
+                indicator: Indicator::HeartRate,
+                fields: vec![
+                    ProposedField {
+                        key: "bpm".to_owned(),
+                        value: Some(json!(0)),
+                        quote: Some("72".to_owned()),
+                    },
+                    ProposedField {
+                        key: "extra_a".to_owned(),
+                        value: Some(json!(1)),
+                        quote: Some("72".to_owned()),
+                    },
+                    ProposedField {
+                        key: "extra_b".to_owned(),
+                        value: Some(json!(2)),
+                        quote: Some("72".to_owned()),
+                    },
+                ],
+                time: TimeHint::Ambiguous {
+                    quote: "invented".to_owned(),
+                },
+                quote: "pulse 72".to_owned(),
+            }],
+            negated: vec!["invented 1".to_owned(), "invented 2".to_owned()],
+            uninterpreted: Vec::new(),
+        };
+        let initial_snapshot = proposal.clone();
+        assert!(!initial_snapshot.check(input).is_empty());
+
+        let direct_start = Instant::now();
+        let direct_checks = Arc::new(AtomicU64::new(0));
+        let direct_checks_clock = Arc::clone(&direct_checks);
+        let direct_deadline = Deadline::with_clock(
+            direct_start,
+            Duration::from_secs(5),
+            Arc::new(move || {
+                // Check 0: entrada de sanitize_proposal; Checks 1..=2: dedup_quoted(negated);
+                // Check 3: iteración 0 del bucle (primera reparación); Check 4: iteración 1 -> vence.
+                let n = direct_checks_clock.fetch_add(1, Ordering::SeqCst);
+                if n >= 4 {
+                    direct_start + Duration::from_secs(10)
+                } else {
+                    direct_start
+                }
+            }),
+        );
+        let mut direct_ctl = Control::without_progress(CancelToken::new(), direct_deadline);
+        assert_eq!(
+            sanitize_proposal(&mut proposal, input, &mut direct_ctl),
+            Err(SlmError::Timeout)
+        );
+        assert_eq!(direct_checks.load(Ordering::SeqCst), 5);
+        assert!(proposal.negated.is_empty());
+        let repaired_record = proposal.records != initial_snapshot.records;
+        assert!(
+            repaired_record,
+            "sanitize_proposal must perform at least one record repair before timing out"
+        );
+        assert!(
+            !proposal.check(input).is_empty(),
+            "timeout must interrupt sanitization before all issues are repaired"
+        );
+
+        // 2. Ruta completa `SlmInterpreter::interpret`: el reloj se arma al entrar en
+        // `Progress::Validating` y vence dentro de la iteración 1 de `sanitize_proposal`.
         let json_out = json!({
             "schema_version": 1,
             "records": [{
@@ -932,31 +1004,43 @@ mod tests {
                 "time": {"kind": "ambiguous", "quote": "invented"},
                 "quote": "pulse 72"
             }],
-            "negated": ["invented 1", "invented 2"],
+            "negated": [],
             "uninterpreted": []
         })
         .to_string();
 
         let start = Instant::now();
-        let checks = Arc::new(AtomicU64::new(0));
-        let checks_clock = Arc::clone(&checks);
+        let in_validating = Arc::new(AtomicBool::new(false));
+        let in_validating_clock = Arc::clone(&in_validating);
+        let validating_checks = Arc::new(AtomicU64::new(0));
+        let validating_checks_clock = Arc::clone(&validating_checks);
         let deadline = Deadline::with_clock(
             start,
             Duration::from_secs(5),
             Arc::new(move || {
-                let n = checks_clock.fetch_add(1, Ordering::SeqCst);
-                if n >= 12 {
+                if !in_validating_clock.load(Ordering::SeqCst) {
+                    return start;
+                }
+                // Tras Validating: 0=Validating, 1..=2=limits, 3=conversión, 4=entrada saneado,
+                // 5=iteración 0 de saneado (repara 1 fallo), 6=iteración 1 -> vence.
+                let n = validating_checks_clock.fetch_add(1, Ordering::SeqCst);
+                if n >= 6 {
                     start + Duration::from_secs(10)
                 } else {
                     start
                 }
             }),
         );
-        let mut ctl = Control::without_progress(CancelToken::new(), deadline);
+        let in_validating_cb = Arc::clone(&in_validating);
+        let mut ctl = Control::new(CancelToken::new(), deadline, move |progress| {
+            if progress == Progress::Validating {
+                in_validating_cb.store(true, Ordering::SeqCst);
+            }
+        });
         let engine = MockEngine::with_responses([json_out]);
         let mut interp = SlmInterpreter::new(engine, "granite-4.0-350m");
         assert_eq!(interp.interpret(input, &mut ctl), Err(SlmError::Timeout));
-        assert!(checks.load(Ordering::SeqCst) >= 13);
+        assert_eq!(validating_checks.load(Ordering::SeqCst), 7);
     }
 
     #[test]
