@@ -1,4 +1,4 @@
-import { core, isCoreError, type Indicator, type LogRecordInput, type ProposedRecord, type RecordValue } from "../core-api";
+import { core, dictate, isCoreError, recordDictation, type DictationRecording, type Indicator, type LogRecordInput, type ProposedRecord, type RecordValue } from "../core-api";
 import type { CorePanel } from "./core-panel";
 import { element, el, setText, utc } from "./dom";
 import { modal } from "./dialog";
@@ -124,6 +124,27 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
     close.disabled = false; save.disabled = !available; setText(close, "Discard");
     controls.open(close);
   }
+  // Offline dictation: hold to record, release to transcribe. The transcript only
+  // fills the description box and is interpreted; nothing is saved until Save.
+  let recording: DictationRecording | null = null;
+  let transcribing = false;
+  async function transcribe(active: DictationRecording): Promise<void> {
+    transcribing = true;
+    entry.dataset.voiceState = "idle";
+    setText(inlineStatus, "Transcribing on this device…");
+    try {
+      const response = await dictate(active, null);
+      const text = response.text.trim();
+      if (!text) { setText(inlineStatus, "Nothing was recognized · Try again or use Type"); return; }
+      setText(inlineStatus, "");
+      await manual();
+      if (dialog.open) await assistant.interpretInto(text, "voice");
+    } catch (error) {
+      setText(inlineStatus, (isCoreError(error) ? error.message : "Dictation failed") + " · Use Type");
+    } finally {
+      transcribing = false;
+    }
+  }
   function release(cancelled = false): void {
     if (!holding) return;
     const captured = pointer;
@@ -131,14 +152,27 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
     entry.dataset.voiceState = "idle";
     if (captured !== null && hold.hasPointerCapture(captured)) hold.releasePointerCapture(captured);
     onHolding?.(false);
-    setText(inlineStatus, cancelled ? "Preview stopped · No audio captured" : "Voice unavailable · Use Type");
+    const active = recording;
+    recording = null;
+    if (!active) { setText(inlineStatus, cancelled ? "Recording stopped" : "Voice unavailable · Use Type"); return; }
+    if (cancelled) { active.cancel(); setText(inlineStatus, "Recording cancelled · No audio kept"); return; }
+    void transcribe(active);
   }
   function begin(): boolean {
-    if (holding || busy || dialog.open) return false;
+    if (holding || busy || transcribing || dialog.open) return false;
     hold.focus({ preventScroll: true }); holding = true; hold.setAttribute("aria-pressed", "true");
     entry.dataset.voiceState = "holding";
-    setText(inlineStatus, "Visual preview · No audio captured");
     onHolding?.(true);
+    if (!available) { setText(inlineStatus, "Voice needs the installed app · Use Type"); return true; }
+    setText(inlineStatus, "Listening… release to finish");
+    const active = recordDictation();
+    recording = active;
+    active.ready.catch(() => {
+      if (recording !== active) return;
+      recording = null; active.cancel();
+      setText(inlineStatus, "Microphone unavailable · Check the permission or use Type");
+    });
+    void active.limitReached.then(() => { if (recording === active) release(); });
     return true;
   }
   hold.addEventListener("pointerdown", event => {

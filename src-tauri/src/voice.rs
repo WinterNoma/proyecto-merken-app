@@ -551,6 +551,7 @@ fn run_transcribe_blocking(
 
 #[tauri::command]
 pub async fn transcribe_audio(
+    app: tauri::AppHandle,
     state: tauri::State<'_, VoiceState>,
     input: TranscribeInput,
 ) -> Result<TranscribeResponse, StoreError> {
@@ -558,6 +559,7 @@ pub async fn transcribe_audio(
     #[cfg(not(feature = "voice-stt"))]
     {
         let _ = (
+            app,
             state,
             input.pcm_f32le_base64,
             input.sample_rate,
@@ -588,6 +590,13 @@ pub async fn transcribe_audio(
         let request_id = input.request_id;
         let pcm_b64 = input.pcm_f32le_base64;
         tauri::async_runtime::spawn_blocking(move || {
+            // En Android los modelos (Whisper incluido) vienen dentro de la APK y se
+            // copian una sola vez a la raíz de modelos antes del primer uso.
+            #[cfg(target_os = "android")]
+            crate::recommendations::ensure_models(&app)
+                .map_err(|_| slm_error("model_missing", None, strings::STT_MODEL_MISSING))?;
+            #[cfg(not(target_os = "android"))]
+            let _ = &app;
             run_transcribe_blocking(stt_inner, root, request_id, pcm_b64, sample_rate, language)
         })
         .await
