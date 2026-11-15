@@ -1,0 +1,68 @@
+#voice-dialog { width: min(440px, calc(100% - 16px)); }
+.voice-sheet .dialog-heading { align-items: center; }
+.voice-sheet .dialog-heading h2 { margin: 0; }
+.chat-scope, .chat-author {
+  color: var(--mk-accent);
+  font: 400 11px/1.4 var(--mk-font-data);
+}
+.chat-scope { margin-block: 8px 14px; }
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 130px;
+  max-height: min(42dvh, 330px);
+  padding: 2px 2px 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.chat-message {
+  align-self: flex-start;
+  max-width: 94%;
+  padding: 9px 12px;
+  border: 1px solid #63707f;
+  border-radius: 13px 13px 13px 4px;
+  background: #192229;
+  overflow-wrap: anywhere;
+  animation: chat-arrival var(--mk-duration-normal) var(--mk-ease) both;
+}
+.chat-message:not([data-author="assistant"]) {
+  align-self: flex-end;
+  border-radius: 13px 13px 4px 13px;
+  background: #334354;
+}
+.chat-message > p { margin: 3px 0 0; font-size: 14px; line-height: 1.42; white-space: pre-line; }
+.chat-review { margin-top: 9px; min-height: 44px; }
+.chat-voice-status { margin: 8px 0; color: var(--mk-text-muted); font-size: 12px; overflow-wrap: anywhere; }
+.chat-voice-status:empty { display: none; }
+.chat-compose {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 6px;
+  margin-top: 10px;
+}
+.chat-compose textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px;
+  resize: vertical;
+  border: 1px solid #8997a7;
+  border-radius: 10px;
+  background: #151a20;
+  color: var(--mk-text);
+  font-size: 16px;
+}
+.chat-compose .button { min-height: 44px; border-radius: 10px; padding-inline: 9px; }
+#chat-talk { display: grid; place-items: center; min-width: 44px; touch-action: none; user-select: none; }
+#chat-talk svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; }
+#chat-talk[aria-pressed="true"] { color: var(--mk-on-accent); background: var(--mk-accent); }
+#chat-manual { min-height: 44px; margin-top: 4px; }
+@keyframes chat-arrival {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (forced-colors: active) {
+  .chat-message, .chat-compose textarea { color: CanvasText; background: Canvas; border-color: CanvasText; }
+}

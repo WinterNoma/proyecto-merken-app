@@ -6,6 +6,7 @@ import "@fontsource/roboto-mono/latin-400.css";
 import "../../docs/brand/tokens.css";
 import "./styles.css";
 import "./hybrid.css";
+import "./assistant.css";
 import { isTauri } from "@tauri-apps/api/core";
 import { element } from "./ui/dom";
 import { createVitals } from "./ui/vitals";

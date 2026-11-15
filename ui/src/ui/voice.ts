@@ -5,6 +5,8 @@ import { modal } from "./dialog";
 import { bodyZones, zoneName } from "./body-map";
 import { indicatorName } from "./core-format";
 import { setupAssistant, type AssistSource } from "./assistant";
+import { createReadingChat, type PulseProposal } from "./reading-chat";
+import { registerDictation } from "./dictation";
 
 const fieldSelectors: Record<Indicator, Record<string, string>> = {
   heart_rate: { bpm: "#manual-a" },
@@ -23,6 +25,8 @@ const fieldSelectors: Record<Indicator, Record<string, string>> = {
 export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (active: boolean) => void): void {
   const dialog = element<HTMLDialogElement>("#voice-dialog");
   const hold = element<HTMLButtonElement>("#talk-hold");
+  const chatHold = element<HTMLButtonElement>("#chat-talk");
+  const chatStatus = element("#chat-voice-status");
   const entry = element(".voice-entry");
   const inlineStatus = element("#voice-inline-status");
   const close = element<HTMLButtonElement>("#voice-close");
@@ -43,6 +47,7 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
   let entrySource: "form" | AssistSource = "form";
   let opening = 0;
   const controls = modal(dialog, () => !busy);
+  const chat = createReadingChat(proposal => void manual(proposal));
   const indicators: Indicator[] = ["heart_rate", "blood_pressure", "oxygen_in_blood", "mood", "body_temperature", "glucose", "sleep", "nutrition", "symptom", "space_radiation", "distance_from_earth"];
   for (const indicator of indicators) { const option = el("option", "", indicatorName(indicator)); option.value = indicator; select.append(option); }
   function input(id: string, label: string, type = "number"): HTMLInputElement {
@@ -128,6 +133,12 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
   // fills the description box and is interpreted; nothing is saved until Save.
   let recording: DictationRecording | null = null;
   let transcribing = false;
+  const dictation = registerDictation(available, [{
+    button: chatHold,
+    canStart: () => dialog.open && form.hidden && !transcribing,
+    status: text => setText(chatStatus, text),
+    transcript: text => chat.transcript(text),
+  }]);
   async function transcribe(active: DictationRecording): Promise<void> {
     transcribing = true;
     entry.dataset.voiceState = "idle";
@@ -137,6 +148,11 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
       const text = response.text.trim();
       if (!text) { setText(inlineStatus, "Nothing was recognized · Try again or use Type"); return; }
       setText(inlineStatus, "");
+      if (dialog.open && form.hidden) {
+        chat.transcript(text);
+        setText(chatStatus, "Transcript ready to review.");
+        return;
+      }
       await manual();
       if (dialog.open) await assistant.interpretInto(text, "voice");
     } catch (error) {
@@ -198,13 +214,27 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
   window.addEventListener("pagehide", () => release(true));
   document.addEventListener("visibilitychange", () => { if (document.hidden) release(true); });
   close.addEventListener("click", controls.close);
-  dialog.addEventListener("close", () => { holding = false; pointer = null; opening += 1; hold.setAttribute("aria-pressed", "false"); onHolding?.(false); assistant.reset(); });
-  async function manual(): Promise<void> {
+  dialog.addEventListener("close", () => {
+    holding = false; pointer = null; opening += 1; hold.setAttribute("aria-pressed", "false"); onHolding?.(false);
+    assistant.reset(); dictation.cancel();
+  });
+  async function manual(proposal?: PulseProposal): Promise<void> {
     if (!dialog.open) openSheet();
     const revision = opening;
     release(true); entry.dataset.voiceState = "idle"; setText(inlineStatus, "");
+    dictation.cancel();
+    chat.hide();
     form.hidden = false;
-    setText(element("#voice-title"), "Type a reading");
+    entrySource = proposal?.source ?? "form";
+    setText(element("#voice-title"), proposal ? "Review reading" : "Type a reading");
+    if (proposal) {
+      select.value = "heart_rate";
+      renderFields();
+      element<HTMLInputElement>("#manual-a").value = String(proposal.bpm);
+      time.value = proposal.measuredAt.slice(0, 19);
+      note.value = "";
+      resetConfirmation();
+    }
     if (!time.value) time.value = new Date().toISOString().slice(0, 19);
     setText(element("#manual-profile"), available ? "On-device profile · Checking…" : "Browser mode");
     setText(element("#manual-availability"), available ? "Saved to the on-device profile, separate from the selected MySQL crew member." : "Local service unavailable. Entries are not recorded in the browser.");
@@ -218,7 +248,17 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
       setText(save, confirmedDraft ? "Confirm warnings and save" : warnedDemo ? "Save real data" : "Save reading");
     } else setText(result, "Local service unavailable. Your entry has been kept; try saving again.");
   }
-  element("#manual-open").addEventListener("click", () => { void manual(); });
+  element("#manual-open").addEventListener("click", () => {
+    release(true);
+    openSheet();
+    form.hidden = true;
+    setText(element("#voice-title"), "Onboard assistant");
+    setText(inlineStatus, "");
+    setText(chatStatus, "");
+    chat.show(true);
+    element("#chat-input").focus({ preventScroll: true });
+  });
+  element("#chat-manual").addEventListener("click", () => { void manual(); });
   function date(id: string): string {
     const raw = element<HTMLInputElement>(id).value;
     const parsed = new Date(raw + "Z");

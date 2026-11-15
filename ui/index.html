@@ -101,6 +101,20 @@
 <dialog id="reading-dialog" class="sheet" aria-labelledby="reading-title" tabindex="-1"><div class="dialog-heading"><h2 id="reading-title">Reading details</h2><button id="reading-close" class="button secondary" type="button">Close</button></div><div id="reading-content"></div><div class="assistant-slot"><span>Explain (assistant not loaded)</span></div></dialog>
 <dialog id="voice-dialog" class="sheet voice-sheet" aria-labelledby="voice-title" tabindex="-1">
 <div class="sheet-handle" aria-hidden="true"></div><div class="dialog-heading"><h2 id="voice-title">Type a reading</h2><button id="voice-close" class="button secondary" type="button">Discard</button></div>
+<div id="reading-chat" hidden>
+  <p class="chat-scope">On-device · Pulse entry</p>
+  <div id="chat-messages" class="chat-log" role="log" aria-label="Reading conversation"></div>
+  <p id="chat-voice-status" class="chat-voice-status" role="status"></p>
+  <form id="chat-compose" class="chat-compose">
+    <label class="sr-only" for="chat-input">Reading or reply</label>
+    <textarea id="chat-input" rows="2" maxlength="240" placeholder="Type a reading or reply"></textarea>
+    <button id="chat-talk" class="button secondary" type="button" aria-label="Hold to dictate" aria-pressed="false" aria-describedby="chat-voice-status">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg>
+    </button>
+    <button id="chat-send" type="submit" class="button primary">Send</button>
+  </form>
+  <button id="chat-manual" type="button" class="text-button">Use reading form</button>
+</div>
 <form id="manual-form" hidden>
 <p id="manual-profile" class="profile-context"></p><p id="manual-availability" class="caption"></p>
 <div id="manual-demo" class="notice" data-tone="neutral" hidden><strong>DEMO · Demo data will be removed</strong><p>Saving real data will remove the demo data.</p></div>

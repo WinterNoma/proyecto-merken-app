@@ -683,6 +683,7 @@ pub fn run() {
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_slm_assets::init())
+        .plugin(tauri_plugin_local_speech::init())
         .setup(|app| {
             let store = open_store(app)?;
             app.manage(AppState(Mutex::new(store)));

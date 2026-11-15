@@ -1,0 +1,16 @@
+[package]
+name = "tauri-plugin-local-speech"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+links = "tauri-plugin-local-speech"
+
+[dependencies]
+tauri = "2"
+serde_json.workspace = true
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[lints]
+workspace = true
