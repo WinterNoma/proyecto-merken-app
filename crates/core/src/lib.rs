@@ -47,6 +47,7 @@ pub fn validate_text(field: &str, text: &str, max_chars: usize) -> Result<(), Va
 
 pub mod effective;
 pub mod evaluate;
+pub mod interpret;
 pub mod measurement;
 pub mod plausibility;
 pub mod proposal;
