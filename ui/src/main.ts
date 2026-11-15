@@ -22,6 +22,8 @@ import { createPreviewFeed } from "./ui/visual-preview";
 import type { FeedState } from "./ui/telemetry";
 import { createAmbientParticles } from "./ui/ambient-particles";
 import { setupRecommendations } from "./ui/recommendations";
+import { core } from "./core-api";
+import type { AstronautProfile } from "./types";
 
 // A dev-only visual fixture. It never polls MySQL or invokes the local core.
 const preview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "1";
@@ -65,7 +67,24 @@ setupPages(index => {
   }
 });
 const vitals = createVitals();
-const crew = createCrewSelector(member => { vitals.render(member); dashboard.member(member); });
+// Copies the member's latest MySQL readings into the local core (DEMO), so the core
+// evaluation, Explain and Recommendations can use them. Never automatic.
+async function importToCore(member: AstronautProfile): Promise<string> {
+  const t = member.telemetry;
+  const result = await core.importCrewMember({
+    crew_id: Number(member.id), display_name: member.name, measured_at: member.measuredAt ?? null,
+    garmin_linked: member.garminLinked === true,
+    readings: {
+      heart_rate: t.heart_rate, systolic: t.blood_pressure.systolic, diastolic: t.blood_pressure.diastolic,
+      body_temperature: t.body_temperature, glucose: t.blood_sugar, oxygen_in_blood: t.oxygen_in_blood,
+      sleep_hours: t.sleep_hours, nutrition: t.nutrition, space_radiation: t.space_radiation,
+      distance_from_earth: t.distance_from_earth,
+    },
+  });
+  await panel.refresh(true);
+  return result.imported + " readings saved in the on-device core as DEMO data" + (result.rejected ? " · " + result.rejected + " outside the accepted range" : "") + ". Mood is text and is not imported.";
+}
+const crew = createCrewSelector(member => { vitals.render(member); dashboard.member(member); }, available ? importToCore : undefined);
 const renderFeed = (state: FeedState): void => {
   latestCrew = state.crew.map(member => ({ id: member.id, name: member.name }));
   // Si guardar en el dispositivo falla o va lento, el panel de historial lo dice.

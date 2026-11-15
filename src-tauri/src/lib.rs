@@ -5,6 +5,7 @@
 //! `merken-store` y `merken-core` como argumento (RNF-03).
 //! Contrato de los comandos: `docs/api/comandos-core.md` y `ui/src/core-api.ts`.
 
+mod crew_import;
 mod recommendations;
 
 use merken_core::time::Timestamp;
@@ -655,6 +656,21 @@ async fn sim_import(
     })
 }
 
+/// Lleva las últimas lecturas de un miembro de la tripulación (MySQL) al núcleo,
+/// como DEMO: sustituye la DEMO anterior y nunca se sube. Después, `get_status`.
+#[tauri::command]
+fn import_crew_member(
+    state: tauri::State<'_, AppState>,
+    input: crew_import::CrewImportInput,
+) -> Result<ImportResult, StoreError> {
+    let at = now();
+    let records = crew_import::crew_records(&input, at)?;
+    let id = crew_import::astronaut_id(input.crew_id);
+    with_store(&state, |s| {
+        s.import_synthetic(&id, input.display_name.trim(), &records, at)
+    })
+}
+
 fn open_store(app: &tauri::App) -> Result<Store, Box<dyn std::error::Error>> {
     let dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&dir)?;
@@ -725,6 +741,7 @@ pub fn run() {
             clear_demo,
             sim_list_astronauts,
             sim_import,
+            import_crew_member,
             record_telemetry,
             list_telemetry,
             verify_telemetry,

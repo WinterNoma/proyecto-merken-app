@@ -39,7 +39,8 @@ export function setupRecommendations(available: boolean): void {
     message.textContent = "Preparing the verified offline model and generating a recommendation. The first request may take longer.";
     try {
       const result = await invoke<Result>("recommendations_generate", { input: { astronaut_id: target.value || null, preferred_activity: preference.value || null } });
-      output.append(el("h3", "", result.provider === "SLM_OFFLINE" ? "Offline SLM recommendation" : "Core-directed action"));
+      output.append(el("h3", "", result.provider === "SLM_OFFLINE" ? "Offline SLM recommendation" : result.provider === "CONTRACT_RULES" ? "Recommendation from approved cards" : "Core-directed action"));
+      if (result.provider === "CONTRACT_RULES") output.append(el("p", "caption", "Chosen by the on-device rules from the approved activity cards; no AI model was used."));
       output.append(el("p", "", result.recommendation.recommendation), el("p", "caption", result.recommendation.caveat));
       output.append(el("p", "", "Snapshot status: " + result.snapshot_status + " · Core action: " + result.core_action.split("_").join(" ")));
       output.append(el("p", "caption", result.context_note), el("p", "caption", "Source: " + result.source + " · Generated " + new Date(result.generated_at).toLocaleString("en-US") + " · " + (result.elapsed_ms / 1000).toFixed(1) + " s"));

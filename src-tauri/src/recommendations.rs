@@ -452,17 +452,25 @@ pub async fn recommendations_generate(
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| {
             let urgent = packet.assessment.core_action == "IMMEDIATE_PROTOCOL";
-            let (recommendation, elapsed) = if urgent {
-                (contract::expected(&packet).map_err(err)?, 0)
-            } else {
-                let path = verified_v7_directory(&app, &model_cache).map_err(err)?;
+            // The model's answer is only accepted when it equals `contract::expected`
+            // (see `contract::accept`), so without the V7 adapter the same card comes
+            // from the contract rules directly, labelled as such.
+            let (recommendation, elapsed, provider) = if urgent {
+                (contract::expected(&packet).map_err(err)?, 0, "CORE_POLICY")
+            } else if let Ok(path) = verified_v7_directory(&app, &model_cache) {
                 release_service_model(&app).map_err(err)?;
                 let (response, _, elapsed) =
                     merken_slm::runtime::generate(&path, &packet, &cancel).map_err(err)?;
-                (response, elapsed)
+                (response, elapsed, "SLM_OFFLINE")
+            } else {
+                (
+                    contract::expected(&packet).map_err(err)?,
+                    0,
+                    "CONTRACT_RULES",
+                )
             };
             Ok(RecommendationResult {
-                provider: if urgent { "CORE_POLICY" } else { "SLM_OFFLINE" }.into(),
+                provider: provider.into(),
                 generated_at: now().to_rfc3339(),
                 source: packet.source,
                 core_action: packet.assessment.core_action,

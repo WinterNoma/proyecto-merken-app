@@ -203,7 +203,11 @@ export function parseCrew(payload: unknown): AstronautProfile[] {
     };
     if ("hrv" in row) telemetry.hrv = reading(row.hrv);
     if ("body_battery" in row) telemetry.body_battery = reading(row.body_battery);
-    return invalidReadings.length ? { id, name, telemetry, invalid: invalidReadings } : { id, name, telemetry };
+    const sync = typeof row.garmin_last_sync === "string" && Number.isFinite(Date.parse(row.garmin_last_sync)) ? row.garmin_last_sync : null;
+    const link = row.garmin_linked;
+    const garminLinked = link === true || link === 1 || (object(link) && Array.isArray(link.data) && link.data[0] === 1);
+    const base = { id, name, telemetry, measuredAt: sync, garminLinked };
+    return invalidReadings.length ? { ...base, invalid: invalidReadings } : base;
   });
 }
 

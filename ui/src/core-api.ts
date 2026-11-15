@@ -300,6 +300,19 @@ export interface SimImportInput {
   token?: string;
 }
 
+export interface CrewImportInput {
+  crew_id: number;
+  display_name: string;
+  measured_at: string | null;
+  garmin_linked: boolean;
+  readings: {
+    heart_rate: number | null; systolic: number | null; diastolic: number | null;
+    body_temperature: number | null; glucose: number | null; oxygen_in_blood: number | null;
+    sleep_hours: number | null; nutrition: number | null; space_radiation: number | null;
+    distance_from_earth: number | null;
+  };
+}
+
 export interface SimImportResult {
   astronaut_id: string;
   display_name: string;
@@ -469,6 +482,8 @@ export const core = {
   /** Descarga los registros de un astronauta simulado y los guarda como DEMO
    *  (sustituye la DEMO anterior, nunca se suben). Después llama a getStatus(). */
   simImport: (input: SimImportInput) => invoke<SimImportResult>("sim_import", { input }),
+  /** Lleva las últimas lecturas de un miembro de MySQL al núcleo como DEMO (sustituye la DEMO anterior). */
+  importCrewMember: (input: CrewImportInput) => invoke<SimImportResult>("import_crew_member", { input }),
   /** Registra un lote (1..=64) de lecturas de telemetría en la cadena local. */
   recordTelemetry: (input: RecordTelemetryInput) =>
     invoke<RecordTelemetryResult>("record_telemetry", { input }),
