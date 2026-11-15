@@ -36,3 +36,30 @@ The positional voice, speed and thread count are optional, in that order. The ex
 Licenses: Kokoro Apache-2.0, sherpa-onnx Apache-2.0, ONNX Runtime MIT. Check the notices included with the specific binaries and model package for attribution and distribution requirements.
 
 To check normalization vocabulary against the installed lexicons, set `MERKEN_KOKORO_DIR` to the model directory and run `cargo test -p merken-voice installed_lexicons_cover_normalizer_vocabulary -- --ignored`.
+
+## Offline speech recognition (STT)
+
+Enable the `stt` feature to transcribe locally with sherpa-onnx. Whisper is the
+project default; base and small packages use `base-*` or `small-*` filenames,
+with matching `<name>-encoder.int8.onnx`, `<name>-decoder.int8.onnx` and
+`<name>-tokens.txt`. An unquantized `-encoder.onnx` / `-decoder.onnx` pair is
+also supported. A complete int8 pair takes precedence. Whisper base fails on
+Spanish; small improves Spanish recognition.
+
+Canary is a secondary option using `encoder.int8.onnx`, `decoder.int8.onnx`
+and `tokens.txt`. It transcribes Spanish well but writes numbers as words,
+while the core only understands digits. Canary's `auto` language defaults to
+Spanish because Canary does not detect the language. Use one complete model
+per directory: ambiguous directories are rejected.
+
+The engine accepts mono normalized f32 audio from 8,000 to 48,000 Hz, between
+0.1 and 30 seconds, and returns trimmed text without saving or postprocessing
+it. The WAV example truncates recordings over 30 seconds:
+
+```text
+cargo run -p merken-voice --features stt --example transcribe -- <model_dir> <mono.wav> [es|en|auto]
+```
+
+Stable errors include `model_missing`, `load_failed`, `unavailable`,
+`audio_invalid`, and `transcription_failed`. Changing the requested language
+recreates the recognizer.
