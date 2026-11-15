@@ -115,7 +115,7 @@ fn invalid(field: impl Into<String>, message: impl Into<String>) -> StoreError {
     }
 }
 
-fn validate_astronaut_key(key: &str, field: &str) -> Result<(), StoreError> {
+pub(crate) fn validate_astronaut_key(key: &str, field: &str) -> Result<(), StoreError> {
     let chars = key.chars().count();
     if chars == 0 || chars > MAX_ASTRONAUT_KEY_CHARS || key.trim().is_empty() {
         return Err(invalid(
@@ -702,9 +702,21 @@ impl Store {
         if let Some(key) = &astronaut_key {
             validate_astronaut_key(key, "astronaut_key")?;
         }
-
         let tx = self.conn.unchecked_transaction()?;
-        let heads = load_telemetry_heads(&tx, astronaut_key.as_deref())?;
+        let result = verify_telemetry_in(&tx, astronaut_key)?;
+        tx.commit()?;
+        Ok(result)
+    }
+}
+
+/// Verifica la cadena usando una conexión o transacción ya abierta, para que el
+/// exportador pueda verificar en el mismo snapshot que usa para leer las filas.
+pub(crate) fn verify_telemetry_in(
+    tx: &rusqlite::Connection,
+    astronaut_key: Option<String>,
+) -> Result<VerifyTelemetryResult, StoreError> {
+    {
+        let heads = load_telemetry_heads(tx, astronaut_key.as_deref())?;
 
         let (sql, sql_params): (&str, Vec<rusqlite::types::Value>) = match astronaut_key {
             Some(key) => (
@@ -807,7 +819,6 @@ impl Store {
             None => (None, None),
         };
 
-        tx.commit()?;
         Ok(VerifyTelemetryResult {
             ok: problem.is_none(),
             checked,

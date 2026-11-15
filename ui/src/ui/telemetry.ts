@@ -6,6 +6,7 @@ import {
   type TelemetryValue,
 } from "../core-api";
 import type { AstronautProfile, AstronautTelemetry, BloodPressure } from "../types";
+import { invoke } from "@tauri-apps/api/core";
 
 export type TelemetryPersistStatusKind = "ok" | "slow" | "error";
 
@@ -31,6 +32,8 @@ export interface ReadingBatchValidation {
 }
 
 export interface FeedState {
+  /** Saved backend replay, not a live sensor observation. */
+  cached?: boolean;
   /** Dev-only fixed synthetic readings, never a live feed. */
   preview?: boolean;
   crew: AstronautProfile[];
@@ -204,6 +207,18 @@ export function parseCrew(payload: unknown): AstronautProfile[] {
   });
 }
 
+/** Map backend names without inventing sensor timestamps or converting dose to rate. */
+export function backendRowsForReplay(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  return rows.map(row => ({
+    id: row.id, astronaut_name: row.astronautName, heart_rate: row.heartRate,
+    blood_pressure: row.bloodPressure, oxygen_in_blood: row.oxygenInBlood,
+    blood_sugar: row.bloodSugar, body_temperature: row.bodyTemperature,
+    sleep_hours: row.sleepHours, hrv: row.hrv, body_battery: row.bodyBattery, mood: row.mood,
+    // Backend mSv is accumulated dose, not the app's µSv/h. Intake window is unverified.
+    space_radiation: null, nutrition: null, distance_from_earth: row.distanceFromEarth,
+  }));
+}
+
 /** Construye y valida cada lectura por separado: excluye las inválidas sin afectar al resto del lote. */
 export function partitionCrewReadings(crew: AstronautProfile[]): ReadingBatchValidation {
   const readings: TelemetryReadingInput[] = [];
@@ -301,7 +316,7 @@ function formatError(error: unknown): string {
   return String(error);
 }
 
-export function createTelemetryFeed(onUpdate: (state: FeedState) => void) {
+export function createTelemetryFeed(onUpdate: (state: FeedState) => void, cacheOnly = false) {
   let state: FeedState = {
     crew: [],
     loading: true,
@@ -483,6 +498,13 @@ export function createTelemetryFeed(onUpdate: (state: FeedState) => void) {
     const timeout = window.setTimeout(() => controller?.abort(), 8000);
     let crewToPersist: AstronautProfile[] | null = null;
     try {
+      if (cacheOnly) {
+        const cache = await invoke<{received_at: string; crew: Record<string, unknown>[]} | null>("recommendations_cached_crew");
+        if (stopped) return;
+        const crew = cache ? parseCrew(backendRowsForReplay(cache.crew)) : [];
+        state = {...state, crew, loading: false, live: false, cached: true, lastSuccess: cache ? new Date(cache.received_at) : null};
+        return; // Never re-record cached values as newly observed telemetry.
+      }
       const response = await fetch("/api/astronauts", { signal: controller.signal, cache: "no-store" });
       if (!response.ok) throw new Error("Crew request failed");
       const crew = parseCrew(await response.json());
@@ -504,13 +526,16 @@ export function createTelemetryFeed(onUpdate: (state: FeedState) => void) {
   }
   onUpdate(state);
   void refresh();
-  const timer = window.setInterval(() => { void refresh(); }, 2000);
+  const timer = cacheOnly ? null : window.setInterval(() => { void refresh(); }, 2000);
+  const saved = (): void => { void refresh(); };
+  if (cacheOnly) window.addEventListener("merken:backend-snapshot", saved);
   return {
     refresh,
     stop(): void {
       stopped = true;
       pendingBatch = null;
-      window.clearInterval(timer);
+      if (timer !== null) window.clearInterval(timer);
+      if (cacheOnly) window.removeEventListener("merken:backend-snapshot", saved);
       controller?.abort();
       clearActiveIpcTimer?.();
     },

@@ -62,7 +62,7 @@ export function setupRecommendations(available: boolean): void {
     event.preventDefault(); if (busy) return; connect.disabled = true; clear();
     const credentials = { username: username.value, password: password.value }; password.value = "";
     message.textContent = "Synchronizing measurements only; no cloud inference is requested.";
-    try { const cache = await invoke<Cache>("recommendations_sync_backend", { input: credentials }); roster(cache); message.textContent = "Snapshot saved. You can disconnect and press Recommendations."; }
+    try { const cache = await invoke<Cache>("recommendations_sync_backend", { input: credentials }); roster(cache); window.dispatchEvent(new Event("merken:backend-snapshot")); message.textContent = "Snapshot saved. You can disconnect and press Recommendations."; }
     catch (error) { message.textContent = typeof error === "object" && error !== null && "message" in error ? String(error.message) : String(error); }
     finally { credentials.password = ""; connect.disabled = !available; }
   });
