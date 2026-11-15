@@ -2497,6 +2497,7 @@ dependencies = [
  "merken-slm",
  "merken-store",
  "merken-sync",
+ "merken-voice",
  "serde",
  "serde_json",
  "tauri",
