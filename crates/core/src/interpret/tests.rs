@@ -677,6 +677,96 @@ fn public_lexicon_helpers_behave_conservatively() {
     assert!(!mentions_indicator(Indicator::HeartRate, "6"));
 }
 
+#[test]
+fn revision2_regressions_attribution_units_time_sleep_negation_correction() {
+    // 1. Atribución no atraviesa otro predicado ("pulso desconocido tras 6 flexiones" -> sin bpm)
+    let p = assert_valid("pulso desconocido tras 6 flexiones");
+    assert_eq!(p.records.len(), 1);
+    assert_eq!(p.records[0].indicator, Indicator::HeartRate);
+    assert_eq!(field_val(&p.records[0], "bpm"), None);
+
+    let p = assert_valid("pulso desconocido tras 6");
+    assert_eq!(p.records.len(), 1);
+    assert_eq!(field_val(&p.records[0], "bpm"), None);
+
+    // 2. Duración previa a otro verbo/predicado ("trabajé 5 horas antes de dormir mal" -> Sleep sin hours)
+    let p = assert_valid("trabajé 5 horas antes de dormir mal");
+    assert_eq!(p.records.len(), 1);
+    assert_eq!(p.records[0].indicator, Indicator::Sleep);
+    assert_eq!(field_val(&p.records[0], "quality"), Some(&json!("poor")));
+    assert_eq!(field_val(&p.records[0], "hours"), None);
+
+    // 3. Unidad desconocida o Fahrenheit (!= ausencia de unidad): sin celsius
+    for txt in ["temperatura 98.6 degF", "temperatura 98.6 ℉", "98.6 ℉"] {
+        let p = assert_valid(txt);
+        assert!(
+            p.records.iter().all(|r| field_val(r, "celsius").is_none()),
+            "unexpected celsius value for {txt:?}: {p:?}"
+        );
+    }
+
+    // 4. Reloj incompleto ("me duele la cabeza a las 08:") -> sin score, tiempo ambiguo
+    let p = assert_valid("me duele la cabeza a las 08:");
+    assert_eq!(p.records.len(), 1);
+    assert_eq!(p.records[0].indicator, Indicator::Symptom);
+    assert_eq!(field_val(&p.records[0], "score"), None);
+    assert_eq!(
+        p.records[0].time,
+        TimeHint::Ambiguous {
+            quote: "a las 08:".to_owned()
+        }
+    );
+
+    // 5. Excepción "no dormí bien" solo para esa construcción; no contaminar bien + otra negación
+    let p = assert_valid("dormí bien no tuve pesadillas");
+    assert_eq!(p.records.len(), 1);
+    assert_eq!(p.records[0].indicator, Indicator::Sleep);
+    assert_eq!(field_val(&p.records[0], "quality"), Some(&json!("good")));
+    assert!(p.negated.is_empty());
+
+    let p = assert_valid("dormí bien sin interrupciones");
+    assert_eq!(p.records.len(), 1);
+    assert_eq!(p.records[0].indicator, Indicator::Sleep);
+    assert_eq!(field_val(&p.records[0], "quality"), Some(&json!("good")));
+    assert!(p.negated.is_empty());
+
+    let p = assert_valid("no dormí bien");
+    assert_eq!(p.records.len(), 1);
+    assert_eq!(field_val(&p.records[0], "quality"), Some(&json!("poor")));
+
+    // 6. Modales negativos y contracciones en inglés
+    for txt in [
+        "I can't measure pulse 72",
+        "I cannot measure pulse 72",
+        "I won't measure pulse 72",
+        "I didn't check pulse 72",
+        "I haven't measured pulse 72",
+    ] {
+        let p = assert_valid(txt);
+        assert!(
+            p.records.is_empty(),
+            "expected no positive records for {txt:?}: {p:?}"
+        );
+        assert!(
+            !p.negated.is_empty(),
+            "expected negated mention for {txt:?}: {p:?}"
+        );
+    }
+
+    // 7. Corrección entre cláusulas contiguas: nunca dos registros positivos
+    let p = assert_valid("pulso 72, perdón pulso 82");
+    assert_eq!(p.records.len(), 1);
+    assert_eq!(p.records[0].indicator, Indicator::HeartRate);
+    assert_eq!(field_val(&p.records[0], "bpm"), None);
+    assert_eq!(p.uninterpreted, vec!["pulso 72, perdón pulso 82"]);
+
+    // 8. hours = 0 vuelve a ser válido en capa 1 en sintonía con units::Hours
+    let p = assert_valid("dormí 0 horas");
+    assert_eq!(p.records.len(), 1);
+    assert_eq!(p.records[0].indicator, Indicator::Sleep);
+    assert_eq!(field_val(&p.records[0], "hours"), Some(&json!(0)));
+}
+
 fn check_proposal_invariants(s: &str) -> Result<(), proptest::test_runner::TestCaseError> {
     let p = interpret(s);
     let issues = p.check(s);
