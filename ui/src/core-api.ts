@@ -389,6 +389,8 @@ export interface VerifyTelemetryResult {
   series_checked: number;
   first_bad_reading_id: number | null;
   problem: TelemetryProblem | null;
+  /** Mayor `reading_id` comprobado en la verificación; `null` si no hay referencia o cadena vacía. */
+  checked_through_reading_id: number | null;
 }
 
 export const core = {

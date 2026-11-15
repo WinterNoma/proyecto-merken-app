@@ -465,6 +465,29 @@ dialog::backdrop { background: #05090ebd; }
 .tele-hist-status[data-tone="alarm"] {
   color: var(--mk-alarm);
 }
+.tele-hist-persist {
+  margin: 0;
+  padding: 5px 9px;
+  border-left: 2px solid var(--mk-state-ink, var(--mk-neutral));
+  border-radius: 6px;
+  background: var(--mk-state-fill, transparent);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--mk-state-ink, var(--mk-text-muted));
+  overflow-wrap: anywhere;
+}
+.tele-hist-persist[data-tone="ok"] {
+  --mk-state-ink: var(--mk-ok);
+  --mk-state-fill: var(--mk-ok-bg);
+}
+.tele-hist-persist[data-tone="warn"] {
+  --mk-state-ink: var(--mk-warn);
+  --mk-state-fill: var(--mk-warn-bg);
+}
+.tele-hist-persist[data-tone="alarm"] {
+  --mk-state-ink: var(--mk-alarm);
+  --mk-state-fill: var(--mk-alarm-bg);
+}
 .tele-hist-trace-box {
   display: flex;
   flex-direction: column;

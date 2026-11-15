@@ -66,6 +66,8 @@ const vitals = createVitals();
 const crew = createCrewSelector(member => { vitals.render(member); dashboard.member(member); });
 const renderFeed = (state: FeedState): void => {
   latestCrew = state.crew.map(member => ({ id: member.id, name: member.name }));
+  // Si guardar en el dispositivo falla o va lento, el panel de historial lo dice.
+  history?.setPersistStatus(state.persist ?? null);
   crew.update(state);
   vitals.feed(state);
   dashboard.feed(state);
