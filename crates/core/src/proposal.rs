@@ -19,10 +19,12 @@ use crate::{
     ErrorCode, ValidationError,
     catalog::{BodyZone, Indicator, SleepQuality},
     interpret::{
-        BoundedOccurrence, Token, check_numeric_unit_around_occurrence,
-        find_token_bounded_occurrences_with_tokens, has_token_bounded_occurrence, interpret,
-        is_single_clause_quote, mentions_indicator, occurrence_is_negated_in_input, quote_number,
-        quote_sleep_quality, quote_unit_compatible, quote_zone, tokenize,
+        AnalyzedSegment, BoundedOccurrence, InputAnalysis, analyze_input_for_check,
+        check_fallback_field_attribution, check_field_attribution_in_segment,
+        check_numeric_unit_around_occurrence, find_token_bounded_occurrences_with_tokens,
+        has_token_bounded_occurrence, is_single_clause_quote, mentions_indicator,
+        occurrence_is_negated_in_input, quote_number, quote_sleep_quality, quote_unit_compatible,
+        quote_zone,
     },
     measurement::Measurement,
     validate_text,
@@ -177,13 +179,95 @@ fn json_values_compatible(key: &str, proposed: &Value, l1: &Value) -> bool {
 }
 
 #[allow(clippy::too_many_arguments)]
+fn check_field_occurrence_against_analysis(
+    input: &str,
+    analysis: &InputAnalysis,
+    rec: &ProposedRecord,
+    valid_rec_occs: &[BoundedOccurrence],
+    f: &ProposedField,
+    val: &Value,
+    fq: &str,
+    fq_occ: &BoundedOccurrence,
+    is_numeric: bool,
+) -> bool {
+    let ro = if valid_rec_occs.is_empty() {
+        None
+    } else {
+        let Some(found_ro) = valid_rec_occs
+            .iter()
+            .find(|ro| fq_occ.first_tok >= ro.first_tok && fq_occ.last_tok <= ro.last_tok)
+        else {
+            return false;
+        };
+        Some(found_ro)
+    };
+
+    if is_numeric
+        && !check_numeric_unit_around_occurrence(
+            input,
+            &analysis.tokens,
+            rec.indicator,
+            fq,
+            fq_occ.first_tok,
+            fq_occ.last_tok,
+        )
+    {
+        return false;
+    }
+
+    let seg_opt: Option<&AnalyzedSegment> = analysis
+        .segments
+        .iter()
+        .find(|seg| seg.contains_occ(fq_occ));
+
+    if let Some(seg) = seg_opt {
+        if seg.indicator != rec.indicator || seg.negated || seg.field_is_ambiguous(&f.key) {
+            return false;
+        }
+        let l1_val = seg
+            .record_idx
+            .and_then(|idx| analysis.proposal.records.get(idx))
+            .and_then(|lr| lr.fields.iter().find(|lf| lf.key == f.key))
+            .and_then(|lf| lf.value.as_ref());
+        if let Some(l1_v) = l1_val {
+            return json_values_compatible(&f.key, val, l1_v);
+        }
+        if is_numeric {
+            return check_field_attribution_in_segment(
+                input,
+                analysis,
+                seg,
+                rec.indicator,
+                &f.key,
+                fq,
+                fq_occ,
+            );
+        }
+        return true;
+    }
+
+    if let Some(ro) = ro {
+        if analysis
+            .segments
+            .iter()
+            .any(|s| s.indicator == rec.indicator && s.overlaps_occ(ro))
+            || analysis.segments.iter().any(|s| s.overlaps_occ(fq_occ))
+        {
+            return false;
+        }
+        return check_fallback_field_attribution(&analysis.tokens, ro, fq_occ);
+    }
+
+    true
+}
+
+#[allow(clippy::too_many_arguments)]
 fn check_present_field(
     at: Option<usize>,
     input: &str,
-    input_tokens: &[Token],
+    analysis: &InputAnalysis,
     rec: &ProposedRecord,
     valid_rec_occs: &[BoundedOccurrence],
-    l1_same_indicator: &[&ProposedRecord],
     f: &ProposedField,
     val: &Value,
     out: &mut Vec<ProposalIssue>,
@@ -214,32 +298,6 @@ fn check_present_field(
         ));
     }
 
-    if f.key != "description"
-        && !l1_same_indicator.is_empty()
-        && let Some(l1_vals) = Some(
-            l1_same_indicator
-                .iter()
-                .filter_map(|lr| {
-                    lr.fields
-                        .iter()
-                        .find(|lf| lf.key == f.key)
-                        .and_then(|lf| lf.value.as_ref())
-                })
-                .collect::<Vec<_>>(),
-        )
-        .filter(|vals| !vals.is_empty())
-        && !l1_vals
-            .iter()
-            .any(|l1_v| json_values_compatible(&f.key, val, l1_v))
-    {
-        out.push(issue(
-            at,
-            &f.key,
-            ErrorCode::InvalidValue,
-            "Field value conflicts with deterministic interpretation",
-        ));
-    }
-
     match f.key.as_str() {
         "bpm" | "systolic" | "diastolic" | "celsius" | "mg_dl" | "hours" | "percentage"
         | "usv_h" | "km" | "kcal" | "score" => {
@@ -255,25 +313,22 @@ fn check_present_field(
             if let Some(fq) = valid_quote {
                 let fq_occs = find_token_bounded_occurrences_with_tokens(
                     input,
-                    input_tokens,
+                    &analysis.tokens,
                     fq,
                     allow_bp_slash,
                 );
-                let in_valid_rec_occ = |occ: &BoundedOccurrence| {
-                    valid_rec_occs.is_empty()
-                        || valid_rec_occs
-                            .iter()
-                            .any(|ro| occ.first_tok >= ro.first_tok && occ.last_tok <= ro.last_tok)
-                };
                 let matching_occ_and_unit = fq_occs.iter().any(|fq_occ| {
-                    in_valid_rec_occ(fq_occ)
-                        && check_numeric_unit_around_occurrence(
-                            input,
-                            input_tokens,
-                            rec.indicator,
-                            fq,
-                            fq_occ.last_tok,
-                        )
+                    check_field_occurrence_against_analysis(
+                        input,
+                        analysis,
+                        rec,
+                        valid_rec_occs,
+                        f,
+                        val,
+                        fq,
+                        fq_occ,
+                        true,
+                    )
                 });
                 let backed = quote_number(fq).is_some_and(|q| (q - num).abs() <= QUOTE_TOLERANCE)
                     && quote_unit_compatible(rec.indicator, fq)
@@ -298,15 +353,30 @@ fn check_present_field(
                 ));
                 return;
             };
-            if let Some(fq) = valid_quote
-                && quote_sleep_quality(fq) != Some(quality)
-            {
-                out.push(issue(
-                    at,
-                    &f.key,
-                    ErrorCode::InvalidValue,
-                    "Sleep quality is not backed by its quote",
-                ));
+            if let Some(fq) = valid_quote {
+                let fq_occs =
+                    find_token_bounded_occurrences_with_tokens(input, &analysis.tokens, fq, false);
+                let matching_occ = fq_occs.iter().any(|fq_occ| {
+                    check_field_occurrence_against_analysis(
+                        input,
+                        analysis,
+                        rec,
+                        valid_rec_occs,
+                        f,
+                        val,
+                        fq,
+                        fq_occ,
+                        false,
+                    )
+                });
+                if quote_sleep_quality(fq) != Some(quality) || !matching_occ {
+                    out.push(issue(
+                        at,
+                        &f.key,
+                        ErrorCode::InvalidValue,
+                        "Sleep quality is not backed by its quote",
+                    ));
+                }
             }
         }
         "body_zone" => {
@@ -319,15 +389,30 @@ fn check_present_field(
                 ));
                 return;
             };
-            if let Some(fq) = valid_quote
-                && quote_zone(fq) != Some(zone)
-            {
-                out.push(issue(
-                    at,
-                    &f.key,
-                    ErrorCode::InvalidValue,
-                    "Body zone is not backed by its quote",
-                ));
+            if let Some(fq) = valid_quote {
+                let fq_occs =
+                    find_token_bounded_occurrences_with_tokens(input, &analysis.tokens, fq, false);
+                let matching_occ = fq_occs.iter().any(|fq_occ| {
+                    check_field_occurrence_against_analysis(
+                        input,
+                        analysis,
+                        rec,
+                        valid_rec_occs,
+                        f,
+                        val,
+                        fq,
+                        fq_occ,
+                        false,
+                    )
+                });
+                if quote_zone(fq) != Some(zone) || !matching_occ {
+                    out.push(issue(
+                        at,
+                        &f.key,
+                        ErrorCode::InvalidValue,
+                        "Body zone is not backed by its quote",
+                    ));
+                }
             }
         }
         "description" => {
@@ -414,29 +499,20 @@ impl Proposal {
                 ));
             }
         }
-        let input_tokens = tokenize(input);
+        let analysis = analyze_input_for_check(input);
         for (i, rec) in self.records.iter().enumerate() {
             let at = Some(i);
-            let rec_occs =
-                find_token_bounded_occurrences_with_tokens(input, &input_tokens, &rec.quote, false);
+            let rec_occs = find_token_bounded_occurrences_with_tokens(
+                input,
+                &analysis.tokens,
+                &rec.quote,
+                false,
+            );
             let valid_rec_occs: Vec<BoundedOccurrence> = rec_occs
                 .iter()
                 .copied()
-                .filter(|occ| {
-                    !occurrence_is_negated_in_input(input, &input_tokens, occ, rec.indicator)
-                })
+                .filter(|occ| !occurrence_is_negated_in_input(&analysis, input, occ, rec.indicator))
                 .collect();
-            let l1 = interpret(&rec.quote);
-            let l1_same_indicator: Vec<&ProposedRecord> = l1
-                .records
-                .iter()
-                .filter(|r| r.indicator == rec.indicator)
-                .collect();
-            let l1_negated_rec = l1
-                .negated
-                .iter()
-                .any(|nq| mentions_indicator(rec.indicator, nq))
-                || (!l1.negated.is_empty() && l1_same_indicator.is_empty());
 
             if !quoted(input, &rec.quote) || rec_occs.is_empty() {
                 out.push(issue(
@@ -445,7 +521,7 @@ impl Proposal {
                     ErrorCode::InvalidValue,
                     "Quote is not a token-bounded part of the input text",
                 ));
-            } else if valid_rec_occs.is_empty() || l1_negated_rec {
+            } else if valid_rec_occs.is_empty() {
                 out.push(issue(
                     at,
                     "quote",
@@ -497,10 +573,9 @@ impl Proposal {
                     check_present_field(
                         at,
                         input,
-                        &input_tokens,
+                        &analysis,
                         rec,
                         &valid_rec_occs,
-                        &l1_same_indicator,
                         f,
                         val,
                         &mut out,
@@ -1055,5 +1130,175 @@ mod tests {
                 .iter()
                 .any(|i| i.error.field == "quality")
         );
+    }
+
+    #[test]
+    fn n1_check_validates_attribution_correction_and_full_unit_in_input() {
+        // 1. Atribución que cruza predicado ("trabajé 5 horas antes de dormir mal" con hours=5)
+        let p_sleep_attr: Proposal = serde_json::from_value(json!({
+            "schema_version": 1,
+            "interpreter": "slm",
+            "interpreter_version": "v1",
+            "records": [{
+                "indicator": "sleep",
+                "fields": [
+                    {"key": "hours", "value": 5, "quote": "5 horas"},
+                    {"key": "quality", "value": "poor", "quote": "mal"},
+                    {"key": "window_start", "value": null, "quote": null},
+                    {"key": "window_end", "value": null, "quote": null}
+                ],
+                "time": {"kind": "unspecified"},
+                "quote": "trabajé 5 horas antes de dormir mal"
+            }],
+            "negated": [],
+            "uninterpreted": []
+        }))
+        .unwrap();
+        assert!(
+            p_sleep_attr
+                .check("trabajé 5 horas antes de dormir mal")
+                .iter()
+                .any(|i| i.error.field == "hours")
+        );
+
+        // 2. Atribución tras predicado ajeno ("pulso desconocido tras 6" con bpm=6; también in-range 60)
+        let p_pulse_6 = pulse("pulso desconocido tras 6", json!(6), Some("6"));
+        assert!(
+            p_pulse_6
+                .check("pulso desconocido tras 6")
+                .iter()
+                .any(|i| i.error.field == "bpm")
+        );
+        let p_pulse_60 = pulse("pulso desconocido tras 60", json!(60), Some("60"));
+        assert!(
+            p_pulse_60
+                .check("pulso desconocido tras 60")
+                .iter()
+                .any(|i| i.error.field == "bpm")
+        );
+
+        // 3. Corrección contigua entre cláusulas ("pulso 72, perdón pulso 82" citando solo "pulso 72")
+        let p_corr_72 = pulse("pulso 72", json!(72), Some("72"));
+        assert!(
+            p_corr_72
+                .check("pulso 72, perdón pulso 82")
+                .iter()
+                .any(|i| i.error.field == "bpm")
+        );
+        let p_corr_82 = pulse("pulso 82", json!(82), Some("82"));
+        assert!(
+            p_corr_82
+                .check("pulso 72, perdón pulso 82")
+                .iter()
+                .any(|i| i.error.field == "bpm")
+        );
+
+        // 4. Unidad dudosa con cola ("temperatura 37 °C/kg" citando "37")
+        let p_temp_tail: Proposal = serde_json::from_value(json!({
+            "schema_version": 1,
+            "interpreter": "slm",
+            "interpreter_version": "v1",
+            "records": [{
+                "indicator": "body_temperature",
+                "fields": [
+                    {"key": "celsius", "value": 37, "quote": "37"}
+                ],
+                "time": {"kind": "unspecified"},
+                "quote": "temperatura 37"
+            }],
+            "negated": [],
+            "uninterpreted": []
+        }))
+        .unwrap();
+        assert!(
+            p_temp_tail
+                .check("temperatura 37 °C/kg")
+                .iter()
+                .any(|i| i.error.field == "celsius")
+        );
+
+        // 5. Contraste válido: relación local inequívoca sin valor en capa 1 (p. ej. radiación espacial)
+        let p_rad: Proposal = serde_json::from_value(json!({
+            "schema_version": 1,
+            "interpreter": "slm",
+            "interpreter_version": "v1",
+            "records": [{
+                "indicator": "space_radiation",
+                "fields": [
+                    {"key": "usv_h", "value": 0.42, "quote": "0.42 uSv/h"}
+                ],
+                "time": {"kind": "unspecified"},
+                "quote": "radiación 0.42 uSv/h"
+            }],
+            "negated": [],
+            "uninterpreted": []
+        }))
+        .unwrap();
+        assert!(p_rad.check("radiación 0.42 uSv/h").is_empty());
+    }
+
+    #[test]
+    fn n2_check_respects_next_indicator_negation_boundaries() {
+        let p_valid = pulse("pulso 72", json!(72), Some("72"));
+        assert!(p_valid.check("pulso 72 sin medir glucosa").is_empty());
+
+        let p_gluc: Proposal = serde_json::from_value(json!({
+            "schema_version": 1,
+            "interpreter": "slm",
+            "interpreter_version": "v1",
+            "records": [{
+                "indicator": "glucose",
+                "fields": [
+                    {"key": "mg_dl", "value": null, "quote": null}
+                ],
+                "time": {"kind": "unspecified"},
+                "quote": "glucosa"
+            }],
+            "negated": [],
+            "uninterpreted": []
+        }))
+        .unwrap();
+        assert!(
+            p_gluc
+                .check("pulso 72 sin medir glucosa")
+                .iter()
+                .any(|i| i.error.field == "quote")
+        );
+    }
+
+    #[test]
+    fn n4_check_rejects_separated_unknown_units_and_keeps_trailing_prose() {
+        for (txt, quote_rec, fq) in [
+            ("temperatura 37 fahrenheits", "temperatura 37", "37"),
+            ("temperatura 37 farenheit", "temperatura 37", "37"),
+            ("temperatura 37 grados f", "temperatura 37", "37"),
+            (
+                "temperatura 37 grados f",
+                "temperatura 37 grados",
+                "37 grados",
+            ),
+        ] {
+            let p_bad: Proposal = serde_json::from_value(json!({
+                "schema_version": 1,
+                "interpreter": "slm",
+                "interpreter_version": "v1",
+                "records": [{
+                    "indicator": "body_temperature",
+                    "fields": [{"key": "celsius", "value": 37, "quote": fq}],
+                    "time": {"kind": "unspecified"},
+                    "quote": quote_rec
+                }],
+                "negated": [],
+                "uninterpreted": []
+            }))
+            .unwrap();
+            assert!(
+                p_bad.check(txt).iter().any(|i| i.error.field == "celsius"),
+                "expected rejection for {txt:?} with quote {fq:?}"
+            );
+        }
+
+        let p_ok = pulse("pulso 72 ahora", json!(72), Some("72"));
+        assert!(p_ok.check("pulso 72 ahora").is_empty());
     }
 }

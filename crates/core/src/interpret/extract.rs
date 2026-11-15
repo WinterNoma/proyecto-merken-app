@@ -3,12 +3,12 @@
 use super::{
     RULES_INTERPRETER_VERSION,
     lexicon::{
-        Token, TokenKind, UnitKind, has_post_unit_unknown_tail, is_bp_keyword_at,
-        is_general_symptom_zone_word, is_hour_unit, is_minute_unit, is_negated_good_sleep,
-        is_negation_word, is_sleep_word, is_symptom_cue, is_unknown_unit_after_number,
-        match_body_zone_phrase, match_unit_at, n1_n2_bp_plausible, parse_body_zone,
-        sleep_quality_word, slice_from_bytes, slice_tokens, starts_with_words, tokenize,
-        truncate_chars, word_at,
+        BoundedOccurrence, Token, TokenKind, UnitKind, has_post_unit_unknown_tail,
+        is_bp_keyword_at, is_general_symptom_zone_word, is_hour_unit, is_minute_unit,
+        is_negated_good_sleep, is_negation_word, is_sleep_word, is_symptom_cue,
+        is_unknown_unit_after_number, match_body_zone_phrase, match_unit_at, n1_n2_bp_plausible,
+        parse_body_zone, parse_quote_number_with_unit, sleep_quality_word, slice_from_bytes,
+        slice_tokens, starts_with_words, tokenize, truncate_chars, word_at,
     },
     numbers::{
         NumberScan, ParsedNumber, en_sub_hundred, es_ten, es_unit_in_compound, number_to_json,
@@ -27,10 +27,84 @@ use crate::{
 use serde_json::{Number, Value, json};
 
 #[derive(Clone, Copy, Debug)]
-struct ClauseSpan {
-    start: usize,
-    end: usize,
+pub(crate) struct ClauseSpan {
+    pub(crate) start: usize,
+    pub(crate) end: usize,
     after_comma: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct SegmentAmbiguity {
+    pub(crate) has_conflict: bool,
+    pub(crate) cleared_by_correction: bool,
+    pub(crate) numeric: bool,
+    pub(crate) hours: bool,
+    pub(crate) quality: bool,
+    pub(crate) score: bool,
+    pub(crate) bp: bool,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct AnalyzedSegment {
+    pub(crate) clause_idx: usize,
+    pub(crate) seg_start: usize,
+    pub(crate) seg_end: usize,
+    pub(crate) cont_start: Option<usize>,
+    pub(crate) cont_end: Option<usize>,
+    pub(crate) anchor_start: usize,
+    pub(crate) anchor_end: usize,
+    pub(crate) indicator: Indicator,
+    pub(crate) negated: bool,
+    pub(crate) ambiguity: SegmentAmbiguity,
+    pub(crate) record_idx: Option<usize>,
+}
+
+impl AnalyzedSegment {
+    pub(crate) fn field_is_ambiguous(&self, key: &str) -> bool {
+        if key == "description" {
+            return false;
+        }
+        if self.ambiguity.has_conflict || self.ambiguity.cleared_by_correction {
+            return true;
+        }
+        match key {
+            "hours" => self.ambiguity.hours,
+            "quality" => self.ambiguity.quality,
+            "score" => self.ambiguity.score || self.ambiguity.numeric,
+            "systolic" | "diastolic" => self.ambiguity.bp,
+            "bpm" | "celsius" | "mg_dl" | "percentage" => self.ambiguity.numeric,
+            _ => false,
+        }
+    }
+
+    pub(crate) fn contains_occ(&self, occ: &BoundedOccurrence) -> bool {
+        (occ.first_tok >= self.seg_start && occ.last_tok < self.seg_end)
+            || self
+                .cont_start
+                .zip(self.cont_end)
+                .is_some_and(|(cs, ce)| occ.first_tok >= cs && occ.last_tok < ce)
+    }
+
+    pub(crate) fn overlaps_occ(&self, occ: &BoundedOccurrence) -> bool {
+        let main_overlap = self.seg_start <= occ.last_tok && self.seg_end > occ.first_tok;
+        let cont_overlap = self
+            .cont_start
+            .zip(self.cont_end)
+            .is_some_and(|(cs, ce)| cs <= occ.last_tok && ce > occ.first_tok);
+        main_overlap || cont_overlap
+    }
+}
+
+pub(crate) struct ClauseInfo {
+    pub(crate) span: ClauseSpan,
+    pub(super) time_mask: TimeMask,
+}
+
+pub(crate) struct InputAnalysis {
+    pub(crate) proposal: Proposal,
+    pub(crate) tokens: Vec<Token>,
+    pub(crate) clauses: Vec<ClauseInfo>,
+    pub(crate) segments: Vec<AnalyzedSegment>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -81,6 +155,8 @@ struct ProposalOut {
     record_start_bytes: Vec<usize>,
     negated: Vec<String>,
     uninterpreted: Vec<String>,
+    clauses: Vec<ClauseInfo>,
+    segments: Vec<AnalyzedSegment>,
     last_was_open_sleep: bool,
     last_clause_rec: Option<(Indicator, usize, usize)>,
     pending_correction_from: Option<(Indicator, usize, usize, Option<usize>)>,
@@ -253,7 +329,10 @@ fn is_indicator_or_symptom_start(tokens: &[Token], idx: usize, end: usize) -> bo
             | "my"
             | "mi"
             | "tengo"
+            | "tuve"
+            | "tenia"
             | "siento"
+            | "senti"
             | "estoy"
             | "i"
             | "im"
@@ -394,7 +473,7 @@ fn split_clauses(tokens: &[Token]) -> Vec<ClauseSpan> {
     refined
 }
 
-fn detect_anchor(tokens: &[Token], idx: usize, end: usize) -> Option<RawAnchor> {
+fn detect_anchor(orig: &str, tokens: &[Token], idx: usize, end: usize) -> Option<RawAnchor> {
     if let Some(bp_len) = is_bp_keyword_at(tokens, idx, end) {
         return Some(RawAnchor {
             kind: AnchorKind::BloodPressure,
@@ -603,7 +682,7 @@ fn detect_anchor(tokens: &[Token], idx: usize, end: usize) -> Option<RawAnchor> 
                 zone: None,
             });
         }
-        if let Some((unit, u_end)) = match_unit_at(tokens, next, end) {
+        if let Some((unit, u_end)) = match_unit_at(orig, tokens, next, end) {
             match unit {
                 UnitKind::HeartRate => {
                     return Some(RawAnchor {
@@ -1033,7 +1112,7 @@ fn find_unique_number(
                     continue;
                 }
                 let (has_matching_unit, compatible, next_i) =
-                    match match_unit_at(tokens, num.end_idx, seg_end) {
+                    match match_unit_at(orig, tokens, num.end_idx, seg_end) {
                         Some((unit, u_end)) => {
                             let bad_tail = has_post_unit_unknown_tail(tokens, u_end, seg_end);
                             (
@@ -1177,7 +1256,7 @@ fn parse_sleep_hours_at(
             let mut has_hour_unit = false;
 
             if num_end < end {
-                if let Some((unit, u_end)) = match_unit_at(tokens, num_end, end) {
+                if let Some((unit, u_end)) = match_unit_at(orig, tokens, num_end, end) {
                     if unit != UnitKind::SleepHours {
                         // p. ej. "20 minutos", "6 ejercicios": rechazar sin volver a intentar.
                         return Some((f64::NAN, None, u_end, false));
@@ -1257,13 +1336,15 @@ fn parse_sleep_hours_at(
     }
 }
 
-fn extract_sleep_record(ctx: &SegmentCtx<'_>) -> (Option<ProposedRecord>, bool) {
+fn extract_sleep_record(ctx: &SegmentCtx<'_>) -> (Option<ProposedRecord>, bool, SegmentAmbiguity) {
     let Some(quote) = slice_tokens(ctx.orig, ctx.tokens, ctx.start, ctx.end) else {
-        return (None, false);
+        return (None, false, SegmentAmbiguity::default());
     };
     let mut hours_field = field_none("hours");
     let mut quality_field = field_none("quality");
     let mut ambiguous = ctx.has_conflict;
+    let mut hours_ambiguous = ctx.has_conflict;
+    let mut quality_ambiguous = ctx.has_conflict;
 
     if !ctx.has_conflict {
         // 1. Extracción de horas (conservadora: rechaza unidades ajenas y números competidores)
@@ -1290,6 +1371,7 @@ fn extract_sleep_record(ctx: &SegmentCtx<'_>) -> (Option<ProposedRecord>, bool) 
         }
         if candidates.len() >= 2 {
             ambiguous = true;
+            hours_ambiguous = true;
         } else if let Some(&(val, is_int, h_start, h_end)) = candidates.first()
             && Hours::try_from(val).is_ok()
             && let Some(val_quote) = slice_tokens(ctx.orig, ctx.tokens, h_start, h_end)
@@ -1361,6 +1443,7 @@ fn extract_sleep_record(ctx: &SegmentCtx<'_>) -> (Option<ProposedRecord>, bool) 
             }
             if q_conflict {
                 ambiguous = true;
+                quality_ambiguous = true;
             } else if let Some((quality, q_quote)) = found_q {
                 quality_field = field_some("quality", json!(quality.as_str()), q_quote);
             }
@@ -1380,12 +1463,20 @@ fn extract_sleep_record(ctx: &SegmentCtx<'_>) -> (Option<ProposedRecord>, bool) 
             quote,
         }),
         ambiguous,
+        SegmentAmbiguity {
+            has_conflict: ctx.has_conflict,
+            hours: hours_ambiguous,
+            quality: quality_ambiguous,
+            ..Default::default()
+        },
     )
 }
 
-fn extract_symptom_record(ctx: &SegmentCtx<'_>) -> (Option<ProposedRecord>, bool) {
+fn extract_symptom_record(
+    ctx: &SegmentCtx<'_>,
+) -> (Option<ProposedRecord>, bool, SegmentAmbiguity) {
     let Some(quote) = slice_tokens(ctx.orig, ctx.tokens, ctx.start, ctx.end) else {
-        return (None, false);
+        return (None, false, SegmentAmbiguity::default());
     };
 
     let mut zone_field = field_none("body_zone");
@@ -1444,6 +1535,11 @@ fn extract_symptom_record(ctx: &SegmentCtx<'_>) -> (Option<ProposedRecord>, bool
             quote,
         }),
         ambiguous,
+        SegmentAmbiguity {
+            has_conflict: ctx.has_conflict,
+            score: ambiguous,
+            ..Default::default()
+        },
     )
 }
 
@@ -1500,13 +1596,18 @@ fn find_bp_pairs(
                     let is_score_slash =
                         is_slash && n2.value == 10.0 && n1.value <= 10.0 && !has_keyword;
                     let plausible_standalone = n1_n2_bp_plausible(n1.value, n2.value);
-                    let (unit_ok, next_after_unit) = match match_unit_at(tokens, n2.end_idx, end) {
-                        Some((u, u_end)) => (u == UnitKind::BloodPressure, u_end),
-                        None => (
-                            !is_unknown_unit_after_number(orig, tokens, n2.end_idx, end),
-                            n2.end_idx,
-                        ),
-                    };
+                    let (unit_ok, next_after_unit) =
+                        match match_unit_at(orig, tokens, n2.end_idx, end) {
+                            Some((u, u_end)) => (
+                                u == UnitKind::BloodPressure
+                                    && !has_post_unit_unknown_tail(tokens, u_end, end),
+                                u_end,
+                            ),
+                            None => (
+                                !is_unknown_unit_after_number(orig, tokens, n2.end_idx, end),
+                                n2.end_idx,
+                            ),
+                        };
                     let local_ok = attribution_link_ok(
                         tokens,
                         start,
@@ -1541,9 +1642,12 @@ fn find_bp_pairs(
     }
 }
 
-fn extract_bp_record(ctx: &SegmentCtx<'_>, has_keyword: bool) -> (Option<ProposedRecord>, bool) {
+fn extract_bp_record(
+    ctx: &SegmentCtx<'_>,
+    has_keyword: bool,
+) -> (Option<ProposedRecord>, bool, SegmentAmbiguity) {
     let Some(quote) = slice_tokens(ctx.orig, ctx.tokens, ctx.start, ctx.end) else {
-        return (None, false);
+        return (None, false, SegmentAmbiguity::default());
     };
     if ctx.has_conflict {
         return (
@@ -1554,6 +1658,11 @@ fn extract_bp_record(ctx: &SegmentCtx<'_>, has_keyword: bool) -> (Option<Propose
                 quote,
             }),
             true,
+            SegmentAmbiguity {
+                has_conflict: true,
+                bp: true,
+                ..Default::default()
+            },
         );
     }
 
@@ -1576,6 +1685,10 @@ fn extract_bp_record(ctx: &SegmentCtx<'_>, has_keyword: bool) -> (Option<Propose
                 quote,
             }),
             true,
+            SegmentAmbiguity {
+                bp: true,
+                ..Default::default()
+            },
         );
     }
 
@@ -1604,6 +1717,7 @@ fn extract_bp_record(ctx: &SegmentCtx<'_>, has_keyword: bool) -> (Option<Propose
                 quote,
             }),
             false,
+            SegmentAmbiguity::default(),
         );
     }
 
@@ -1636,19 +1750,23 @@ fn extract_bp_record(ctx: &SegmentCtx<'_>, has_keyword: bool) -> (Option<Propose
                 quote,
             }),
             search.ambiguous,
+            SegmentAmbiguity {
+                bp: search.ambiguous,
+                ..Default::default()
+            },
         );
     }
 
-    (None, false)
+    (None, false, SegmentAmbiguity::default())
 }
 
 fn extract_single_numeric_record(
     ctx: &SegmentCtx<'_>,
     indicator: Indicator,
     field_key: &'static str,
-) -> (Option<ProposedRecord>, bool) {
+) -> (Option<ProposedRecord>, bool, SegmentAmbiguity) {
     let Some(quote) = slice_tokens(ctx.orig, ctx.tokens, ctx.start, ctx.end) else {
-        return (None, false);
+        return (None, false, SegmentAmbiguity::default());
     };
     let mut field = field_none(field_key);
     let mut ambiguous = ctx.has_conflict;
@@ -1704,6 +1822,11 @@ fn extract_single_numeric_record(
             quote,
         }),
         ambiguous,
+        SegmentAmbiguity {
+            has_conflict: ctx.has_conflict,
+            numeric: ambiguous,
+            ..Default::default()
+        },
     )
 }
 
@@ -1816,7 +1939,10 @@ fn is_safe_introducer_before_anchor(w: &str) -> bool {
             | "do"
             | "does"
             | "tengo"
+            | "tuve"
+            | "tenia"
             | "siento"
+            | "senti"
             | "estoy"
             | "medi"
             | "tome"
@@ -1828,19 +1954,34 @@ fn is_safe_introducer_before_anchor(w: &str) -> bool {
             | "chequear"
             | "pude"
             | "puedo"
+            | "poder"
+            | "haber"
+            | "estar"
             | "have"
             | "has"
             | "had"
+            | "be"
+            | "been"
+            | "being"
             | "feel"
             | "felt"
             | "measure"
             | "measured"
+            | "measuring"
             | "check"
             | "checked"
+            | "checking"
             | "take"
             | "took"
+            | "taking"
             | "record"
+            | "recording"
             | "log"
+            | "logging"
+            | "midiendo"
+            | "chequeando"
+            | "tomando"
+            | "registrando"
             | "get"
     )
 }
@@ -1851,27 +1992,36 @@ fn is_measurement_action_word(w: &str) -> bool {
         "medir"
             | "medido"
             | "medida"
+            | "midiendo"
             | "tomar"
             | "tomado"
             | "tomada"
+            | "tomando"
             | "registrar"
             | "registrado"
             | "registrada"
+            | "registrando"
             | "confirmar"
             | "confirmado"
             | "confirmada"
             | "chequear"
             | "chequeado"
+            | "chequeando"
             | "measure"
             | "measured"
+            | "measuring"
             | "take"
             | "taken"
+            | "taking"
             | "check"
             | "checked"
+            | "checking"
             | "record"
             | "recorded"
+            | "recording"
             | "log"
             | "logged"
+            | "logging"
             | "detectado"
             | "detectada"
             | "detected"
@@ -2055,9 +2205,38 @@ fn clear_record_values(rec: &mut ProposedRecord) {
     }
 }
 
+fn compute_seg_starts(
+    tokens: &[Token],
+    c_start: usize,
+    groups: &[AnchorGroup],
+    time_mask: &TimeMask,
+) -> Vec<usize> {
+    let mut seg_starts = Vec::with_capacity(groups.len());
+    for (pos, g) in groups.iter().enumerate() {
+        if pos == 0 {
+            seg_starts.push(c_start);
+        } else {
+            let prev_anchor_end = groups.get(pos - 1).map_or(c_start, |prev| prev.anchor_end);
+            let pulled =
+                pull_back_negation_boundary(tokens, prev_anchor_end, g.anchor_start, time_mask);
+            seg_starts.push(pulled);
+        }
+    }
+    seg_starts
+}
+
+fn mark_record_cleared_by_correction(segments: &mut [AnalyzedSegment], rec_idx: usize) {
+    for seg in segments {
+        if seg.record_idx == Some(rec_idx) {
+            seg.ambiguity.cleared_by_correction = true;
+        }
+    }
+}
+
 fn process_clause(
     orig: &str,
     tokens: &[Token],
+    clause_idx: usize,
     clause: ClauseSpan,
     carried_time: Option<&MatchedTime>,
     out: &mut ProposalOut,
@@ -2066,6 +2245,10 @@ fn process_clause(
     let c_end = clause.end;
     let time_matches = find_time_hints(orig, tokens, c_start, c_end);
     let time_mask = TimeMask::from_matches(c_start, c_end, &time_matches);
+    out.clauses.push(ClauseInfo {
+        span: clause,
+        time_mask: time_mask.clone(),
+    });
 
     // Si toda la cláusula es solo una expresión temporal (p. ej. "ayer, dormí mal")
     let has_non_time_word_or_num = (c_start..c_end).any(|i| {
@@ -2092,7 +2275,7 @@ fn process_clause(
             i += 1;
             continue;
         }
-        if let Some(a) = detect_anchor(tokens, i, c_end)
+        if let Some(a) = detect_anchor(orig, tokens, i, c_end)
             && !time_mask.any_masked(a.start, a.end)
         {
             raw_anchors.push(a);
@@ -2134,6 +2317,16 @@ fn process_clause(
         {
             prev.quote = merged_quote;
         }
+        let prev_rec_idx = out.records.len().saturating_sub(1);
+        if let Some(seg) = out
+            .segments
+            .iter_mut()
+            .rev()
+            .find(|s| s.record_idx == Some(prev_rec_idx))
+        {
+            seg.cont_start = Some(c_start);
+            seg.cont_end = Some(c_end);
+        }
         out.last_was_open_sleep = false;
         out.pending_correction_from = None;
         return None;
@@ -2147,6 +2340,7 @@ fn process_clause(
             if let Some(prev_rec) = out.records.get_mut(rec_idx) {
                 clear_record_values(prev_rec);
             }
+            mark_record_cleared_by_correction(&mut out.segments, rec_idx);
             if after_corr_idx >= c_end {
                 // "pulso 72, perdón, pulso 82": guardar inicio para combinarlo con la cláusula siguiente.
                 out.pending_correction_from =
@@ -2239,6 +2433,30 @@ fn process_clause(
             if let Some(prev_rec) = out.records.get_mut(rec_idx) {
                 clear_record_values(prev_rec);
             }
+            mark_record_cleared_by_correction(&mut out.segments, rec_idx);
+            let corr_seg_starts = compute_seg_starts(tokens, c_start, &groups, &time_mask);
+            for (pos, g) in groups.iter().enumerate() {
+                let seg_start = corr_seg_starts.get(pos).copied().unwrap_or(c_start);
+                let seg_end = corr_seg_starts.get(pos + 1).copied().unwrap_or(c_end);
+                if seg_start < seg_end {
+                    out.segments.push(AnalyzedSegment {
+                        clause_idx,
+                        seg_start,
+                        seg_end,
+                        cont_start: None,
+                        cont_end: None,
+                        anchor_start: g.anchor_start,
+                        anchor_end: g.anchor_end,
+                        indicator: g.kind.to_indicator(),
+                        negated: false,
+                        ambiguity: SegmentAmbiguity {
+                            cleared_by_correction: true,
+                            ..Default::default()
+                        },
+                        record_idx: None,
+                    });
+                }
+            }
             if let Some(combined) = slice_from_bytes(orig, prev_start_b, clause_end_byte) {
                 out.uninterpreted.push(combined);
             }
@@ -2255,17 +2473,7 @@ fn process_clause(
 
     // Calcular límites de cada segmento, retrocediendo por negaciones locales entre anclas.
     let group_count = groups.len();
-    let mut seg_starts = Vec::with_capacity(group_count);
-    for (pos, g) in groups.iter().enumerate() {
-        if pos == 0 {
-            seg_starts.push(c_start);
-        } else {
-            let prev_anchor_end = groups.get(pos - 1).map_or(c_start, |prev| prev.anchor_end);
-            let pulled =
-                pull_back_negation_boundary(tokens, prev_anchor_end, g.anchor_start, &time_mask);
-            seg_starts.push(pulled);
-        }
-    }
+    let seg_starts = compute_seg_starts(tokens, c_start, &groups, &time_mask);
 
     let mut emitted_open_sleep = false;
     let mut last_emitted_in_clause: Option<(Indicator, usize, usize)> = None;
@@ -2305,6 +2513,22 @@ fn process_clause(
             if let Some(q) = slice_tokens(orig, tokens, seg_start, seg_end) {
                 out.negated.push(q);
             }
+            out.segments.push(AnalyzedSegment {
+                clause_idx,
+                seg_start,
+                seg_end,
+                cont_start: None,
+                cont_end: None,
+                anchor_start: g.anchor_start,
+                anchor_end: g.anchor_end,
+                indicator: g.kind.to_indicator(),
+                negated: true,
+                ambiguity: SegmentAmbiguity {
+                    has_conflict: g.has_conflict,
+                    ..Default::default()
+                },
+                record_idx: None,
+            });
             emitted_open_sleep = false;
             last_emitted_in_clause = None;
             continue;
@@ -2321,7 +2545,7 @@ fn process_clause(
             time_hint,
             has_conflict: g.has_conflict,
         };
-        let (rec, ambiguous) = match g.kind {
+        let (rec, ambiguous, seg_amb) = match g.kind {
             AnchorKind::HeartRate => {
                 extract_single_numeric_record(&ctx, Indicator::HeartRate, "bpm")
             }
@@ -2341,6 +2565,21 @@ fn process_clause(
             AnchorKind::Sleep => extract_sleep_record(&ctx),
             AnchorKind::Symptom => extract_symptom_record(&ctx),
         };
+
+        let seg_rec_idx = rec.as_ref().map(|_| out.records.len());
+        out.segments.push(AnalyzedSegment {
+            clause_idx,
+            seg_start,
+            seg_end,
+            cont_start: None,
+            cont_end: None,
+            anchor_start: g.anchor_start,
+            anchor_end: g.anchor_end,
+            indicator: g.kind.to_indicator(),
+            negated: false,
+            ambiguity: seg_amb,
+            record_idx: seg_rec_idx,
+        });
 
         if let Some(r) = rec {
             emitted_open_sleep = r.indicator == Indicator::Sleep
@@ -2422,43 +2661,77 @@ pub(crate) fn is_single_clause_quote(quote: &str) -> bool {
 }
 
 /// Comprueba si la ocurrencia `occ` de una cita en `input` está negada por su contexto
-/// inmediato en la misma cláusula (antes o inmediatamente después) o en la propia mención.
+/// inmediato en el mismo segmento/cláusula (antes o inmediatamente después, sin invadir el
+/// siguiente indicador ni sus introductores) o en la propia mención.
 pub(crate) fn occurrence_is_negated_in_input(
+    analysis: &InputAnalysis,
     input: &str,
-    input_tokens: &[Token],
-    occ: &super::lexicon::BoundedOccurrence,
+    occ: &BoundedOccurrence,
     indicator: Indicator,
 ) -> bool {
-    let clauses = split_clauses(input_tokens);
-    let Some(clause) = clauses
+    let input_tokens = &analysis.tokens;
+    let Some((clause_idx, clause_info)) = analysis
+        .clauses
         .iter()
-        .copied()
-        .find(|c| occ.first_tok >= c.start && occ.last_tok < c.end)
+        .enumerate()
+        .find(|(_, c)| occ.first_tok >= c.span.start && occ.last_tok < c.span.end)
     else {
-        return false;
+        return analysis.segments.iter().any(|s| {
+            s.cont_start
+                .zip(s.cont_end)
+                .is_some_and(|(_, ce)| occ.first_tok >= s.seg_start && occ.last_tok < ce)
+                && s.negated
+        });
     };
 
-    let time_matches = find_time_hints(input, input_tokens, clause.start, clause.end);
-    let time_mask = TimeMask::from_matches(clause.start, clause.end, &time_matches);
+    let clause = clause_info.span;
+    let time_mask = &clause_info.time_mask;
+    let seg_opt = analysis
+        .segments
+        .iter()
+        .find(|s| s.clause_idx == clause_idx && s.contains_occ(occ));
 
-    // 1. Negación previa en la misma cláusula antes de occ.first_tok, deteniéndose ante un corte
-    //    coordinado o ante otro ancla de distinto indicador ("no me duele pulso 72", "no tengo fiebre y pulso 72").
-    let mut prefix_min = clause.start;
-    let mut a_idx = clause.start;
-    while a_idx < occ.first_tok {
-        if time_mask.is_masked(a_idx) {
-            a_idx += 1;
-            continue;
-        }
-        if let Some(a) = detect_anchor(input_tokens, a_idx, occ.first_tok)
-            && !time_mask.any_masked(a.start, a.end)
-        {
-            if a.kind.to_indicator() != indicator {
-                prefix_min = prefix_min.max(a.end);
+    if let Some(seg) = seg_opt
+        && seg.negated
+        && seg.indicator == indicator
+    {
+        return true;
+    }
+
+    if seg_opt.is_none()
+        && analysis.segments.iter().any(|s| {
+            s.clause_idx == clause_idx
+                && s.negated
+                && s.indicator == indicator
+                && s.overlaps_occ(occ)
+        })
+    {
+        return true;
+    }
+
+    // 1. Negación previa en el mismo segmento/cláusula antes de occ.first_tok.
+    let mut prefix_min = if let Some(seg) = seg_opt {
+        seg.seg_start
+    } else {
+        clause.start
+    };
+    if seg_opt.is_none() {
+        let mut a_idx = clause.start;
+        while a_idx < occ.first_tok {
+            if time_mask.is_masked(a_idx) {
+                a_idx += 1;
+                continue;
             }
-            a_idx = a.end.max(a_idx + 1);
-        } else {
-            a_idx += 1;
+            if let Some(a) = detect_anchor(input, input_tokens, a_idx, occ.first_tok)
+                && !time_mask.any_masked(a.start, a.end)
+            {
+                if a.kind.to_indicator() != indicator {
+                    prefix_min = prefix_min.max(a.end);
+                }
+                a_idx = a.end.max(a_idx + 1);
+            } else {
+                a_idx += 1;
+            }
         }
     }
 
@@ -2478,9 +2751,21 @@ pub(crate) fn occurrence_is_negated_in_input(
         }
     }
 
-    // 2. Negación o resolución pospuesta inmediatamente tras occ.last_tok que modifica al propio indicador.
+    // 2. Negación o resolución pospuesta inmediatamente tras occ.last_tok, acotada al fin del
+    //    segmento actual (no alcanza al siguiente indicador ni a sus introductores).
+    let post_end = if let Some(seg) = seg_opt {
+        seg.seg_end
+    } else {
+        analysis
+            .segments
+            .iter()
+            .filter(|s| s.clause_idx == clause_idx && s.seg_start > occ.last_tok)
+            .map(|s| s.seg_start)
+            .min()
+            .unwrap_or(clause.end)
+    };
     let mut j = occ.last_tok + 1;
-    while j < clause.end {
+    while j < post_end {
         if time_mask.is_masked(j) {
             j += 1;
             continue;
@@ -2495,8 +2780,8 @@ pub(crate) fn occurrence_is_negated_in_input(
         if word_at(input_tokens, j).is_some_and(is_post_anchor_absence_predicate) {
             return true;
         }
-        if is_negation_start_at(input_tokens, j, clause.end) {
-            let neg_len = if j + 1 < clause.end
+        if is_negation_start_at(input_tokens, j, post_end) {
+            let neg_len = if j + 1 < post_end
                 && (starts_with_words(input_tokens, j, &["ya", "no"])
                     || starts_with_words(input_tokens, j, &["nada", "de"]))
             {
@@ -2505,7 +2790,7 @@ pub(crate) fn occurrence_is_negated_in_input(
                 1
             };
             let after = j + neg_len;
-            if after >= clause.end
+            if after >= post_end
                 && matches!(
                     word_at(input_tokens, j),
                     Some("no" | "not" | "never" | "nunca" | "tampoco")
@@ -2520,9 +2805,9 @@ pub(crate) fn occurrence_is_negated_in_input(
         if matches!(
             word_at(input_tokens, j),
             Some("es" | "esta" | "fue" | "se" | "is" | "was" | "are" | "were")
-        ) && j + 1 < clause.end
+        ) && j + 1 < post_end
             && (word_at(input_tokens, j + 1).is_some_and(is_post_anchor_absence_predicate)
-                || (is_negation_start_at(input_tokens, j + 1, clause.end)
+                || (is_negation_start_at(input_tokens, j + 1, post_end)
                     && word_at(input_tokens, j + 2).is_some_and(is_measurement_action_word)))
         {
             return true;
@@ -2543,7 +2828,7 @@ pub(crate) fn occurrence_is_negated_in_input(
             let mut matching_anchors = Vec::new();
             let mut sa = 0;
             while sa < sub_tokens.len() {
-                if let Some(a) = detect_anchor(&sub_tokens, sa, sub_tokens.len()) {
+                if let Some(a) = detect_anchor(sub_slice, &sub_tokens, sa, sub_tokens.len()) {
                     if a.kind.to_indicator() == indicator {
                         matching_anchors.push(a);
                     }
@@ -2570,7 +2855,133 @@ pub(crate) fn occurrence_is_negated_in_input(
     false
 }
 
-pub(super) fn interpret_within_limit(text: &str) -> Proposal {
+/// Verifica la relación local mención-valor dentro de un segmento cuando la capa 1 dejó el
+/// campo en `None`, reutilizando exactamente las mismas reglas de atribución que la extracción.
+pub(crate) fn check_field_attribution_in_segment(
+    input: &str,
+    analysis: &InputAnalysis,
+    seg: &AnalyzedSegment,
+    indicator: Indicator,
+    field_key: &str,
+    fq: &str,
+    fq_occ: &BoundedOccurrence,
+) -> bool {
+    let tokens = &analysis.tokens;
+    let Some(clause_info) = analysis.clauses.get(seg.clause_idx) else {
+        return false;
+    };
+    let time_mask = &clause_info.time_mask;
+    if time_mask.any_masked(fq_occ.first_tok, fq_occ.last_tok + 1) {
+        return false;
+    }
+
+    let (local_start, local_end, anchor_start, anchor_end) = if let Some((cs, ce)) =
+        seg.cont_start.zip(seg.cont_end)
+        && fq_occ.first_tok >= cs
+        && fq_occ.last_tok < ce
+    {
+        (cs, ce, cs, cs)
+    } else {
+        (seg.seg_start, seg.seg_end, seg.anchor_start, seg.anchor_end)
+    };
+
+    let mut val_start = fq_occ.first_tok;
+    let mut val_end = fq_occ.last_tok + 1;
+
+    if indicator == Indicator::BloodPressure
+        && field_key == "diastolic"
+        && val_start >= local_start + 2
+        && (tokens
+            .get(val_start - 1)
+            .is_some_and(|tk| tk.kind == TokenKind::Slash)
+            || matches!(word_at(tokens, val_start - 1), Some("sobre" | "over")))
+    {
+        let mut best_start = None;
+        let mut s = val_start - 1;
+        while s > local_start {
+            let prev = s - 1;
+            if let Some(n1) = parse_simple_number(tokens, prev)
+                && n1.end_idx == val_start - 1
+            {
+                best_start = Some(prev);
+            } else if best_start.is_some() {
+                break;
+            }
+            s = prev;
+        }
+        if let Some(bs) = best_start {
+            val_start = bs;
+        }
+    }
+
+    if indicator == Indicator::BloodPressure
+        && field_key == "systolic"
+        && val_end + 1 < local_end
+        && (tokens
+            .get(val_end)
+            .is_some_and(|tk| tk.kind == TokenKind::Slash)
+            || matches!(word_at(tokens, val_end), Some("sobre" | "over")))
+        && let Some(n2) = parse_simple_number(tokens, val_end + 1)
+        && n2.end_idx <= local_end
+    {
+        val_end = n2.end_idx;
+    }
+
+    let mut explicit_unit = parse_quote_number_with_unit(fq)
+        .is_some_and(|(_, u_opt)| u_opt.is_some_and(|u| u.matches_indicator(indicator)));
+    if indicator == Indicator::Sleep
+        && (fq_occ.first_tok..=fq_occ.last_tok)
+            .any(|k| word_at(tokens, k).is_some_and(is_hour_unit))
+    {
+        explicit_unit = true;
+    }
+    if matches!(indicator, Indicator::Mood | Indicator::Symptom)
+        && (fq_occ.first_tok..=fq_occ.last_tok)
+            .any(|k| tokens.get(k).is_some_and(|tk| tk.kind == TokenKind::Slash))
+    {
+        explicit_unit = true;
+    }
+    if val_end < local_end
+        && let Some((u, u_end)) = match_unit_at(input, tokens, val_end, local_end)
+        && u.matches_indicator(indicator)
+    {
+        explicit_unit = true;
+        val_end = u_end;
+    }
+
+    if val_start > 0 && is_non_clinical_prefix_word(word_at(tokens, val_start - 1)) {
+        return false;
+    }
+
+    attribution_link_ok(
+        tokens,
+        local_start,
+        anchor_start,
+        anchor_end,
+        val_start,
+        val_end,
+        explicit_unit,
+        time_mask,
+    )
+}
+
+/// Comprobación conservadora para ocurrencias fuera de segmentos clasificados por capa 1
+/// (p. ej. indicadores sin extractor en reglas o menciones sin ancla reconocida).
+pub(crate) fn check_fallback_field_attribution(
+    tokens: &[Token],
+    rec_occ: &BoundedOccurrence,
+    fq_occ: &BoundedOccurrence,
+) -> bool {
+    let bad_prefix =
+        fq_occ.first_tok > 0 && is_non_clinical_prefix_word(word_at(tokens, fq_occ.first_tok - 1));
+    !bad_prefix && !has_correction_between(tokens, rec_occ.first_tok, rec_occ.last_tok + 1)
+}
+
+pub(crate) fn analyze_input_for_check(text: &str) -> InputAnalysis {
+    analyze_within_limit(text)
+}
+
+fn analyze_within_limit(text: &str) -> InputAnalysis {
     let trimmed = text.trim();
     let tokens = tokenize(text);
     let clauses = split_clauses(&tokens);
@@ -2578,8 +2989,15 @@ pub(super) fn interpret_within_limit(text: &str) -> Proposal {
     let mut out = ProposalOut::default();
     let mut carried_time: Option<MatchedTime> = None;
 
-    for clause in clauses {
-        let next_carried = process_clause(text, &tokens, clause, carried_time.as_ref(), &mut out);
+    for (clause_idx, clause) in clauses.into_iter().enumerate() {
+        let next_carried = process_clause(
+            text,
+            &tokens,
+            clause_idx,
+            clause,
+            carried_time.as_ref(),
+            &mut out,
+        );
         carried_time = next_carried;
     }
 
@@ -2609,12 +3027,23 @@ pub(super) fn interpret_within_limit(text: &str) -> Proposal {
         out.uninterpreted = vec![trimmed.to_owned()];
     }
 
-    Proposal {
+    let proposal = Proposal {
         schema_version: PROPOSAL_SCHEMA_VERSION,
         interpreter: InterpreterKind::Rules,
         interpreter_version: RULES_INTERPRETER_VERSION.to_owned(),
         records: out.records,
         negated: out.negated,
         uninterpreted: out.uninterpreted,
+    };
+
+    InputAnalysis {
+        proposal,
+        tokens,
+        clauses: out.clauses,
+        segments: out.segments,
     }
+}
+
+pub(super) fn interpret_within_limit(text: &str) -> Proposal {
+    analyze_within_limit(text).proposal
 }
