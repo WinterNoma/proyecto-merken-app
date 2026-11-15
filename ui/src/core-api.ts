@@ -405,7 +405,10 @@ export interface ProposedRecord { indicator: Indicator; fields: ProposedField[];
 export interface Proposal { schema_version: number; interpreter: "rules" | "slm"; interpreter_version: string; records: ProposedRecord[]; negated: string[]; uninterpreted: string[] }
 export type Layer2Status = "not_needed" | "unavailable" | "used" | "model_unavailable" | "cancelled" | "timeout" | "discarded" | "slm_error";
 export interface InterpretResponse { proposal: Proposal; layer2_proposal: Proposal | null; unresolved: string[]; layer2: Layer2Status }
-export interface FactLine { id: string; text: string }
+export type FactId = "indicator" | "status" | "reason" | "direction" | "latest_reading" | "baseline" | "history" | "escalation" | "source";
+export interface FactLine { id: FactId; text: string }
+/** Tauri event slm-progress; it never contains input or generated text. */
+export interface SlmProgress { request_id: string; phase: "loading" | "generating" | "validating" | "done"; tokens: number; max_tokens: number }
 export interface AiNote { statements: { ficha_id: string; statement_id: string; text: string }[]; label: string }
 export type NoteStatus = "available" | "no_fichas" | "model_unavailable" | "cancelled" | "timeout" | "discarded" | "slm_error";
 export interface ExplainResponse { facts: FactLine[]; note: AiNote | null; note_status: NoteStatus; model_id: string | null }
@@ -413,10 +416,11 @@ export interface SlmModelStatus { model_id: string; installed: boolean; verified
 export interface SlmStatus { interpreter: SlmModelStatus; explainer: SlmModelStatus }
 
 export const core = {
-  interpretText: (input: { text: string; source?: "text" | "voice" }) => invoke<InterpretResponse>("interpret_text", { input }),
-  explainIndicator: (input: { indicator: Indicator; body_zone?: BodyZone }) => invoke<ExplainResponse>("explain_indicator", { input }),
+  interpretText: (input: { request_id: string; text: string; source?: "text" | "voice" | null }) => invoke<InterpretResponse>("interpret_text", { input }),
+  explainIndicator: (input: { request_id: string; indicator: Indicator; body_zone?: BodyZone | null }) => invoke<ExplainResponse>("explain_indicator", { input }),
   slmStatus: () => invoke<SlmStatus>("slm_status"),
-  slmCancel: () => invoke<boolean>("slm_cancel"),
+  slmCancel: (requestId: string) => invoke<boolean>("slm_cancel", { request_id: requestId }),
+  slmRelease: () => invoke<boolean>("slm_release"),
   getProfile: () => invoke<ProfileResponse>("get_profile"),
   logRecord: (input: LogRecordInput) => invoke<LogResult>("log_record", { input }),
   correctRecord: (input: CorrectRecordInput) => invoke<LogResult>("correct_record", { input }),

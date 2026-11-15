@@ -10,6 +10,7 @@ use merken_slm::{
     Ficha,
     service::{
         ExplainResponse, InterpretResponse, ServiceError, SlmService, SlmStatus, default_deadline,
+        wait_limit,
     },
 };
 use merken_store::{
@@ -26,7 +27,9 @@ use merken_sync::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+
+mod strings;
 
 /// Versión de la app que viaja en cada registro (`app_version`).
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -40,11 +43,13 @@ pub struct SlmState {
 
 #[derive(Deserialize)]
 pub struct InterpretInput {
+    pub request_id: String,
     pub text: String,
     pub source: Option<String>,
 }
 #[derive(Deserialize)]
 pub struct ExplainInput {
+    pub request_id: String,
     pub indicator: String,
     pub body_zone: Option<merken_core::catalog::BodyZone>,
 }
@@ -58,41 +63,47 @@ fn slm_error(code: &str, field: Option<&str>, message: &str) -> StoreError {
 }
 fn service_error(e: ServiceError) -> StoreError {
     match e {
-        ServiceError::Busy => slm_error("busy", None, "The assistant is busy. Try again shortly"),
-        ServiceError::InvalidValue => slm_error(
-            "invalid_value",
-            Some("text"),
-            "Text exceeds the maximum length",
-        ),
-        ServiceError::Unavailable => slm_error("slm_error", None, "The assistant is unavailable"),
+        ServiceError::Busy => slm_error("busy", None, strings::SLM_BUSY),
+        ServiceError::InvalidValue => {
+            slm_error("invalid_value", Some("text"), strings::TEXT_TOO_LONG)
+        }
+        ServiceError::InvalidRequestId => {
+            slm_error("invalid_value", Some("request_id"), strings::REQUEST_ID)
+        }
+        ServiceError::Unavailable => slm_error("slm_error", None, strings::SLM_UNAVAILABLE),
+    }
+}
+fn validate_request_id(id: &str) -> Result<(), StoreError> {
+    if merken_slm::service::valid_request_id(id) {
+        Ok(())
+    } else {
+        Err(service_error(ServiceError::InvalidRequestId))
     }
 }
 pub fn handle_interpret(
     service: &SlmService,
     input: InterpretInput,
 ) -> Result<InterpretResponse, StoreError> {
+    validate_request_id(&input.request_id)?;
     if input
         .source
         .as_deref()
         .is_some_and(|s| s != "text" && s != "voice")
     {
-        return Err(slm_error(
-            "invalid_value",
-            Some("source"),
-            "Source must be text or voice",
-        ));
+        return Err(slm_error("invalid_value", Some("source"), strings::SOURCE));
     }
-    service
-        .interpret(input.text, default_deadline())
-        .map_err(service_error)?
-        .recv()
-        .map_err(|_| slm_error("slm_error", None, "The assistant is unavailable"))
+    let deadline = default_deadline();
+    let pending = service
+        .interpret(input.request_id, input.text, deadline.clone())
+        .map_err(service_error)?;
+    Ok(pending.recv_timeout(wait_limit(&deadline)))
 }
 pub fn handle_find_evaluation(
     store: &mut Store,
     input: ExplainInput,
     at: Timestamp,
 ) -> Result<merken_core::evaluate::Evaluation, StoreError> {
+    validate_request_id(&input.request_id)?;
     let status = store.status(at, APP_VERSION)?;
     let entries = if input.indicator == "symptom" {
         status.symptoms
@@ -102,25 +113,26 @@ pub fn handle_find_evaluation(
     entries
         .into_iter()
         .find(|e| e.indicator == input.indicator && e.body_zone == input.body_zone)
-        .ok_or_else(|| slm_error("not_found", Some("indicator"), "Indicator not found"))
+        .ok_or_else(|| slm_error("not_found", Some("indicator"), strings::INDICATOR_NOT_FOUND))
 }
 pub fn handle_explain(
     service: &SlmService,
+    request_id: String,
     eval: merken_core::evaluate::Evaluation,
     fichas: Vec<Ficha>,
 ) -> Result<ExplainResponse, StoreError> {
-    service
-        .explain(eval, fichas, default_deadline())
-        .map_err(service_error)?
-        .recv()
-        .map_err(|_| slm_error("slm_error", None, "The assistant is unavailable"))
+    let deadline = default_deadline();
+    let pending = service
+        .explain(request_id, eval, fichas, deadline.clone())
+        .map_err(service_error)?;
+    Ok(pending.recv_timeout(wait_limit(&deadline)))
 }
 async fn slm_blocking<T: Send + 'static>(
     f: impl FnOnce() -> Result<T, StoreError> + Send + 'static,
 ) -> Result<T, StoreError> {
     tauri::async_runtime::spawn_blocking(f)
         .await
-        .map_err(|_| slm_error("slm_error", None, "The assistant was interrupted"))?
+        .map_err(|_| slm_error("slm_error", None, strings::SLM_INTERRUPTED))?
 }
 #[tauri::command]
 async fn interpret_text(
@@ -132,30 +144,66 @@ async fn interpret_text(
 }
 #[tauri::command]
 async fn explain_indicator(
-    store: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
     state: tauri::State<'_, SlmState>,
     input: ExplainInput,
 ) -> Result<ExplainResponse, StoreError> {
-    let eval = with_store(&store, |s| handle_find_evaluation(s, input, now()))?;
     let service = state.service.clone();
     let fichas = state.fichas.clone();
-    slm_blocking(move || handle_explain(&service, eval, fichas)).await
+    slm_blocking(move || {
+        let request_id = input.request_id.clone();
+        // Both mutex acquisition and SQLite/evaluation run on the blocking pool.
+        let eval = with_store(&app.state::<AppState>(), |s| {
+            handle_find_evaluation(s, input, now())
+        })?;
+        // with_store has released its guard before any wait for the SLM.
+        handle_explain(&service, request_id, eval, fichas)
+    })
+    .await
 }
 #[tauri::command]
 async fn slm_status(state: tauri::State<'_, SlmState>) -> Result<SlmStatus, StoreError> {
     let service = state.service.clone();
     slm_blocking(move || {
+        let deadline = default_deadline();
         service
-            .status(default_deadline())
+            .status(deadline.clone())
             .map_err(service_error)?
-            .recv()
-            .map_err(|_| slm_error("slm_error", None, "The assistant is unavailable"))
+            .recv_timeout(wait_limit(&deadline))
+            .map_err(receive_error)
     })
     .await
 }
+fn receive_error(error: std::sync::mpsc::RecvTimeoutError) -> StoreError {
+    match error {
+        std::sync::mpsc::RecvTimeoutError::Timeout => {
+            slm_error("timeout", None, strings::SLM_TIMEOUT)
+        }
+        std::sync::mpsc::RecvTimeoutError::Disconnected => {
+            slm_error("slm_error", None, strings::SLM_UNAVAILABLE)
+        }
+    }
+}
+#[tauri::command(rename_all = "snake_case")]
+async fn slm_cancel(
+    state: tauri::State<'_, SlmState>,
+    request_id: String,
+) -> Result<bool, StoreError> {
+    validate_request_id(&request_id)?;
+    Ok(state.service.cancel(&request_id))
+}
 #[tauri::command]
-async fn slm_cancel(state: tauri::State<'_, SlmState>) -> Result<bool, StoreError> {
-    Ok(state.service.cancel())
+async fn slm_release(state: tauri::State<'_, SlmState>) -> Result<bool, StoreError> {
+    let service = state.service.clone();
+    slm_blocking(move || {
+        let deadline = default_deadline();
+        service
+            .release(deadline.clone())
+            .map_err(service_error)?
+            .recv_timeout(wait_limit(&deadline))
+            .map_err(receive_error)
+    })
+    .await
 }
 
 fn now() -> Timestamp {
@@ -173,7 +221,7 @@ fn with_store<T>(
     let mut guard = state.0.lock().map_err(|_| StoreError {
         code: "storage_error".into(),
         field: None,
-        message: "The local database is unavailable. Restart the app".into(),
+        message: strings::STORAGE_UNAVAILABLE.into(),
     })?;
     f(&mut guard)
 }
@@ -257,7 +305,7 @@ async fn blocking<T: Send + 'static>(
         .map_err(|_| StoreError {
             code: "network".into(),
             field: None,
-            message: "The simulation download was interrupted".into(),
+            message: strings::SIM_INTERRUPTED.into(),
         })?
 }
 
@@ -278,7 +326,7 @@ pub fn handle_load_demo(
     let scenario = Scenario::parse(&input.scenario).ok_or_else(|| StoreError {
         code: "invalid_value".into(),
         field: Some("scenario".into()),
-        message: "Unknown demo scenario. Use routine, persistent_change or alarm_event".into(),
+        message: strings::UNKNOWN_SCENARIO.into(),
     })?;
     store.load_demo(scenario, now, APP_VERSION)
 }
@@ -435,7 +483,7 @@ async fn sim_import(
             .ok_or_else(|| StoreError {
                 code: "not_found".into(),
                 field: Some("astronaut_id".into()),
-                message: "Astronaut not found in the simulation".into(),
+                message: strings::ASTRONAUT_NOT_FOUND.into(),
             })?;
         let records = client.records_since(&id, &from).map_err(sync_err)?;
         Ok((name, records))
@@ -472,7 +520,12 @@ pub fn run() {
             let factory = merken_slm::service::LlamaFactory;
             #[cfg(not(feature = "slm-llama"))]
             let factory = merken_slm::service::NoEngineFactory;
-            let (service, fichas) = SlmService::start(root, factory, None)?;
+            let handle = app.handle().clone();
+            let progress =
+                std::sync::Arc::new(move |event: merken_slm::service::ServiceProgress| {
+                    let _ = handle.emit("slm-progress", event);
+                });
+            let (service, fichas) = SlmService::start(root, factory, Some(progress))?;
             app.manage(SlmState { service, fichas });
             Ok(())
         })
@@ -481,6 +534,7 @@ pub fn run() {
             explain_indicator,
             slm_status,
             slm_cancel,
+            slm_release,
             core_status,
             get_profile,
             log_record,
@@ -519,6 +573,7 @@ mod tests {
         let invalid = handle_interpret(
             &service,
             InterpretInput {
+                request_id: "tauri-test".into(),
                 text: "a".repeat(merken_core::interpret::MAX_INPUT_CHARS + 1),
                 source: None,
             },
@@ -526,21 +581,44 @@ mod tests {
         assert!(
             invalid.is_err_and(|e| e.code == "invalid_value" && e.field.as_deref() == Some("text"))
         );
+        let nullable: InterpretInput = serde_json::from_value(serde_json::json!({
+            "request_id": "nullable", "text": "pulso 72", "source": null,
+        }))?;
+        assert!(nullable.source.is_none());
+        let nullable_explain: ExplainInput = serde_json::from_value(serde_json::json!({
+            "request_id": "nullable-explain", "indicator": "heart_rate", "body_zone": null,
+        }))?;
+        assert!(nullable_explain.body_zone.is_none());
+        let invalid_id = handle_interpret(
+            &service,
+            InterpretInput {
+                request_id: "not valid".into(),
+                text: "pulso 72".into(),
+                source: None,
+            },
+        );
+        assert!(
+            invalid_id.is_err_and(
+                |e| e.code == "invalid_value" && e.field.as_deref() == Some("request_id")
+            )
+        );
         let mut store = Store::open_in_memory()?;
         let evaluation = handle_find_evaluation(
             &mut store,
             ExplainInput {
+                request_id: "tauri-test".into(),
                 indicator: "heart_rate".into(),
                 body_zone: None,
             },
             Timestamp::from_millis(0),
         )?;
-        let explanation = handle_explain(&service, evaluation, fichas)?;
+        let explanation = handle_explain(&service, "tauri-explain".into(), evaluation, fichas)?;
         assert_eq!(explanation.note_status, "no_fichas");
         assert!(!explanation.facts.is_empty());
         let missing = handle_find_evaluation(
             &mut store,
             ExplainInput {
+                request_id: "tauri-test".into(),
                 indicator: "unknown".into(),
                 body_zone: None,
             },

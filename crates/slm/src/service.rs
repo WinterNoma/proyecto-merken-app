@@ -1,7 +1,7 @@
 //! Single-worker SLM service. All generated content remains a proposal.
 use crate::{
-    AiNote, CancelToken, Control, Deadline, Engine, Explainer, FactLine, Ficha, Interpreter,
-    ModelFile, ModelManifest, ModelPackage, ModelRole, ModelSlot, ModelStore, Progress, SlmError,
+    AiNote, CancelToken, Control, Deadline, Engine, FactLine, Ficha, Interpreter, ModelFile,
+    ModelManifest, ModelPackage, ModelRole, ModelSlot, ModelStore, Progress, SlmError,
     SlmExplainer, SlmInterpreter, offered_statements, render_facts,
 };
 use merken_core::{
@@ -11,9 +11,11 @@ use merken_core::{
 };
 use serde::Serialize;
 use std::{
+    collections::HashMap,
     path::PathBuf,
     sync::{
         Arc, Mutex,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::{self, Receiver, SyncSender, TrySendError},
     },
     thread,
@@ -49,16 +51,17 @@ pub fn v5_manifest() -> ModelManifest {
 pub enum ServiceError {
     Busy,
     InvalidValue,
+    InvalidRequestId,
     Unavailable,
 }
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct InterpretResponse {
     pub proposal: Proposal,
     pub layer2_proposal: Option<Proposal>,
     pub unresolved: Vec<String>,
     pub layer2: &'static str,
 }
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ExplainResponse {
     pub facts: Vec<FactLine>,
     pub note: Option<AiNote>,
@@ -145,31 +148,145 @@ impl<E: Engine> Engine for BorrowedEngine<'_, E> {
         self.0.model_id()
     }
 }
-pub type ProgressCallback = Arc<dyn Fn(Progress) + Send + Sync>;
-enum Job {
+#[derive(Clone, Debug, Serialize)]
+pub struct ServiceProgress {
+    pub request_id: String,
+    pub phase: &'static str,
+    pub tokens: u32,
+    pub max_tokens: u32,
+}
+pub type ProgressCallback = Arc<dyn Fn(ServiceProgress) + Send + Sync>;
+type Requests = Arc<Mutex<HashMap<String, Arc<Request>>>>;
+struct Request {
+    id: Option<String>,
+    token: CancelToken,
+    worker_failed: Arc<AtomicBool>,
+    timed_out: AtomicBool,
+    stalled: Arc<AtomicUsize>,
+}
+impl Request {
+    fn timeout(&self) {
+        if !self.timed_out.swap(true, Ordering::SeqCst) {
+            self.stalled.fetch_add(1, Ordering::SeqCst);
+        }
+        self.token.cancel();
+    }
+}
+impl Drop for Request {
+    fn drop(&mut self) {
+        if self.timed_out.load(Ordering::SeqCst) {
+            self.stalled.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+}
+fn forget(requests: &Requests, request: &Arc<Request>) {
+    if let Some(id) = &request.id
+        && let Ok(mut entries) = requests.lock()
+        && entries
+            .get(id)
+            .is_some_and(|entry| Arc::ptr_eq(entry, request))
+    {
+        entries.remove(id);
+    }
+}
+struct Reply<T> {
+    tx: mpsc::Sender<T>,
+    request: Arc<Request>,
+    requests: Requests,
+}
+impl<T> Reply<T> {
+    fn send(self, value: T) {
+        // Completion is visible before the caller receives the result.
+        forget(&self.requests, &self.request);
+        let _ = self.tx.send(value);
+    }
+}
+impl<T> Drop for Reply<T> {
+    fn drop(&mut self) {
+        if thread::panicking() {
+            self.request.worker_failed.store(true, Ordering::SeqCst);
+        }
+        forget(&self.requests, &self.request);
+    }
+}
+/// Deterministic fallback lives on the command thread, outside the optional worker.
+pub struct Pending<T> {
+    rx: Receiver<T>,
+    fallback: Box<dyn FnOnce(&'static str) -> T + Send>,
+    request: Arc<Request>,
+    requests: Requests,
+    wait: Duration,
+}
+impl<T> Pending<T> {
+    pub fn wait(self) -> T {
+        let wait = self.wait;
+        self.recv_timeout(wait)
+    }
+    pub fn recv_timeout(self, timeout: Duration) -> T {
+        match self.rx.recv_timeout(timeout) {
+            Ok(value) => value,
+            Err(error) => {
+                let status = match error {
+                    mpsc::RecvTimeoutError::Timeout => {
+                        self.request.timeout();
+                        "timeout"
+                    }
+                    mpsc::RecvTimeoutError::Disconnected => "slm_error",
+                };
+                self.request.token.cancel();
+                forget(&self.requests, &self.request);
+                (self.fallback)(status)
+            }
+        }
+    }
+}
+enum JobKind {
     Interpret {
         text: String,
-        deadline: Deadline,
-        reply: mpsc::Sender<InterpretResponse>,
+        result: InterpretResponse,
+        needed: bool,
+        reply: Reply<InterpretResponse>,
     },
     Explain {
         eval: Box<Evaluation>,
         fichas: Vec<Ficha>,
-        deadline: Deadline,
-        reply: mpsc::Sender<ExplainResponse>,
+        result: ExplainResponse,
+        reply: Reply<ExplainResponse>,
     },
     Status {
-        deadline: Deadline,
-        reply: mpsc::Sender<SlmStatus>,
+        reply: Reply<SlmStatus>,
+    },
+    Release {
+        reply: Reply<bool>,
     },
 }
+struct Job {
+    request: Arc<Request>,
+    deadline: Deadline,
+    kind: JobKind,
+}
+struct Worker {
+    tx: SyncSender<Job>,
+    handle: thread::JoinHandle<()>,
+    failed: Arc<AtomicBool>,
+}
+type SpawnWorker = Arc<dyn Fn(Receiver<Job>) -> thread::JoinHandle<()> + Send + Sync>;
 #[derive(Clone)]
 pub struct SlmService {
-    tx: SyncSender<Job>,
-    current: Arc<Mutex<Option<CancelToken>>>,
+    worker: Arc<Mutex<Worker>>,
+    spawn: SpawnWorker,
+    requests: Requests,
+    stalled: Arc<AtomicUsize>,
+}
+/// IDs are caller-generated and must not be reused for distinct UI requests.
+pub fn valid_request_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 impl SlmService {
-    /// Validates the embedded curated list and starts one worker with a bounded queue.
     pub fn start<F: EngineFactory>(
         root: PathBuf,
         factory: F,
@@ -177,7 +294,6 @@ impl SlmService {
     ) -> Result<(Self, Vec<Ficha>), SlmError> {
         Self::start_with_interpreter(root, factory, progress, None)
     }
-    /// An interpreter manifest must be trusted and bundled by the application.
     pub fn start_with_interpreter<F: EngineFactory>(
         root: PathBuf,
         factory: F,
@@ -185,63 +301,237 @@ impl SlmService {
         interpreter: Option<ModelManifest>,
     ) -> Result<(Self, Vec<Ficha>), SlmError> {
         let fichas = Ficha::vec_from_json(include_str!("../fichas/fichas.json"))?;
+        let factory = Arc::new(Mutex::new(factory));
+        let spawn: SpawnWorker = Arc::new(move |rx| {
+            let (root, factory, progress, interpreter) = (
+                root.clone(),
+                factory.clone(),
+                progress.clone(),
+                interpreter.clone(),
+            );
+            thread::spawn(move || {
+                let Ok(mut factory) = factory.lock() else {
+                    return;
+                };
+                // The slot and all replies unwind BEFORE this thread finishes.
+                // Keeping the factory guard outside catch_unwind avoids poisoning it.
+                let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    worker(root, &mut *factory, rx, progress, interpreter);
+                }));
+            })
+        });
         let (tx, rx) = mpsc::sync_channel(2);
-        let current = Arc::new(Mutex::new(None));
-        let worker_current = Arc::clone(&current);
-        thread::spawn(move || worker(root, factory, rx, worker_current, progress, interpreter));
-        Ok((Self { tx, current }, fichas))
+        let handle = spawn(rx);
+        Ok((
+            Self {
+                worker: Arc::new(Mutex::new(Worker {
+                    tx,
+                    handle,
+                    failed: Arc::new(AtomicBool::new(false)),
+                })),
+                spawn,
+                requests: Arc::new(Mutex::new(HashMap::new())),
+                stalled: Arc::new(AtomicUsize::new(0)),
+            },
+            fichas,
+        ))
     }
-    fn send(&self, job: Job) -> Result<(), ServiceError> {
-        self.tx.try_send(job).map_err(|e| match e {
-            TrySendError::Full(_) => ServiceError::Busy,
-            TrySendError::Disconnected(_) => ServiceError::Unavailable,
-        })
+    fn submit<T>(
+        &self,
+        id: Option<String>,
+        deadline: Deadline,
+        build: impl FnOnce(Reply<T>) -> JobKind,
+    ) -> Result<(Receiver<T>, Arc<Request>), ServiceError> {
+        if id.as_deref().is_some_and(|id| !valid_request_id(id)) {
+            return Err(ServiceError::InvalidRequestId);
+        }
+        let mut worker = self.worker.lock().map_err(|_| ServiceError::Unavailable)?;
+        if worker.handle.is_finished() {
+            // is_finished proves that the old slot was dropped; never overlap engines.
+            let (tx, rx) = mpsc::sync_channel(2);
+            let previous = std::mem::replace(
+                &mut *worker,
+                Worker {
+                    tx,
+                    handle: (self.spawn)(rx),
+                    failed: Arc::new(AtomicBool::new(false)),
+                },
+            );
+            let _ = previous.handle.join();
+        }
+        if worker.failed.load(Ordering::SeqCst) || self.stalled.load(Ordering::SeqCst) != 0 {
+            return Err(ServiceError::Busy);
+        }
+        let request = Arc::new(Request {
+            id,
+            token: CancelToken::new(),
+            worker_failed: worker.failed.clone(),
+            timed_out: AtomicBool::new(false),
+            stalled: self.stalled.clone(),
+        });
+        if let Some(id) = &request.id {
+            let mut entries = self
+                .requests
+                .lock()
+                .map_err(|_| ServiceError::Unavailable)?;
+            if entries.contains_key(id) {
+                return Err(ServiceError::Busy);
+            }
+            entries.insert(id.clone(), request.clone());
+        }
+        let (tx, rx) = mpsc::channel();
+        let kind = build(Reply {
+            tx,
+            request: request.clone(),
+            requests: self.requests.clone(),
+        });
+        worker
+            .tx
+            .try_send(Job {
+                request: request.clone(),
+                deadline,
+                kind,
+            })
+            .map_err(|e| match e {
+                TrySendError::Full(_) => ServiceError::Busy,
+                TrySendError::Disconnected(_) => ServiceError::Unavailable,
+            })?;
+        Ok((rx, request))
     }
     pub fn interpret(
         &self,
+        request_id: String,
         text: String,
         deadline: Deadline,
-    ) -> Result<Receiver<InterpretResponse>, ServiceError> {
+    ) -> Result<Pending<InterpretResponse>, ServiceError> {
         if text.chars().count() > MAX_INPUT_CHARS {
             return Err(ServiceError::InvalidValue);
         }
-        let (reply, rx) = mpsc::channel();
-        self.send(Job::Interpret {
+        if !valid_request_id(&request_id) {
+            return Err(ServiceError::InvalidRequestId);
+        }
+        let proposal = interpret(&text);
+        let unresolved = unresolved_fragments(&text, &proposal);
+        let needed =
+            !unresolved.is_empty() || proposal.uninterpreted.iter().any(|u| has_content(u));
+        let result = InterpretResponse {
+            proposal,
+            unresolved,
+            layer2_proposal: None,
+            layer2: if needed { "unavailable" } else { "not_needed" },
+        };
+        let fallback = result.clone();
+        let wait = wait_limit(&deadline);
+        let admission = self.submit(Some(request_id), deadline, |reply| JobKind::Interpret {
             text,
-            deadline,
+            result,
+            needed,
             reply,
-        })?;
-        Ok(rx)
+        });
+        match admission {
+            Ok((rx, request)) => Ok(Pending {
+                rx,
+                request,
+                requests: self.requests.clone(),
+                wait,
+                fallback: Box::new(move |status| InterpretResponse {
+                    layer2: status,
+                    ..fallback
+                }),
+            }),
+            Err(ServiceError::Unavailable) => Ok(self.ready(InterpretResponse {
+                layer2: "slm_error",
+                ..fallback
+            })),
+            Err(e) => Err(e),
+        }
     }
     pub fn explain(
         &self,
+        request_id: String,
         eval: Evaluation,
         fichas: Vec<Ficha>,
         deadline: Deadline,
-    ) -> Result<Receiver<ExplainResponse>, ServiceError> {
-        let (reply, rx) = mpsc::channel();
-        self.send(Job::Explain {
+    ) -> Result<Pending<ExplainResponse>, ServiceError> {
+        if !valid_request_id(&request_id) {
+            return Err(ServiceError::InvalidRequestId);
+        }
+        let result = ExplainResponse {
+            facts: render_facts(&eval),
+            note: None,
+            note_status: "no_fichas",
+            model_id: None,
+        };
+        let fallback = result.clone();
+        let wait = wait_limit(&deadline);
+        let admission = self.submit(Some(request_id), deadline, |reply| JobKind::Explain {
             eval: Box::new(eval),
             fichas,
-            deadline,
+            result,
             reply,
-        })?;
-        Ok(rx)
+        });
+        match admission {
+            Ok((rx, request)) => Ok(Pending {
+                rx,
+                request,
+                requests: self.requests.clone(),
+                wait,
+                fallback: Box::new(move |status| ExplainResponse {
+                    note_status: status,
+                    ..fallback
+                }),
+            }),
+            Err(ServiceError::Unavailable) => Ok(self.ready(ExplainResponse {
+                note_status: "slm_error",
+                ..fallback
+            })),
+            Err(e) => Err(e),
+        }
+    }
+    fn ready<T: Send + 'static>(&self, value: T) -> Pending<T> {
+        let (tx, rx) = mpsc::channel();
+        // A disconnected receiver immediately selects this deterministic fallback.
+        let request = Arc::new(Request {
+            id: None,
+            token: CancelToken::new(),
+            worker_failed: Arc::new(AtomicBool::new(false)),
+            timed_out: AtomicBool::new(false),
+            stalled: self.stalled.clone(),
+        });
+        drop(tx);
+        Pending {
+            rx,
+            request,
+            requests: self.requests.clone(),
+            wait: Duration::ZERO,
+            fallback: Box::new(move |_| value),
+        }
     }
     pub fn status(&self, deadline: Deadline) -> Result<Receiver<SlmStatus>, ServiceError> {
-        let (reply, rx) = mpsc::channel();
-        self.send(Job::Status { deadline, reply })?;
-        Ok(rx)
+        self.submit(None, deadline, |reply| JobKind::Status { reply })
+            .map(|(rx, _)| rx)
     }
-    pub fn cancel(&self) -> bool {
-        if let Ok(current) = self.current.lock()
-            && let Some(token) = current.as_ref()
+    pub fn release(&self, deadline: Deadline) -> Result<Receiver<bool>, ServiceError> {
+        self.submit(None, deadline, |reply| JobKind::Release { reply })
+            .map(|(rx, _)| rx)
+    }
+    pub fn cancel(&self, request_id: &str) -> bool {
+        if let Ok(entries) = self.requests.lock()
+            && let Some(request) = entries.get(request_id)
         {
-            token.cancel();
+            request.token.cancel();
             return true;
         }
         false
     }
+}
+/// Cooperative deadline plus a small command-side response margin.
+pub const WAIT_MARGIN: Duration = Duration::from_secs(2);
+pub fn wait_limit(deadline: &Deadline) -> Duration {
+    deadline
+        .remaining()
+        .unwrap_or(Duration::from_secs(120))
+        .saturating_add(WAIT_MARGIN)
 }
 fn reason(error: &SlmError) -> &'static str {
     match error {
@@ -254,108 +544,9 @@ fn reason(error: &SlmError) -> &'static str {
         _ => "slm_error",
     }
 }
-// Solo se omiten conectores aislados; la negación ("no", "not") conserva significado.
-fn connector(word: &str) -> bool {
-    matches!(
-        word.to_lowercase().as_str(),
-        "y" | "e" | "pero" | "también" | "tambien" | "and" | "but" | "also"
-    )
-}
-
-// Las citas no llevan offsets: se cubren todas sus apariciones literales. Los cortes
-// conservan límites UTF-8 y los fragmentos devueltos son subcadenas originales.
-fn unresolved_fragments(text: &str, proposal: &Proposal) -> Vec<String> {
-    let mut spans = Vec::new();
-    let record_quotes: Vec<&str> = proposal
-        .records
-        .iter()
-        .map(|r| {
-            // La capa 1 puede citar toda la cláusula, incluso tras una conjunción.
-            // Solo recortamos si el prefijo reproduce exactamente sus campos.
-            r.quote
-                .match_indices(char::is_whitespace)
-                .find_map(|(i, _)| {
-                    let tail = r.quote.get(i..)?.trim_start();
-                    let next = tail
-                        .split_whitespace()
-                        .next()?
-                        .trim_matches(|c: char| !c.is_alphanumeric());
-                    if !connector(next) {
-                        return None;
-                    }
-                    let prefix = r.quote.get(..i)?.trim_end();
-                    let parsed = interpret(prefix);
-                    parsed
-                        .records
-                        .iter()
-                        .any(|candidate| {
-                            candidate.indicator == r.indicator
-                                && candidate.fields == r.fields
-                                && candidate.time == r.time
-                        })
-                        .then_some(prefix)
-                })
-                .unwrap_or(&r.quote)
-        })
-        .collect();
-    let quotes = record_quotes
-        .into_iter()
-        .chain(
-            proposal
-                .records
-                .iter()
-                .flat_map(|r| r.fields.iter().filter_map(|f| f.quote.as_deref())),
-        )
-        // Una negación solo cubre texto si niega un indicador medible ("no tengo
-        // fiebre"). Las que solo nombran un síntoma o una zona corporal pueden ser
-        // expresiones coloquiales que la capa 1 no entiende ("no pegué ojo": "ojo"
-        // es una zona): quedan en el residuo para la capa 2, cuya propuesta pasa
-        // por `Proposal::check` (polaridad incluida) antes de mostrarse.
-        .chain(proposal.negated.iter().map(String::as_str).filter(|n| {
-            merken_core::catalog::Indicator::ALL
-                .into_iter()
-                .filter(|i| *i != merken_core::catalog::Indicator::Symptom)
-                .any(|i| merken_core::interpret::mentions_indicator(i, n))
-        }))
-        .chain(proposal.uninterpreted.iter().map(String::as_str));
-    for quote in quotes.filter(|q| !q.is_empty()) {
-        for (start, matched) in text.match_indices(quote) {
-            spans.push((start, start + matched.len()));
-        }
-    }
-    spans.sort_unstable();
-    let mut result = Vec::new();
-    let mut cursor = 0;
-    for (start, end) in spans
-        .into_iter()
-        .chain(std::iter::once((text.len(), text.len())))
-    {
-        if start > cursor
-            && let Some(fragment) = text.get(cursor..start)
-        {
-            // Mantener conectores internos, pero quitar puntuación y conectores extremos.
-            let words: Vec<_> = fragment
-                .split_whitespace()
-                .filter_map(|part| {
-                    let word = part.trim_matches(|c: char| !c.is_alphanumeric());
-                    (!word.is_empty()).then_some(word)
-                })
-                .collect();
-            let first = words.iter().position(|w| !connector(w));
-            let last = words.iter().rposition(|w| !connector(w));
-            if let (Some(first), Some(last)) = (first, last)
-                && let (Some(a), Some(b)) = (words.get(first), words.get(last))
-                && let Some(a_pos) = fragment.find(*a)
-                && let Some(b_pos) = fragment.rfind(*b)
-                && let Some(value) = fragment.get(a_pos..b_pos + b.len())
-            {
-                result.push(value.to_owned());
-            }
-        }
-        cursor = cursor.max(end);
-    }
-    result
-}
+#[path = "service_residual.rs"]
+mod residual;
+use residual::{has_content, unresolved_fragments};
 
 fn filter_layer2(
     mut extra: Proposal,
@@ -386,45 +577,52 @@ fn filter_layer2(
 
 fn worker<F: EngineFactory>(
     root: PathBuf,
-    mut factory: F,
+    factory: &mut F,
     rx: Receiver<Job>,
-    current: Arc<Mutex<Option<CancelToken>>>,
     progress: Option<ProgressCallback>,
     interpreter: Option<ModelManifest>,
 ) {
     let mut slot = ModelSlot::<F::Engine>::new();
     let manifest = v5_manifest();
     while let Ok(job) = rx.recv() {
-        let token = CancelToken::new();
-        if let Ok(mut active) = current.lock() {
-            *active = Some(token.clone());
-        }
-        let deadline = match &job {
-            Job::Interpret { deadline, .. }
-            | Job::Explain { deadline, .. }
-            | Job::Status { deadline, .. } => deadline.clone(),
-        };
         let callback = progress.clone();
-        let mut ctl = Control::new(token, deadline, move |p| {
-            if let Some(cb) = &callback {
-                cb(p);
+        let request_id = job.request.id.clone();
+        let mut ctl = Control::new(job.request.token.clone(), job.deadline, move |p| {
+            if let (Some(cb), Some(id)) = (&callback, &request_id) {
+                let (phase, tokens, max_tokens) = match p {
+                    Progress::Loading => ("loading", 0, 0),
+                    Progress::Generating { tokens, max_tokens } => {
+                        ("generating", tokens, max_tokens)
+                    }
+                    Progress::Validating => ("validating", 0, 0),
+                    Progress::Done => ("done", 0, 0),
+                };
+                cb(ServiceProgress {
+                    request_id: id.clone(),
+                    phase,
+                    tokens,
+                    max_tokens,
+                });
             }
         });
-        match job {
-            Job::Interpret { text, reply, .. } => {
-                let proposal = interpret(&text);
-                let unresolved = unresolved_fragments(&text, &proposal);
-                // Un fragmento sin interpretar que solo tiene conectores o puntuación
-                // ("y") no justifica cargar un modelo.
-                let needed = !unresolved.is_empty()
-                    || proposal.uninterpreted.iter().any(|u| {
-                        u.split_whitespace().any(|part| {
-                            let word = part.trim_matches(|c: char| !c.is_alphanumeric());
-                            !word.is_empty() && !connector(word)
-                        })
-                    });
-                let mut layer2 = if needed { "unavailable" } else { "not_needed" };
-                let mut layer2_proposal = None;
+        match job.kind {
+            JobKind::Interpret {
+                text,
+                mut result,
+                needed,
+                reply,
+            } => {
+                let InterpretResponse {
+                    proposal,
+                    unresolved,
+                    layer2,
+                    layer2_proposal,
+                } = &mut result;
+                if let Err(e) = ctl.check() {
+                    *layer2 = reason(&e);
+                    reply.send(result);
+                    continue;
+                }
                 if needed
                     && factory.available()
                     && let Some(model) = interpreter
@@ -441,50 +639,43 @@ fn worker<F: EngineFactory>(
                             .and_then(|store| factory.load(&store, model, &mut slot, &mut ctl))
                     };
                     match load {
-                        Err(e) => layer2 = reason(&e),
+                        Err(e) => *layer2 = reason(&e),
                         Ok(()) => {
                             if let Some(engine) = slot.engine_mut() {
                                 let mut l2 =
                                     SlmInterpreter::new(BorrowedEngine(engine), &model.version);
                                 match l2.interpret(&text, &mut ctl) {
-                                    Err(e) => layer2 = reason(&e),
+                                    Err(e) => *layer2 = reason(&e),
                                     Ok(extra) => {
                                         let filtered =
-                                            filter_layer2(extra, &proposal, &unresolved, &text);
+                                            filter_layer2(extra, proposal, unresolved, &text);
                                         if let Some(filtered) = filtered {
-                                            layer2_proposal = Some(filtered);
-                                            layer2 = "used";
+                                            *layer2_proposal = Some(filtered);
+                                            *layer2 = "used";
                                         } else {
-                                            layer2 = "discarded";
+                                            *layer2 = "discarded";
                                         }
                                     }
                                 }
                             } else {
-                                layer2 = "slm_error";
+                                *layer2 = "slm_error";
                             }
                         }
                     }
                 }
-                let _ = reply.send(InterpretResponse {
-                    proposal,
-                    layer2_proposal,
-                    unresolved,
-                    layer2,
-                });
+                reply.send(result);
             }
-            Job::Explain {
+            JobKind::Explain {
                 eval,
                 fichas,
+                mut result,
                 reply,
-                ..
             } => {
-                let facts = render_facts(&eval);
-                let mut result = ExplainResponse {
-                    facts,
-                    note: None,
-                    note_status: "no_fichas",
-                    model_id: None,
-                };
+                if let Err(e) = ctl.check() {
+                    result.note_status = reason(&e);
+                    reply.send(result);
+                    continue;
+                }
                 match offered_statements(&fichas, eval.status) {
                     Ok(offered) if offered.is_empty() => {}
                     Err(_) => result.note_status = "discarded",
@@ -506,7 +697,12 @@ fn worker<F: EngineFactory>(
                                 if let Some(engine) = slot.engine_mut() {
                                     let mut explainer =
                                         SlmExplainer::new(BorrowedEngine(engine), V5_ID);
-                                    match explainer.explain(&eval, &fichas, &mut ctl) {
+                                    match explainer.explain_with_facts(
+                                        &eval,
+                                        &fichas,
+                                        result.facts.clone(),
+                                        &mut ctl,
+                                    ) {
                                         Ok(explanation) => {
                                             result.note_status = if explanation.note.is_some() {
                                                 "available"
@@ -525,9 +721,9 @@ fn worker<F: EngineFactory>(
                         }
                     }
                 }
-                let _ = reply.send(result);
+                reply.send(result);
             }
-            Job::Status { reply, .. } => {
+            JobKind::Status { reply } => {
                 let dir = root.join(V5_ID);
                 let installed = dir.join("space-health-base-Q4_K_M.gguf").is_file()
                     && dir.join("space-health-lora-f16.gguf").is_file();
@@ -569,7 +765,7 @@ fn worker<F: EngineFactory>(
                         available: false,
                     }
                 };
-                let _ = reply.send(SlmStatus {
+                reply.send(SlmStatus {
                     interpreter: interpreter_status,
                     explainer: ModelStatus {
                         model_id: V5_ID.into(),
@@ -580,9 +776,9 @@ fn worker<F: EngineFactory>(
                     },
                 });
             }
-        }
-        if let Ok(mut active) = current.lock() {
-            *active = None;
+            JobKind::Release { reply } => {
+                reply.send(slot.unload());
+            }
         }
     }
 }
@@ -602,6 +798,11 @@ mod tests {
     use super::*;
     use merken_core::{evaluate::evaluate_all, time::Timestamp};
 
+    fn next_id() -> String {
+        static ID: AtomicUsize = AtomicUsize::new(0);
+        format!("test-{}", ID.fetch_add(1, Ordering::SeqCst))
+    }
+
     #[test]
     fn no_model_returns_rules_and_facts() {
         let (service, fichas) = SlmService::start(
@@ -612,10 +813,13 @@ mod tests {
         .unwrap();
         assert!(fichas.is_empty());
         let interpretation = service
-            .interpret("pulso 72 y algo desconocido".into(), default_deadline())
+            .interpret(
+                next_id(),
+                "pulso 72 y algo desconocido".into(),
+                default_deadline(),
+            )
             .unwrap()
-            .recv()
-            .unwrap();
+            .wait();
         assert_eq!(interpretation.layer2, "unavailable");
         assert!(!interpretation.proposal.records.is_empty());
         let eval = evaluate_all(&[], &[], Timestamp::from_millis(0))
@@ -623,19 +827,22 @@ mod tests {
             .next()
             .unwrap();
         let explanation = service
-            .explain(eval, fichas, default_deadline())
+            .explain(next_id(), eval, fichas, default_deadline())
             .unwrap()
-            .recv()
-            .unwrap();
+            .wait();
         assert!(!explanation.facts.is_empty());
         assert_eq!(explanation.note_status, "no_fichas");
         assert!(explanation.note.is_none());
-        let status = service.status(default_deadline()).unwrap().recv().unwrap();
+        let status = service
+            .status(default_deadline())
+            .unwrap()
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
         assert!(!status.explainer.loaded);
         assert!(!status.explainer.available);
     }
 
-    struct CountingFactory(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+    struct CountingFactory(std::sync::Arc<AtomicUsize>);
     impl EngineFactory for CountingFactory {
         type Engine = crate::MockEngine;
         fn available(&self) -> bool {
@@ -648,13 +855,13 @@ mod tests {
             _: &mut ModelSlot<Self::Engine>,
             _: &mut Control<'_>,
         ) -> Result<(), SlmError> {
-            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.0.fetch_add(1, Ordering::SeqCst);
             Err(SlmError::ModelMissing)
         }
     }
     #[test]
     fn no_fichas_never_loads_engine() {
-        let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let count = std::sync::Arc::new(AtomicUsize::new(0));
         let (service, fichas) = SlmService::start(
             std::env::temp_dir().join("merken-slm-no-fichas"),
             CountingFactory(count.clone()),
@@ -666,12 +873,11 @@ mod tests {
             .next()
             .unwrap();
         let response = service
-            .explain(eval, fichas, default_deadline())
+            .explain(next_id(), eval, fichas, default_deadline())
             .unwrap()
-            .recv()
-            .unwrap();
+            .wait();
         assert_eq!(response.note_status, "no_fichas");
-        assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert_eq!(count.load(Ordering::SeqCst), 0);
     }
 
     #[test]
@@ -683,7 +889,11 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(
-            service.interpret("a".repeat(MAX_INPUT_CHARS + 1), default_deadline()),
+            service.interpret(
+                next_id(),
+                "a".repeat(MAX_INPUT_CHARS + 1),
+                default_deadline()
+            ),
             Err(ServiceError::InvalidValue)
         ));
     }
@@ -707,10 +917,9 @@ mod tests {
             ("pulso 72 y no tengo fiebre", "not_needed", vec![]),
         ] {
             let response = service
-                .interpret(text.into(), default_deadline())
+                .interpret(next_id(), text.into(), default_deadline())
                 .unwrap()
-                .recv()
-                .unwrap();
+                .wait();
             assert_eq!(response.layer2, status, "{text}");
             assert_eq!(response.unresolved, expected, "{text}");
             assert_eq!(response.proposal, interpret(text));
@@ -745,15 +954,23 @@ mod tests {
     }
 
     type Gate = (mpsc::Sender<()>, mpsc::Receiver<()>);
-    type LoadCount = Arc<std::sync::atomic::AtomicUsize>;
+    type LoadCount = Arc<AtomicUsize>;
     struct TestFactory {
         responses: Vec<String>,
         count: LoadCount,
+        live: LoadCount,
         gate: Option<Gate>,
     }
     struct TestEngine {
         mock: crate::MockEngine,
+        live: LoadCount,
+        panic_on_generate: bool,
         gate: Option<Gate>,
+    }
+    impl Drop for TestEngine {
+        fn drop(&mut self) {
+            self.live.fetch_sub(1, Ordering::SeqCst);
+        }
     }
     impl Engine for TestEngine {
         fn generate(
@@ -764,6 +981,9 @@ mod tests {
             if let Some((entered, release)) = self.gate.take() {
                 let _ = entered.send(());
                 let _ = release.recv();
+            }
+            if self.panic_on_generate {
+                panic!("test engine unwind");
             }
             self.mock.generate(req, ctl)
         }
@@ -783,13 +1003,21 @@ mod tests {
             slot: &mut ModelSlot<Self::Engine>,
             ctl: &mut Control<'_>,
         ) -> Result<(), SlmError> {
-            self.count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.count.fetch_add(1, Ordering::SeqCst);
             let fixture = fixture_manifest(&manifest.model_id, manifest.role);
+            let panic_on_generate = self.responses.first().is_some_and(|r| r == "__panic__");
+            if panic_on_generate {
+                self.responses.remove(0);
+            }
             let responses = self.responses.clone();
+            let live = self.live.clone();
             let mut gate = self.gate.take();
             store
                 .verify_and_load(&fixture, slot, ctl, |model, _| {
+                    assert_eq!(live.fetch_add(1, Ordering::SeqCst), 0);
                     Ok(TestEngine {
+                        live: live.clone(),
+                        panic_on_generate,
                         mock: crate::MockEngine::with_responses(responses.clone())
                             .with_model_id(model.model_id()),
                         gate: gate.take(),
@@ -799,8 +1027,8 @@ mod tests {
         }
     }
     fn test_service(responses: Vec<String>, gate: Option<Gate>) -> (SlmService, LoadCount) {
-        static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-        let id = SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        static SEQ: AtomicUsize = AtomicUsize::new(0);
+        let id = SEQ.fetch_add(1, Ordering::SeqCst);
         let root =
             std::env::temp_dir().join(format!("merken-service-test-{}-{id}", std::process::id()));
         for model in ["test-interpreter", V5_ID] {
@@ -809,12 +1037,13 @@ mod tests {
             std::fs::write(dir.join("model.gguf"), b"abc").unwrap();
             std::fs::write(dir.join("adapter.gguf"), b"abc").unwrap();
         }
-        let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let count = Arc::new(AtomicUsize::new(0));
         let (service, _) = SlmService::start_with_interpreter(
             root,
             TestFactory {
                 responses,
                 count: count.clone(),
+                live: Arc::new(AtomicUsize::new(0)),
                 gate,
             },
             None,
@@ -830,10 +1059,9 @@ mod tests {
         let json = r#"{"schema_version":1,"records":[{"indicator":"space_radiation","fields":[{"key":"usv_h","value":0.42,"quote":"0.42 uSv/h"}],"time":{"kind":"unspecified"},"quote":"radiación 0.42 uSv/h"},{"indicator":"heart_rate","fields":[{"key":"bpm","value":72,"quote":"72"}],"time":{"kind":"unspecified"},"quote":"pulso 72"}],"negated":[],"uninterpreted":[]}"#;
         let (service, _) = test_service(vec![json.into(), "not json".into()], None);
         let first = service
-            .interpret(input.into(), default_deadline())
+            .interpret(next_id(), input.into(), default_deadline())
             .unwrap()
-            .recv()
-            .unwrap();
+            .wait();
         assert_eq!(first.layer2, "used");
         let extra = first.layer2_proposal.unwrap();
         assert_eq!(extra.records.len(), 1);
@@ -844,10 +1072,13 @@ mod tests {
         assert!(extra.check(input).is_empty());
         assert_eq!(first.proposal, interpret(input));
         let second = service
-            .interpret("pulso 72 y desconocido".into(), default_deadline())
+            .interpret(
+                next_id(),
+                "pulso 72 y desconocido".into(),
+                default_deadline(),
+            )
             .unwrap()
-            .recv()
-            .unwrap();
+            .wait();
         assert_eq!(second.layer2, "discarded");
         assert!(second.layer2_proposal.is_none());
         // Una cita válida para la entrada, pero fuera de los fragmentos pendientes.
@@ -861,26 +1092,29 @@ mod tests {
         let (entered_tx, entered_rx) = mpsc::channel();
         let (release_tx, release_rx) = mpsc::channel();
         let (service, _) = test_service(vec!["{}".into()], Some((entered_tx, release_rx)));
+        let active_id = next_id();
         let first = service
-            .interpret("desconocido".into(), default_deadline())
+            .interpret(active_id.clone(), "desconocido".into(), default_deadline())
             .unwrap();
         entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         let _second = service
-            .interpret("otro".into(), default_deadline())
+            .interpret(next_id(), "otro".into(), default_deadline())
             .unwrap();
-        let _third = service.interpret("más".into(), default_deadline()).unwrap();
+        let _third = service
+            .interpret(next_id(), "más".into(), default_deadline())
+            .unwrap();
         assert!(matches!(
-            service.interpret("llena".into(), default_deadline()),
+            service.interpret(next_id(), "llena".into(), default_deadline()),
             Err(ServiceError::Busy)
         ));
         let cancel_service = service.clone();
         assert!(
-            std::thread::spawn(move || cancel_service.cancel())
+            std::thread::spawn(move || cancel_service.cancel(&active_id))
                 .join()
                 .unwrap()
         );
         release_tx.send(()).unwrap();
-        let result = first.recv_timeout(Duration::from_secs(5)).unwrap();
+        let result = first.recv_timeout(Duration::from_secs(5));
         assert_eq!(result.layer2, "cancelled");
         assert_eq!(result.proposal, interpret("desconocido"));
         assert!(result.layer2_proposal.is_none());
@@ -890,16 +1124,14 @@ mod tests {
     fn timeout_and_engine_failure_fall_back() {
         let (service, _) = test_service(vec![], None);
         let timeout = service
-            .interpret("desconocido".into(), Deadline::expired())
+            .interpret(next_id(), "desconocido".into(), Deadline::expired())
             .unwrap()
-            .recv()
-            .unwrap();
+            .wait();
         assert_eq!(timeout.layer2, "timeout");
         let error = service
-            .interpret("desconocido".into(), default_deadline())
+            .interpret(next_id(), "desconocido".into(), default_deadline())
             .unwrap()
-            .recv()
-            .unwrap();
+            .wait();
         assert_eq!(error.layer2, "slm_error");
         assert!(error.layer2_proposal.is_none());
     }
@@ -925,10 +1157,9 @@ mod tests {
         )
         .unwrap();
         let response = service
-            .explain(eval, vec![ficha], default_deadline())
+            .explain(next_id(), eval, vec![ficha], default_deadline())
             .unwrap()
-            .recv()
-            .unwrap();
+            .wait();
         assert!(!response.facts.is_empty());
         assert!(response.note.is_none());
         assert_eq!(response.note_status, "slm_error");
@@ -955,27 +1186,402 @@ mod tests {
         )
         .unwrap();
         let _ = service
-            .interpret("desconocido".into(), default_deadline())
+            .interpret(next_id(), "desconocido".into(), default_deadline())
             .unwrap()
-            .recv()
+            .wait();
+        let status = service
+            .status(default_deadline())
+            .unwrap()
+            .recv_timeout(Duration::from_secs(5))
             .unwrap();
-        let status = service.status(default_deadline()).unwrap().recv().unwrap();
         assert!(status.interpreter.loaded && !status.explainer.loaded);
         let explanation = service
-            .explain(eval, vec![ficha], default_deadline())
+            .explain(next_id(), eval, vec![ficha], default_deadline())
             .unwrap()
-            .recv()
-            .unwrap();
+            .wait();
         assert!(!explanation.facts.is_empty());
-        let status = service.status(default_deadline()).unwrap().recv().unwrap();
+        let status = service
+            .status(default_deadline())
+            .unwrap()
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
         assert!(!status.interpreter.loaded && status.explainer.loaded);
         let _ = service
-            .interpret("desconocido".into(), default_deadline())
+            .interpret(next_id(), "desconocido".into(), default_deadline())
             .unwrap()
-            .recv()
+            .wait();
+        let status = service
+            .status(default_deadline())
+            .unwrap()
+            .recv_timeout(Duration::from_secs(5))
             .unwrap();
-        let status = service.status(default_deadline()).unwrap().recv().unwrap();
         assert!(status.interpreter.loaded && !status.explainer.loaded);
-        assert_eq!(loads.load(std::sync::atomic::Ordering::SeqCst), 3);
+        assert_eq!(loads.load(Ordering::SeqCst), 3);
+    }
+
+    const RESIDUAL_CASES: &[(&str, &[&str])] = &[
+        ("pulso 72", &[]),
+        ("pulso 72 y no pegué ojo", &["no pegué ojo"]),
+        ("pulso 72 y tos 172 veces", &["tos 172 veces"]),
+        ("pulso 72 estoy agotado", &["estoy agotado"]),
+        ("no tengo fiebre", &[]),
+        ("no headache", &[]),
+        ("pulso 72, y", &[]),
+        ("dolor de cabeza 6 desde esta mañana", &[]),
+        ("glucosa 95 mg/dL y temperatura 37 grados", &[]),
+        ("me duele la cabeza un 6 y dormí mal", &[]),
+        ("heart rate 72 and glucose 95 mg/dL", &[]),
+        ("pulse 72 I feel exhausted", &["I feel exhausted"]),
+    ];
+
+    // Run with --nocapture BEFORE accepting the core-backed residual expectations.
+    // Process creation was denied in the implementation environment; these are the
+    // handwritten task contract, not a claim of observed layer-1 output.
+    #[test]
+    fn layer1_citations_and_residual_contract() {
+        let proposals: Vec<_> = RESIDUAL_CASES
+            .iter()
+            .map(|(text, _)| interpret(text))
+            .collect();
+        for ((text, _), proposal) in RESIDUAL_CASES.iter().zip(&proposals) {
+            println!(
+                "LAYER1 {text}: {}",
+                serde_json::to_string(proposal).unwrap()
+            );
+        }
+        for ((text, expected), proposal) in RESIDUAL_CASES.iter().zip(&proposals) {
+            let unresolved = unresolved_fragments(text, proposal);
+            assert_eq!(unresolved, *expected, "{text}: core={proposal:?}");
+            let needed =
+                !unresolved.is_empty() || proposal.uninterpreted.iter().any(|u| has_content(u));
+            assert_eq!(needed, !expected.is_empty(), "{text}: core={proposal:?}");
+        }
+    }
+
+    #[test]
+    fn queued_cancellation_is_identity_scoped() {
+        let (entered, seen) = mpsc::channel();
+        let (release, gate) = mpsc::channel();
+        let (service, loads) = test_service(vec!["{}".into()], Some((entered, gate)));
+        let b = service
+            .interpret("B".into(), "desconocido".into(), default_deadline())
+            .unwrap();
+        seen.recv_timeout(Duration::from_secs(5)).unwrap();
+        let a = service
+            .interpret("A".into(), "otro".into(), default_deadline())
+            .unwrap();
+        assert!(service.cancel("A"));
+        assert!(!service.requests.lock().unwrap()["B"].token.is_cancelled());
+        release.send(()).unwrap();
+        assert_eq!(b.wait().layer2, "discarded");
+        assert_eq!(a.wait().layer2, "cancelled");
+        assert_eq!(loads.load(Ordering::SeqCst), 1);
+        assert!(!service.cancel("A"));
+    }
+
+    #[test]
+    fn late_cancellation_does_not_touch_running_successor() {
+        let (entered, seen) = mpsc::channel();
+        let (release, gate) = mpsc::channel();
+        let (service, _) = test_service(vec!["{}".into()], Some((entered, gate)));
+        assert_eq!(
+            service
+                .interpret("A".into(), "pulso 72".into(), default_deadline())
+                .unwrap()
+                .wait()
+                .layer2,
+            "not_needed"
+        );
+        let b = service
+            .interpret("B".into(), "desconocido".into(), default_deadline())
+            .unwrap();
+        seen.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(!service.cancel("A"));
+        assert!(!service.cancel("unknown"));
+        assert!(!service.requests.lock().unwrap()["B"].token.is_cancelled());
+        release.send(()).unwrap();
+        assert_eq!(b.wait().layer2, "discarded");
+    }
+
+    #[test]
+    fn command_wait_times_out_while_native_work_remains_busy() {
+        let (entered, seen) = mpsc::channel();
+        let (release, gate) = mpsc::channel();
+        let (service, _) = test_service(vec!["{}".into()], Some((entered, gate)));
+        let text = "pulso 72 estoy agotado";
+        let pending = service
+            .interpret("A".into(), text.into(), default_deadline())
+            .unwrap();
+        seen.recv_timeout(Duration::from_secs(5)).unwrap();
+        let response = pending.recv_timeout(Duration::from_millis(5));
+        assert_eq!(response.layer2, "timeout");
+        assert_eq!(response.proposal, interpret(text));
+        assert_eq!(response.unresolved, ["estoy agotado"]);
+        assert!(!service.cancel("A"));
+        assert!(matches!(
+            service.interpret("B".into(), "otro".into(), default_deadline()),
+            Err(ServiceError::Busy)
+        ));
+        release.send(()).unwrap();
+        let until = std::time::Instant::now() + Duration::from_secs(5);
+        while service.stalled.load(Ordering::SeqCst) != 0 {
+            assert!(std::time::Instant::now() < until);
+            thread::yield_now();
+        }
+        assert_eq!(
+            service
+                .interpret("B".into(), "pulso 72".into(), default_deadline())
+                .unwrap()
+                .wait()
+                .layer2,
+            "not_needed"
+        );
+    }
+
+    struct PanicFactory;
+    impl EngineFactory for PanicFactory {
+        type Engine = crate::MockEngine;
+        fn available(&self) -> bool {
+            true
+        }
+        fn load(
+            &mut self,
+            _: &ModelStore,
+            _: &ModelManifest,
+            _: &mut ModelSlot<Self::Engine>,
+            _: &mut Control<'_>,
+        ) -> Result<(), SlmError> {
+            panic!("test worker unwind");
+        }
+    }
+
+    #[test]
+    fn worker_unwind_preserves_rules_and_restarts_without_overlap() {
+        let (service, _) = SlmService::start_with_interpreter(
+            std::env::temp_dir().join("merken-worker-unwind"),
+            PanicFactory,
+            None,
+            Some(fixture_manifest("test-interpreter", ModelRole::Interpreter)),
+        )
+        .unwrap();
+        let text = "pulso 72 estoy agotado";
+        let response = service
+            .interpret("A".into(), text.into(), default_deadline())
+            .unwrap()
+            .wait();
+        assert_eq!(response.layer2, "slm_error");
+        assert_eq!(response.proposal, interpret(text));
+        assert_eq!(response.unresolved, ["estoy agotado"]);
+        assert!(!service.cancel("A"));
+        let until = std::time::Instant::now() + Duration::from_secs(5);
+        while !service.worker.lock().unwrap().handle.is_finished() {
+            assert!(std::time::Instant::now() < until);
+            thread::yield_now();
+        }
+        let response = service
+            .interpret("B".into(), "pulso 72".into(), default_deadline())
+            .unwrap()
+            .wait();
+        assert_eq!(response.layer2, "not_needed");
+        assert!(!service.cancel("B"));
+    }
+
+    #[test]
+    fn release_unloads_and_next_model_request_reloads() {
+        let (service, loads) = test_service(vec!["{}".into()], None);
+        service
+            .interpret(next_id(), "otro".into(), default_deadline())
+            .unwrap()
+            .wait();
+        assert_eq!(loads.load(Ordering::SeqCst), 1);
+        assert!(
+            service
+                .release(default_deadline())
+                .unwrap()
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+        );
+        assert!(
+            !service
+                .status(default_deadline())
+                .unwrap()
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .interpreter
+                .loaded
+        );
+        assert!(
+            !service
+                .release(default_deadline())
+                .unwrap()
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+        );
+        assert_eq!(loads.load(Ordering::SeqCst), 1);
+        service
+            .interpret(next_id(), "otro".into(), default_deadline())
+            .unwrap()
+            .wait();
+        assert_eq!(loads.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn request_id_validation_and_duplicate_admission() {
+        for invalid in ["", "two words", "ñ", "a/b", &"a".repeat(65)] {
+            assert!(!valid_request_id(invalid));
+        }
+        assert!(valid_request_id(&"a".repeat(64)));
+        assert!(valid_request_id("Az09_--"));
+        let (entered, seen) = mpsc::channel();
+        let (release, gate) = mpsc::channel();
+        let (service, _) = test_service(vec!["{}".into()], Some((entered, gate)));
+        assert!(matches!(
+            service.interpret("bad id".into(), "otro".into(), default_deadline()),
+            Err(ServiceError::InvalidRequestId)
+        ));
+        let pending = service
+            .interpret("same".into(), "otro".into(), default_deadline())
+            .unwrap();
+        seen.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(matches!(
+            service.interpret("same".into(), "otro".into(), default_deadline()),
+            Err(ServiceError::Busy)
+        ));
+        release.send(()).unwrap();
+        pending.wait();
+    }
+
+    #[test]
+    fn explainer_unwind_keeps_precomputed_facts() {
+        use crate::{FichaId, Statement, StatementId};
+        let (service, _) = SlmService::start(
+            std::env::temp_dir().join("merken-explainer-unwind"),
+            PanicFactory,
+            None,
+        )
+        .unwrap();
+        let eval = evaluate_all(&[], &[], Timestamp::from_millis(0))
+            .into_iter()
+            .next()
+            .unwrap();
+        let expected = render_facts(&eval);
+        let ficha = Ficha::new(
+            FichaId::new("test").unwrap(),
+            vec![
+                Statement::new(
+                    StatementId::new("line").unwrap(),
+                    "Review your recorded data.",
+                    vec![eval.status],
+                )
+                .unwrap(),
+            ],
+        )
+        .unwrap();
+        let result = service
+            .explain("explain-A".into(), eval, vec![ficha], default_deadline())
+            .unwrap()
+            .wait();
+        assert_eq!(result.facts, expected);
+        assert_eq!(result.note_status, "slm_error");
+        assert!(result.note.is_none());
+        assert!(!service.cancel("explain-A"));
+    }
+
+    #[test]
+    fn progress_is_identified_and_contains_no_text() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let seen = events.clone();
+        let (service, _) = SlmService::start_with_interpreter(
+            std::env::temp_dir().join("merken-progress-test"),
+            ProgressFactory,
+            Some(Arc::new(move |event| {
+                seen.lock().unwrap().push(event);
+            })),
+            Some(fixture_manifest("test-interpreter", ModelRole::Interpreter)),
+        )
+        .unwrap();
+        service
+            .interpret("progress-A".into(), "otro".into(), default_deadline())
+            .unwrap()
+            .wait();
+        let observed = events.lock().unwrap();
+        assert_eq!(observed.len(), 1);
+        assert_eq!(observed[0].request_id, "progress-A");
+        assert_eq!(observed[0].phase, "loading");
+        let event = ServiceProgress {
+            request_id: "progress-A".into(),
+            phase: "generating",
+            tokens: 4,
+            max_tokens: 32,
+        };
+        assert_eq!(
+            serde_json::to_value(event).unwrap(),
+            serde_json::json!({
+                "request_id": "progress-A", "phase": "generating", "tokens": 4, "max_tokens": 32,
+            })
+        );
+    }
+
+    struct ProgressFactory;
+    impl EngineFactory for ProgressFactory {
+        type Engine = crate::MockEngine;
+        fn available(&self) -> bool {
+            true
+        }
+        fn load(
+            &mut self,
+            _: &ModelStore,
+            _: &ModelManifest,
+            _: &mut ModelSlot<Self::Engine>,
+            ctl: &mut Control<'_>,
+        ) -> Result<(), SlmError> {
+            ctl.report(Progress::Loading);
+            Err(SlmError::ModelMissing)
+        }
+    }
+
+    #[test]
+    fn loaded_engine_unwind_drops_slot_before_restarting() {
+        let (entered, seen) = mpsc::channel();
+        let (release, gate) = mpsc::channel();
+        let (service, loads) = test_service(vec!["__panic__".into()], Some((entered, gate)));
+        let pending = service
+            .interpret("engine-A".into(), "otro".into(), default_deadline())
+            .unwrap();
+        seen.recv_timeout(Duration::from_secs(5)).unwrap();
+        let eval = evaluate_all(&[], &[], Timestamp::from_millis(0))
+            .into_iter()
+            .next()
+            .unwrap();
+        let expected_facts = render_facts(&eval);
+        let queued = service
+            .explain("queued".into(), eval, vec![], default_deadline())
+            .unwrap();
+        release.send(()).unwrap();
+        let response = pending.wait();
+        assert_eq!(response.layer2, "slm_error");
+        assert!(!service.cancel("engine-A"));
+        let queued = queued.wait();
+        assert_eq!(queued.note_status, "slm_error");
+        assert_eq!(queued.facts, expected_facts);
+        assert!(!service.cancel("queued"));
+        let until = std::time::Instant::now() + Duration::from_secs(5);
+        while !service.worker.lock().unwrap().handle.is_finished() {
+            assert!(std::time::Instant::now() < until);
+            thread::yield_now();
+        }
+        // The factory's live-engine counter asserts zero before every load.
+        let second = service
+            .interpret("engine-B".into(), "otro".into(), default_deadline())
+            .unwrap()
+            .wait();
+        assert_eq!(second.layer2, "slm_error"); // ordinary mock engine error, no unwind
+        let status = service
+            .status(default_deadline())
+            .unwrap()
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        assert!(status.interpreter.loaded);
+        assert_eq!(loads.load(Ordering::SeqCst), 2);
     }
 }

@@ -122,8 +122,20 @@ impl<E: Engine> Explainer for SlmExplainer<E> {
         fichas: &[Ficha],
         ctl: &mut Control<'_>,
     ) -> Result<Explanation, SlmError> {
+        self.explain_with_facts(eval, fichas, render_facts(eval), ctl)
+    }
+}
+
+impl<E: Engine> SlmExplainer<E> {
+    /// Service entry point: facts were already rendered on the command thread.
+    pub(crate) fn explain_with_facts(
+        &mut self,
+        eval: &Evaluation,
+        fichas: &[Ficha],
+        facts: Vec<FactLine>,
+        ctl: &mut Control<'_>,
+    ) -> Result<Explanation, SlmError> {
         ctl.check()?;
-        let facts = render_facts(eval);
         let offered = offered_statements(fichas, eval.status)?;
         let req = self.build_request(eval, &facts, &offered);
         let raw = self.engine.generate(&req, ctl)?;
