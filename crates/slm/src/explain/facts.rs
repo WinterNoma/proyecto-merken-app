@@ -72,10 +72,6 @@ mod strings {
     pub const STATUS_CHANGE_GENERAL: &str = "Status: Change — outside your recent range.";
     pub const STATUS_ALARM: &str = "Status: Alarm — urgent attention recommended.";
 
-    pub const STATUS_ALARM_PREFIX: &str = "Status: Alarm";
-    pub const STATUS_CHANGE_PREFIX: &str = "Status: Change";
-    pub const STATUS_STABLE_PREFIX: &str = "Status: Stable";
-
     pub const REASON_NO_DATA: &str = "Reason: No data available.";
     pub const REASON_TOO_FEW_PREFIX: &str = "Reason: Need ";
     pub const REASON_TOO_FEW_MID: &str = " previous readings (";
@@ -225,36 +221,6 @@ pub fn render_facts(eval: &Evaluation) -> Vec<FactLine> {
     ));
 
     facts
-}
-
-/// Deduce el estado clínico a partir de los hechos renderizados (fail-closed a `NotEvaluated`).
-pub(super) fn infer_status_from_facts(facts: &[FactLine]) -> Status {
-    let Some(line) = facts.iter().find(|f| f.id == FactId::Status) else {
-        return Status::NotEvaluated;
-    };
-    if line.text.starts_with(strings::STATUS_ALARM_PREFIX) {
-        Status::Alarm
-    } else if line.text.starts_with(strings::STATUS_CHANGE_PREFIX) {
-        Status::Change
-    } else if line.text.starts_with(strings::STATUS_STABLE_PREFIX) {
-        Status::Stable
-    } else {
-        Status::NotEvaluated
-    }
-}
-
-/// Indica si los hechos reflejan una acción de escalado urgente (RF-10).
-pub(super) fn is_urgent_from_facts(facts: &[FactLine]) -> bool {
-    facts
-        .iter()
-        .any(|f| f.id == FactId::Escalation && f.text == strings::ESCALATION_URGENT)
-}
-
-/// Indica si la fuente de los hechos es `SourceKind::ApprovedProtocol`.
-pub(super) fn is_approved_protocol_from_facts(facts: &[FactLine]) -> bool {
-    facts
-        .iter()
-        .any(|f| f.id == FactId::Source && f.text.starts_with(strings::SOURCE_APPROVED_PREFIX))
 }
 
 fn indicator_label(indicator: &str) -> String {

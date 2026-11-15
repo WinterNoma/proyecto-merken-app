@@ -2,7 +2,7 @@
 
 use crate::{
     control::{Control, Progress},
-    error::SlmError,
+    error::{EngineErrorCode, SlmError},
 };
 use std::collections::VecDeque;
 
@@ -157,9 +157,7 @@ impl Engine for MockEngine {
         ctl.check()?;
         match self.queue.pop_front() {
             Some(result) => result,
-            None => Err(SlmError::Engine(
-                "MockEngine response queue is empty".to_owned(),
-            )),
+            None => Err(SlmError::Engine(EngineErrorCode::EmptyResponse)),
         }
     }
 

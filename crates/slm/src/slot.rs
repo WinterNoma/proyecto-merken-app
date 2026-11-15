@@ -3,7 +3,7 @@
 use crate::{
     control::{Control, Progress},
     engine::Engine,
-    error::SlmError,
+    error::{EngineErrorCode, SlmError},
     manifest::VerifiedModel,
 };
 
@@ -34,14 +34,38 @@ impl<E: Engine> ModelSlot<E> {
 
     /// Descarga cualquier modelo previo, revalida el paquete y carga `model` mediante `factory`.
     ///
+    /// Adquiere el bloqueo de lectura compartido del directorio de `model` y lo mantiene hasta
+    /// que `factory` devuelve. Para ejecutar verificación y carga bajo un único bloqueo de
+    /// lectura ininterrumpido, usa [`crate::ModelStore::verify_and_load`].
+    ///
     /// # Mitigación frente a TOCTOU
     ///
-    /// Los modelos residen en el almacenamiento privado de la aplicación, donde únicamente
-    /// la aplicación tiene permisos de escritura; esa restricción es la mitigación frente a
-    /// sustituciones concurrentes entre verificación y carga. Además, justo antes de entregar
-    /// las rutas a `factory`, se vuelve a comprobar tamaño, fecha de modificación, ausencia de
-    /// enlaces simbólicos y confinamiento bajo la raíz canónica.
+    /// Los modelos residen en el almacenamiento privado de la aplicación Android, donde únicamente
+    /// la aplicación tiene permisos de escritura (frontera frente a otros procesos). Dentro del
+    /// proceso, [`crate::ModelStore`] serializa las escrituras con un `RwLock` y mantiene el
+    /// bloqueo de lectura hasta que `factory` devuelve. Justo antes de invocar `factory`, se
+    /// vuelve a comprobar tamaño, fecha de modificación, ausencia de enlaces simbólicos y
+    /// confinamiento bajo la raíz canónica.
     pub fn load<F>(
+        &mut self,
+        model: VerifiedModel,
+        ctl: &mut Control<'_>,
+        factory: F,
+    ) -> Result<&mut E, SlmError>
+    where
+        F: FnMut(&VerifiedModel, &mut Control<'_>) -> Result<E, SlmError>,
+    {
+        let dir = model.dir().to_path_buf();
+        crate::store::with_dir_read_lock(&dir, || {
+            self.load_unlocked(model, ctl, factory).map(|_| ())
+        })?;
+        self.loaded
+            .as_mut()
+            .map(|slot| &mut slot.engine)
+            .ok_or(SlmError::Engine(EngineErrorCode::Internal))
+    }
+
+    pub(crate) fn load_unlocked<F>(
         &mut self,
         model: VerifiedModel,
         ctl: &mut Control<'_>,
@@ -61,7 +85,7 @@ impl<E: Engine> ModelSlot<E> {
         self.loaded
             .as_mut()
             .map(|slot| &mut slot.engine)
-            .ok_or_else(|| SlmError::Engine("Failed to store loaded model".to_owned()))
+            .ok_or(SlmError::Engine(EngineErrorCode::Internal))
     }
 
     /// Descarga el modelo actual si existe. Devuelve `true` si había uno cargado.
@@ -296,9 +320,12 @@ mod tests {
         .unwrap();
 
         let res = slot.load(verified_explainer(&dir, "broken"), &mut ctl, |_, _| {
-            Err(SlmError::Engine("boom".into()))
+            Err(SlmError::Engine(EngineErrorCode::LoadFailed))
         });
-        assert!(matches!(res, Err(SlmError::Engine(_))));
+        assert!(matches!(
+            res,
+            Err(SlmError::Engine(EngineErrorCode::LoadFailed))
+        ));
         assert!(!slot.is_loaded());
         assert_eq!(*events.lock().unwrap(), vec!["drop:first"]);
     }

@@ -32,6 +32,43 @@ impl fmt::Display for OutputIssue {
     }
 }
 
+/// Código constante de error interno del motor de inferencia.
+///
+/// Nunca contiene texto libre del backend ni fragmentos clínicos o del usuario.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EngineErrorCode {
+    /// Fallo al inicializar o cargar el modelo en el motor.
+    LoadFailed,
+    /// Fallo durante la generación de salida en el motor.
+    GenerationFailed,
+    /// El motor no devolvió ninguna respuesta (p. ej. cola vacía en pruebas).
+    EmptyResponse,
+    /// Error de sincronización interna al adquirir el bloqueo del almacén de modelos.
+    LockPoisoned,
+    /// Fallo interno no clasificado del motor.
+    Internal,
+}
+
+impl EngineErrorCode {
+    /// Representación estable en `snake_case` del código de error del motor.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::LoadFailed => "load_failed",
+            Self::GenerationFailed => "generation_failed",
+            Self::EmptyResponse => "empty_response",
+            Self::LockPoisoned => "lock_poisoned",
+            Self::Internal => "internal",
+        }
+    }
+}
+
+impl fmt::Display for EngineErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Errores del subsistema SLM local.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SlmError {
@@ -49,8 +86,8 @@ pub enum SlmError {
     InvalidOutput(Vec<OutputIssue>),
     /// Operación, formato o ruta no soportados.
     Unsupported(String),
-    /// Error interno del motor de inferencia.
-    Engine(String),
+    /// Error interno del motor de inferencia identificado mediante código constante.
+    Engine(EngineErrorCode),
     /// Error de entrada/salida al acceder a los archivos del modelo.
     Io(String),
 }
@@ -71,7 +108,7 @@ impl fmt::Display for SlmError {
                 )
             }
             Self::Unsupported(msg) => write!(f, "Unsupported SLM operation: {msg}"),
-            Self::Engine(msg) => write!(f, "SLM engine error: {msg}"),
+            Self::Engine(code) => write!(f, "SLM engine error: {code}"),
             Self::Io(msg) => write!(f, "Model I/O error: {msg}"),
         }
     }
