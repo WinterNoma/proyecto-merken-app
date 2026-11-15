@@ -13,6 +13,7 @@ pub(super) struct MatchedTime {
 }
 
 /// Máscara booleana local a una cláusula (`[c_start..c_end)`), evitando coste cuadrático.
+#[derive(Clone)]
 pub(super) struct TimeMask {
     offset: usize,
     flags: Vec<bool>,
