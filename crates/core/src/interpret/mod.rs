@@ -23,7 +23,12 @@ pub const RULES_INTERPRETER_VERSION: &str = "rules-interp-2026.11.14";
 /// la interfaz abra el formulario directamente.
 pub const MAX_INPUT_CHARS: usize = 1000;
 
-pub(crate) use lexicon::quote_unit_compatible;
+pub(crate) use extract::{is_single_clause_quote, occurrence_is_negated_in_input};
+pub(crate) use lexicon::{
+    BoundedOccurrence, Token, check_numeric_unit_around_occurrence,
+    find_token_bounded_occurrences_with_tokens, has_token_bounded_occurrence,
+    quote_unit_compatible, tokenize,
+};
 pub use lexicon::{mentions_indicator, quote_number, quote_sleep_quality, quote_zone};
 
 /// Interpreta texto libre (español, inglés o mezclado) mediante reglas deterministas.
