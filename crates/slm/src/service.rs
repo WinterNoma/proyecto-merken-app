@@ -1290,6 +1290,10 @@ mod tests {
         ("pulse —72", &["—72"]),
         ("pulso + setenta", &["+ setenta"]),
         ("pulso ± 72", &["± 72"]),
+        ("pulse \u{2212}\u{00a0}72", &["\u{2212}\u{00a0}72"]),
+        ("pulso 72%", &["72%"]),
+        ("temperatura 36℉", &["36℉"]),
+        ("temperatura 36 ℉.", &["36 ℉"]),
         ("temperatura −0.5", &["−0.5"]),
         ("temperatura +36,6", &["+36,6"]),
         ("temperatura 36,6", &[]),
@@ -1424,7 +1428,7 @@ mod tests {
     fn symbol_prefixes_stop_at_sentence_boundaries_and_attached_words() {
         for boundary in [
             ".", ",", ";", ":", "!", "?", "¡", "¿", "\"", "'", "(", ")", "‘", "’", "“", "”", "«",
-            "»", "‹", "›", "\n", "\r", "\u{00a0}",
+            "»", "‹", "›", "\n", "\r",
         ] {
             let text = format!("pulso ~{boundary}\t± 72");
             let mut proposal = interpret("pulso 72");
