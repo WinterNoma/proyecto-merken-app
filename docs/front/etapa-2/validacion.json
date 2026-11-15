@@ -1,0 +1,511 @@
+{
+  "profiles": [
+    {
+      "canvas": {
+        "ariaHidden": "true",
+        "pointerEvents": "none"
+      },
+      "mic": {
+        "center": 206,
+        "clipped": false,
+        "height": 56,
+        "width": 244
+      },
+      "page": [
+        412,
+        915
+      ],
+      "viewport": [
+        412,
+        915
+      ],
+      "particles": {
+        "canvasPixels": 376980,
+        "count": 63,
+        "energy": 0,
+        "frames": 3391,
+        "height": 915,
+        "holding": false,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 0.20000000298023224,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 412
+      }
+    },
+    {
+      "canvas": {
+        "ariaHidden": "true",
+        "pointerEvents": "none"
+      },
+      "mic": {
+        "center": 215,
+        "clipped": false,
+        "height": 56,
+        "width": 262
+      },
+      "page": [
+        430,
+        932
+      ],
+      "viewport": [
+        430,
+        932
+      ],
+      "particles": {
+        "canvasPixels": 400760,
+        "count": 67,
+        "energy": 0,
+        "frames": 898,
+        "height": 932,
+        "holding": false,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.20000000298023224,
+        "renderMsP95": 0.30000001192092896,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 430
+      }
+    },
+    {
+      "canvas": {
+        "ariaHidden": "true",
+        "pointerEvents": "none"
+      },
+      "mic": {
+        "center": 180,
+        "clipped": false,
+        "height": 56,
+        "width": 192
+      },
+      "page": [
+        360,
+        800
+      ],
+      "viewport": [
+        360,
+        800
+      ],
+      "particles": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 0,
+        "frames": 1609,
+        "height": 800,
+        "holding": false,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 0.20000000298023224,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      }
+    }
+  ],
+  "checks": {
+    "held": [
+      {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 0.7382852215287177,
+        "event": "held-250ms",
+        "frames": 3235,
+        "height": 800,
+        "holding": true,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 0.20000000298023224,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      }
+    ],
+    "released": {
+      "canvasPixels": 288000,
+      "count": 48,
+      "energy": 3.77411515777122e-81,
+      "frames": 4427,
+      "height": 800,
+      "holding": false,
+      "mode": "running",
+      "pulseActive": false,
+      "renderMsP50": 0.10000000149011612,
+      "renderMsP95": 0.20000000298023224,
+      "resolution": 1,
+      "sampleCount": 120,
+      "slowIntervals": 0,
+      "targetFps": 30,
+      "width": 360
+    },
+    "zone": {
+      "canvasPixels": 288000,
+      "count": 48,
+      "energy": 2.240616503839425e-82,
+      "frames": 4444,
+      "height": 800,
+      "holding": false,
+      "mode": "running",
+      "pulseActive": true,
+      "renderMsP50": 0.10000000149011612,
+      "renderMsP95": 0.20000000298023224,
+      "resolution": 1,
+      "sampleCount": 120,
+      "slowIntervals": 0,
+      "targetFps": 30,
+      "width": 360
+    },
+    "history": {
+      "after": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 2.240616503839425e-82,
+        "frames": 4444,
+        "height": 800,
+        "holding": false,
+        "mode": "inactive",
+        "pulseActive": true,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 0.20000000298023224,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "before": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 2.240616503839425e-82,
+        "frames": 4444,
+        "height": 800,
+        "holding": false,
+        "mode": "inactive",
+        "pulseActive": true,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 0.20000000298023224,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      }
+    },
+    "reduced": {
+      "after": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 0,
+        "frames": 5,
+        "height": 800,
+        "holding": false,
+        "mode": "reduced",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 1.2999999523162842,
+        "resolution": 1,
+        "sampleCount": 5,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "before": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 0,
+        "frames": 5,
+        "height": 800,
+        "holding": false,
+        "mode": "reduced",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 1.2999999523162842,
+        "resolution": 1,
+        "sampleCount": 5,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "preference": true
+    },
+    "forcedColors": {
+      "canvasPixels": 288000,
+      "count": 48,
+      "energy": 0,
+      "frames": 5,
+      "height": 800,
+      "holding": false,
+      "mode": "forced-colors",
+      "pulseActive": false,
+      "renderMsP50": 0.10000000149011612,
+      "renderMsP95": 1.2999999523162842,
+      "resolution": 1,
+      "sampleCount": 5,
+      "slowIntervals": 0,
+      "targetFps": 30,
+      "width": 360
+    },
+    "lifecycle": {
+      "after": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 0,
+        "frames": 5,
+        "height": 800,
+        "holding": false,
+        "mode": "paused",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 1.2999999523162842,
+        "resolution": 1,
+        "sampleCount": 5,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "before": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 0,
+        "frames": 5,
+        "height": 800,
+        "holding": false,
+        "mode": "paused",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 1.2999999523162842,
+        "resolution": 1,
+        "sampleCount": 5,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "resumed": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 0,
+        "frames": 5,
+        "height": 800,
+        "holding": false,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 1.2999999523162842,
+        "resolution": 1,
+        "sampleCount": 5,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      }
+    },
+    "runSample": {
+      "after": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 0,
+        "frames": 1012,
+        "height": 800,
+        "holding": false,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 0.20000000298023224,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "drawFps": 29.9880047980696,
+      "draws": 120,
+      "durationMs": 4001.60000000149
+    },
+    "disabled": {
+      "after": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 0,
+        "frames": 1013,
+        "height": 800,
+        "holding": false,
+        "mode": "disabled",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 0.20000000298023224,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "before": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 0,
+        "frames": 1013,
+        "height": 800,
+        "holding": false,
+        "mode": "disabled",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 0.20000000298023224,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      }
+    },
+    "noContext": {
+      "destroyed": {
+        "canvasPixels": 1,
+        "count": 0,
+        "energy": 0,
+        "frames": 0,
+        "height": 1,
+        "holding": false,
+        "mode": "destroyed",
+        "pulseActive": false,
+        "renderMsP50": 0,
+        "renderMsP95": 0,
+        "resolution": 1,
+        "sampleCount": 0,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 1
+      },
+      "unavailable": {
+        "canvasPixels": 45000,
+        "count": 0,
+        "energy": 0,
+        "frames": 0,
+        "height": 1,
+        "holding": false,
+        "mode": "unavailable",
+        "pulseActive": false,
+        "renderMsP50": 0,
+        "renderMsP95": 0,
+        "resolution": 1,
+        "sampleCount": 0,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 1
+      }
+    },
+    "visibility": {
+      "after": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 0,
+        "frames": 2371,
+        "height": 800,
+        "holding": false,
+        "mode": "paused",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 0.20000000298023224,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "before": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 0,
+        "frames": 2371,
+        "height": 800,
+        "holding": false,
+        "mode": "paused",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 0.20000000298023224,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "resumed": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 0,
+        "frames": 2371,
+        "height": 800,
+        "holding": false,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 0.20000000298023224,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "simulated": true
+    },
+    "highDpr": {
+      "high": {
+        "canvasPixels": 648000,
+        "count": 48,
+        "energy": 0,
+        "frames": 2372,
+        "height": 800,
+        "holding": false,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 0.20000000298023224,
+        "resolution": 1.5,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "restored": {
+        "canvasPixels": 288000,
+        "count": 48,
+        "energy": 0,
+        "frames": 2372,
+        "height": 800,
+        "holding": false,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.10000000149011612,
+        "renderMsP95": 0.20000000298023224,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "simulated": true
+    },
+    "largeText": {
+      "clipping": [],
+      "pageHeight": 1960,
+      "pageWidth": 345,
+      "width": 360
+    }
+  },
+  "capture": {
+    "frames": 30,
+    "frameRate": 6,
+    "durationMs": 4865,
+    "frameDirectory": "C:/Users/Salva/AppData/Local/Temp/merken-particles-1794708993112"
+  }
+}

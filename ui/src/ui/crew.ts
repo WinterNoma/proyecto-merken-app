@@ -109,7 +109,7 @@ export function createCrewSelector(onSelect: (member: AstronautProfile | null) =
       const empty = crew.length === 0;
       select.disabled = empty; previous.disabled = crew.length < 2; next.disabled = crew.length < 2;
       if (empty) select.replaceChildren(el("option", "", state.loading ? "Loading crew…" : "No crew available"));
-      const availability = state.loading ? "Loading crew…" : state.live
+      const availability = state.preview ? "DEMO · Fixed sample readings" : state.loading ? "Loading crew…" : state.live
         ? (empty ? "No crew available" : "Live")
         : state.lastSuccess ? "Last update " + utc(state.lastSuccess, true) : "Connection unavailable · No data";
       setText(element("#crew-availability"), availability);

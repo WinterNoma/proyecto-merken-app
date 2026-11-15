@@ -7,7 +7,8 @@
 
 use merken_core::time::Timestamp;
 use merken_store::{
-    Scenario, Store, StoreError,
+    ListTelemetryInput, RecordTelemetryInput, RecordTelemetryResult, Scenario, Store, StoreError,
+    TelemetryItem, VerifyTelemetryResult,
     api::{
         CorrectRecordInput, EventItem, ImportResult, ListRecordsInput, LogRecordInput, LogResult,
         ProfileResponse, RaiseEventInput, RaiseEventResult, RecordItem, StatusResponse,
@@ -86,6 +87,11 @@ pub struct SimAstronautsResponse {
     pub astronauts: Vec<SimAstronaut>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+pub struct VerifyTelemetryInput {
+    pub astronaut_key: Option<String>,
+}
+
 // ---------- Lógica sin Tauri (se puede probar) ----------
 
 fn sync_err(e: SyncError) -> StoreError {
@@ -145,6 +151,14 @@ pub fn handle_load_demo(
         message: "Unknown demo scenario. Use routine, persistent_change or alarm_event".into(),
     })?;
     store.load_demo(scenario, now, APP_VERSION)
+}
+
+pub fn handle_verify_telemetry(
+    store: &Store,
+    input: Option<VerifyTelemetryInput>,
+) -> Result<VerifyTelemetryResult, StoreError> {
+    let astronaut_key = input.and_then(|i| i.astronaut_key);
+    store.verify_telemetry(astronaut_key)
 }
 
 // ---------- Comandos ----------
@@ -227,6 +241,30 @@ fn clear_demo(state: tauri::State<'_, AppState>) -> Result<(), StoreError> {
     with_store(&state, |s| s.clear_demo())
 }
 
+#[tauri::command]
+fn record_telemetry(
+    state: tauri::State<'_, AppState>,
+    input: RecordTelemetryInput,
+) -> Result<RecordTelemetryResult, StoreError> {
+    with_store(&state, |s| s.record_telemetry(input, now(), APP_VERSION))
+}
+
+#[tauri::command]
+fn list_telemetry(
+    state: tauri::State<'_, AppState>,
+    input: ListTelemetryInput,
+) -> Result<Vec<TelemetryItem>, StoreError> {
+    with_store(&state, |s| s.list_telemetry(input))
+}
+
+#[tauri::command]
+fn verify_telemetry(
+    state: tauri::State<'_, AppState>,
+    input: Option<VerifyTelemetryInput>,
+) -> Result<VerifyTelemetryResult, StoreError> {
+    with_store(&state, |s| handle_verify_telemetry(s, input))
+}
+
 /// Lista los astronautas de la API de simulación (datos inventados).
 #[tauri::command]
 async fn sim_list_astronauts(
@@ -307,7 +345,10 @@ pub fn run() {
             load_demo,
             clear_demo,
             sim_list_astronauts,
-            sim_import
+            sim_import,
+            record_telemetry,
+            list_telemetry,
+            verify_telemetry
         ])
         .run(tauri::generate_context!());
     if let Err(e) = result {
@@ -359,6 +400,151 @@ mod tests {
         assert_eq!(st.alerts.len(), 1);
         let events = handle_list_events(&store, ListEventsInput::default())?;
         assert_eq!(events.events.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn telemetry_round_trip_and_verify_command_paths() -> Result<(), StoreError> {
+        let mut store = Store::open_in_memory()?;
+        let now = Timestamp::from_millis(1_800_000_000_000);
+        let input: RecordTelemetryInput = serde_json::from_value(serde_json::json!({
+            "readings": [
+                {
+                    "astronaut_key": "astro-1",
+                    "astronaut_name": "Alex Morgan",
+                    "indicator": "heart_rate",
+                    "value": { "bpm": 72 },
+                    "unit": "bpm"
+                },
+                {
+                    "astronaut_key": "astro-2",
+                    "astronaut_name": "Sam Vega",
+                    "indicator": "hrv",
+                    "value": { "ms": 64 },
+                    "unit": "ms"
+                },
+                {
+                    "astronaut_key": "astro-1",
+                    "astronaut_name": "Alex Morgan",
+                    "indicator": "space_radiation",
+                    "value": { "usv_h": 14.1 },
+                    "unit": "µSv/h"
+                },
+                {
+                    "astronaut_key": "astro-1",
+                    "astronaut_name": "Alex Morgan",
+                    "indicator": "distance_from_earth",
+                    "value": { "km": 418.2 },
+                    "unit": "km"
+                }
+            ]
+        }))
+        .map_err(|_| StoreError {
+            code: "invalid_schema".into(),
+            field: None,
+            message: "bad test json".into(),
+        })?;
+        let recorded = store.record_telemetry(input, now, APP_VERSION)?;
+        assert_eq!(recorded.stored, 4);
+
+        let later = now.saturating_add_ms(10_000);
+        let follow_up: RecordTelemetryInput = serde_json::from_value(serde_json::json!({
+            "readings": [
+                {
+                    "astronaut_key": "astro-1",
+                    "astronaut_name": "Alex Morgan",
+                    "indicator": "heart_rate",
+                    "value": { "bpm": 76 },
+                    "unit": "bpm"
+                }
+            ]
+        }))
+        .map_err(|_| StoreError {
+            code: "invalid_schema".into(),
+            field: None,
+            message: "bad follow-up json".into(),
+        })?;
+        let recorded_later = store.record_telemetry(follow_up, later, APP_VERSION)?;
+        assert_eq!(recorded_later.stored, 1);
+
+        let list_input: ListTelemetryInput = serde_json::from_value(serde_json::json!({
+            "astronaut_key": "astro-1",
+            "indicator": "heart_rate",
+            "from": "2027-01-15T08:00:05Z",
+            "to": "2027-01-15T09:00:15+01:00"
+        }))
+        .map_err(|_| StoreError {
+            code: "invalid_schema".into(),
+            field: None,
+            message: "bad list json".into(),
+        })?;
+        let filtered_rfc3339 = store.list_telemetry(list_input)?;
+        assert_eq!(filtered_rfc3339.len(), 1);
+        assert_eq!(filtered_rfc3339[0].value, serde_json::json!({ "bpm": 76 }));
+
+        let items = store.list_telemetry(ListTelemetryInput {
+            astronaut_key: "astro-1".into(),
+            ..Default::default()
+        })?;
+        assert_eq!(items.len(), 4);
+        assert_eq!(items[0].app_version, APP_VERSION);
+
+        // Sin `input` (Option::None).
+        let verified_none = handle_verify_telemetry(&store, None)?;
+        assert_eq!(
+            verified_none,
+            VerifyTelemetryResult {
+                ok: true,
+                checked: 5,
+                series_checked: 4,
+                checked_through_reading_id: Some(5),
+                first_bad_reading_id: None,
+                problem: None,
+            }
+        );
+
+        // Con `input: {}`.
+        let verify_empty: Option<VerifyTelemetryInput> =
+            serde_json::from_str("{}").map_err(|_| StoreError {
+                code: "invalid_schema".into(),
+                field: None,
+                message: "bad verify json".into(),
+            })?;
+        let verified_empty = handle_verify_telemetry(&store, verify_empty)?;
+        assert_eq!(verified_empty, verified_none);
+
+        // Con `input: { astronaut_key }`.
+        let verify_scoped: Option<VerifyTelemetryInput> =
+            serde_json::from_str(r#"{"astronaut_key":"astro-1"}"#).map_err(|_| StoreError {
+                code: "invalid_schema".into(),
+                field: None,
+                message: "bad scoped verify json".into(),
+            })?;
+        let verified_scoped = handle_verify_telemetry(&store, verify_scoped)?;
+        assert_eq!(
+            verified_scoped,
+            VerifyTelemetryResult {
+                ok: true,
+                checked: 4,
+                series_checked: 3,
+                checked_through_reading_id: Some(5),
+                first_bad_reading_id: None,
+                problem: None,
+            }
+        );
+
+        let json_payload = serde_json::to_value(&verified_scoped)?;
+        assert_eq!(
+            json_payload,
+            serde_json::json!({
+                "ok": true,
+                "checked": 4,
+                "series_checked": 3,
+                "checked_through_reading_id": 5,
+                "first_bad_reading_id": null,
+                "problem": null,
+            })
+        );
         Ok(())
     }
 }

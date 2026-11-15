@@ -15,7 +15,7 @@ export const readingLinks: Record<string, { indicator: Indicator; zone: BodyZone
   sleep: { indicator: "sleep", zone: "head" }, nutrition: { indicator: "nutrition", zone: "abdomen" },
   radiation: { indicator: "space_radiation", zone: "other" }, distance: { indicator: "distance_from_earth", zone: "other" },
 };
-export function setupPages() {
+export function setupPages(onChange?: (index: number) => void) {
   const pages = [element("#overview"), element("#core-panel")];
   const dots = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-page]"));
   let active = 0;
@@ -25,6 +25,7 @@ export function setupPages() {
     dots.forEach((dot, i) => { if (i === active) dot.setAttribute("aria-current", "page"); else dot.removeAttribute("aria-current"); });
     setText(element("#page-name"), active === 0 ? "Overview" : "History / On-device record");
     if (focus) pages[active].focus();
+    onChange?.(active);
   }
   dots.forEach((dot, index) => dot.addEventListener("click", () => show(index)));
   element("#sync-open").addEventListener("click", () => show(1, true));
@@ -43,7 +44,7 @@ export function setupPages() {
   });
   container.addEventListener("pointercancel", () => { start = null; });
 }
-export function createDashboard(available: boolean) {
+export function createDashboard(available: boolean, onZoneSelection?: (zone: BodyZone) => void) {
   const map = createBodyMap(zone => {
     highlight(zone);
     const linked = Object.entries(readingLinks).filter(([, link]) => link.zone === zone);
@@ -63,16 +64,17 @@ export function createDashboard(available: boolean) {
   dialog.addEventListener("close", () => { detailRevision += 1; });
   function highlight(zone: BodyZone): void {
     for (const [key, link] of Object.entries(readingLinks)) element("#vital-" + key).classList.toggle("is-linked", zone === link.zone);
+    onZoneSelection?.(zone);
   }
   function overall(): void {
     const copy = available ? status ? statusCopy(status.overall.status) : statusCopy(confirmedAlert?.status ?? "not_evaluated")
       : member ? crewStatus(member.telemetry) : { tone: "neutral" as const, label: "No data", icon: "no_data" as const };
     paintBadge(element("#overall-status"), copy);
     element("#overall-box").dataset.tone = copy.tone;
-    element("#overview-demo").hidden = !status?.is_demo;
+    element("#overview-demo").hidden = !status?.is_demo && !feed?.preview;
     setText(element("#overall-scope"), available
       ? "On-device · " + (profile?.profile?.astronaut.display_name ?? "Profile unavailable") + (!online ? " · Local service unavailable" : "")
-      : "MySQL · Reading-level assessment");
+      : feed?.preview ? "Synthetic crew · Reading-level assessment" : "MySQL · Reading-level assessment");
     if (available) setText(element("#feed-status"), status ? (online ? "Live · " : "Last update · ") + utc(status.evaluated_at, true) : "Awaiting local record");
     const extra = element("#overall-extra");
     const unknown = status?.indicators.filter(evaluation => evaluation.status === "not_evaluated" && evaluation.reason !== "not_applicable").length ?? 0;
@@ -81,7 +83,7 @@ export function createDashboard(available: boolean) {
     element("#overview-alerts").hidden = !status?.alerts.length && !confirmedAlert;
     setText(element("#overview-alerts"), "View persistent alerts (" + (status?.alerts.length || (confirmedAlert ? 1 : 0)) + ")");
     setText(element("#overview-sync"), status ? status.sync.pending + " pending · " + status.sync.failed + " failed" : "Unavailable");
-    setText(element("#body-source"), available ? "Cards: MySQL crew · Zones: on-device symptoms" + (status?.is_demo ? " · DEMO" : "") : "Local service unavailable · Body zones not evaluated");
+    setText(element("#body-source"), available ? "Cards: MySQL crew · Zones: on-device symptoms" + (status?.is_demo ? " · DEMO" : "") : feed?.preview ? "DEMO readings · Body navigation only · Zones not evaluated" : "Local service unavailable · Body zones not evaluated");
   }
   async function detail(key: string): Promise<void> {
     const link = readingLinks[key]; if (!link) return;
@@ -91,11 +93,11 @@ export function createDashboard(available: boolean) {
     setText(element("#reading-title"), card.querySelector(".card-label")?.textContent ?? "Reading");
     const content = element("#reading-content");
     const feedSection = el("section", "detail-feed");
-    feedSection.append(el("p", "eyebrow", "MySQL crew · " + (member?.name ?? "No crew available")),
+    feedSection.append(el("p", "eyebrow", (feed?.preview ? "DEMO crew · " : "MySQL crew · ") + (member?.name ?? "No crew available")),
       el("p", "record-value data", card.querySelector(".reading")?.textContent ?? "--"),
-      el("p", "", card.querySelector(".vital-status")?.textContent ?? "No data"),
+      el("p", "", card.querySelector<HTMLElement>(".vital-status")?.dataset.label ?? "No data"),
       el("p", "caption", card.querySelector(".reference")?.textContent ?? "No reference supplied"),
-      el("p", "caption", feed?.lastSuccess ? "Received " + utc(feed.lastSuccess) + ". Measurement time is not supplied by this feed." : "No receipt or measurement time available."),
+      el("p", "caption", feed?.preview ? "Fixed synthetic sample. Not a live measurement." : feed?.lastSuccess ? "Received " + utc(feed.lastSuccess) + ". Measurement time is not supplied by this feed." : "No receipt or measurement time available."),
       el("p", "caption", "Navigation zone: " + zoneName(link.zone) + ". This link does not indicate a symptom."));
     if (feed && !feed.live) feedSection.append(el("p", "caption", "Connection unavailable. Last received values only."));
     const local = el("section", "detail-local");
