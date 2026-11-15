@@ -4,8 +4,8 @@ use super::{
     RULES_INTERPRETER_VERSION,
     lexicon::{
         BoundedOccurrence, Token, TokenKind, UnitKind, has_post_unit_unknown_tail,
-        is_bp_keyword_at, is_general_symptom_zone_word, is_hour_unit, is_minute_unit,
-        is_negated_good_sleep, is_negation_word, is_sleep_word, is_symptom_cue,
+        indicator_mention_end, is_bp_keyword_at, is_general_symptom_zone_word, is_hour_unit,
+        is_minute_unit, is_negated_good_sleep, is_negation_word, is_sleep_word, is_symptom_cue,
         is_unknown_unit_after_number, match_body_zone_phrase, match_unit_at, n1_n2_bp_plausible,
         parse_body_zone, parse_quote_number_with_unit, sleep_quality_word, slice_from_bytes,
         slice_tokens, starts_with_words, tokenize, truncate_chars, word_at,
@@ -72,7 +72,9 @@ impl AnalyzedSegment {
             "quality" => self.ambiguity.quality,
             "score" => self.ambiguity.score || self.ambiguity.numeric,
             "systolic" | "diastolic" => self.ambiguity.bp,
-            "bpm" | "celsius" | "mg_dl" | "percentage" => self.ambiguity.numeric,
+            "bpm" | "celsius" | "mg_dl" | "percentage" | "usv_h" | "km" | "kcal" => {
+                self.ambiguity.numeric
+            }
             _ => false,
         }
     }
@@ -117,6 +119,8 @@ enum AnchorKind {
     Mood,
     Sleep,
     Symptom,
+    // Se reconocen y delimitan, pero capa 1 no extrae sus valores.
+    MentionOnly(Indicator),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -158,7 +162,8 @@ struct ProposalOut {
     clauses: Vec<ClauseInfo>,
     segments: Vec<AnalyzedSegment>,
     last_was_open_sleep: bool,
-    last_clause_rec: Option<(Indicator, usize, usize)>,
+    // Indicador, índice del segmento (haya o no registro L1), byte inicial.
+    last_clause_mention: Option<(Indicator, usize, usize)>,
     pending_correction_from: Option<(Indicator, usize, usize, Option<usize>)>,
 }
 
@@ -198,6 +203,12 @@ fn is_clause_break_word(w: &str) -> bool {
 fn is_indicator_or_symptom_start(tokens: &[Token], idx: usize, end: usize) -> bool {
     if idx >= end {
         return false;
+    }
+    if Indicator::ALL
+        .iter()
+        .any(|&indicator| indicator_mention_end(indicator, tokens, idx, end).is_some())
+    {
+        return true;
     }
     let Some(w) = word_at(tokens, idx) else {
         if let Some(num) = parse_simple_number(tokens, idx) {
@@ -473,7 +484,52 @@ fn split_clauses(tokens: &[Token]) -> Vec<ClauseSpan> {
     refined
 }
 
+/// Toda mención delimita segmentos, aunque no haya soporte de extracción para ella.
 fn detect_anchor(orig: &str, tokens: &[Token], idx: usize, end: usize) -> Option<RawAnchor> {
+    if let Some(anchor) = detect_extraction_anchor(orig, tokens, idx, end) {
+        return Some(anchor);
+    }
+    // Las unidades de contexto también delimitan menciones sin etiqueta ("0.42 uSv/h").
+    if let Some(num) = parse_simple_number(tokens, idx)
+        && let Some((unit, unit_end)) = match_unit_at(orig, tokens, num.end_idx, end)
+        && let Some(indicator) = [
+            Indicator::SpaceRadiation,
+            Indicator::DistanceFromEarth,
+            Indicator::Nutrition,
+        ]
+        .into_iter()
+        .find(|&indicator| unit.matches_indicator(indicator))
+    {
+        return Some(RawAnchor {
+            kind: AnchorKind::MentionOnly(indicator),
+            start: idx,
+            end: unit_end,
+            is_keyword: false,
+            zone: None,
+        });
+    }
+    Indicator::ALL.iter().find_map(|&indicator| {
+        let mention_end = indicator_mention_end(indicator, tokens, idx, end)?;
+        let unit_end = match_unit_at(orig, tokens, idx, end)
+            .filter(|(unit, _)| unit.matches_indicator(indicator))
+            .map(|(_, unit_end)| unit_end);
+        Some(RawAnchor {
+            kind: AnchorKind::from_indicator(indicator),
+            start: idx,
+            end: unit_end.unwrap_or(mention_end),
+            is_keyword: unit_end.is_none(),
+            zone: None,
+        })
+    })
+}
+
+/// Anclas que además permiten a capa 1 extraer valores.
+fn detect_extraction_anchor(
+    orig: &str,
+    tokens: &[Token],
+    idx: usize,
+    end: usize,
+) -> Option<RawAnchor> {
     if let Some(bp_len) = is_bp_keyword_at(tokens, idx, end) {
         return Some(RawAnchor {
             kind: AnchorKind::BloodPressure,
@@ -1830,6 +1886,37 @@ fn extract_single_numeric_record(
     )
 }
 
+/// Solo analiza ambigüedad; no propone ni convierte valores para estos indicadores.
+fn analyze_mention_only(ctx: &SegmentCtx<'_>) -> (Option<ProposedRecord>, bool, SegmentAmbiguity) {
+    let mut numbers = 0;
+    let mut i = ctx.start;
+    while i < ctx.end {
+        if ctx.time_mask.is_masked(i) {
+            i += 1;
+            continue;
+        }
+        match scan_number(ctx.tokens, i, ctx.end, false) {
+            Some(NumberScan::Valid(num)) => {
+                if !ctx.time_mask.any_masked(i, num.end_idx) {
+                    numbers += 1;
+                }
+                i = num.end_idx.max(i + 1);
+            }
+            Some(NumberScan::Rejected { end_idx }) => {
+                numbers += 1;
+                i = end_idx.max(i + 1);
+            }
+            None => i += 1,
+        }
+    }
+    let ambiguity = SegmentAmbiguity {
+        has_conflict: ctx.has_conflict,
+        numeric: numbers > 1,
+        ..Default::default()
+    };
+    (None, ambiguity.has_conflict || ambiguity.numeric, ambiguity)
+}
+
 fn is_negation_start_at(tokens: &[Token], idx: usize, end: usize) -> bool {
     if let Some(w) = word_at(tokens, idx)
         && matches!(
@@ -2161,6 +2248,22 @@ fn try_pure_sleep_duration_continuation(
 }
 
 impl AnchorKind {
+    const fn from_indicator(indicator: Indicator) -> Self {
+        match indicator {
+            Indicator::HeartRate => Self::HeartRate,
+            Indicator::BloodPressure => Self::BloodPressure,
+            Indicator::BodyTemperature => Self::BodyTemperature,
+            Indicator::Glucose => Self::Glucose,
+            Indicator::OxygenInBlood => Self::OxygenInBlood,
+            Indicator::Mood => Self::Mood,
+            Indicator::Sleep => Self::Sleep,
+            Indicator::Symptom => Self::Symptom,
+            Indicator::SpaceRadiation | Indicator::DistanceFromEarth | Indicator::Nutrition => {
+                Self::MentionOnly(indicator)
+            }
+        }
+    }
+
     const fn to_indicator(self) -> Indicator {
         match self {
             Self::HeartRate => Indicator::HeartRate,
@@ -2171,6 +2274,7 @@ impl AnchorKind {
             Self::Mood => Indicator::Mood,
             Self::Sleep => Indicator::Sleep,
             Self::Symptom => Indicator::Symptom,
+            Self::MentionOnly(indicator) => indicator,
         }
     }
 }
@@ -2225,11 +2329,20 @@ fn compute_seg_starts(
     seg_starts
 }
 
-fn mark_record_cleared_by_correction(segments: &mut [AnalyzedSegment], rec_idx: usize) {
-    for seg in segments {
-        if seg.record_idx == Some(rec_idx) {
-            seg.ambiguity.cleared_by_correction = true;
+/// La corrección se enlaza con una mención original, no con la existencia de un registro L1.
+fn clear_segment_by_correction(out: &mut ProposalOut, segment_idx: usize) {
+    let record_idx = out.segments.get(segment_idx).and_then(|seg| seg.record_idx);
+    if let Some(rec_idx) = record_idx {
+        if let Some(rec) = out.records.get_mut(rec_idx) {
+            clear_record_values(rec);
         }
+        for seg in &mut out.segments {
+            if seg.record_idx == Some(rec_idx) {
+                seg.ambiguity.cleared_by_correction = true;
+            }
+        }
+    } else if let Some(seg) = out.segments.get_mut(segment_idx) {
+        seg.ambiguity.cleared_by_correction = true;
     }
 }
 
@@ -2262,7 +2375,7 @@ fn process_clause(
     });
     if !has_non_time_word_or_num {
         out.last_was_open_sleep = false;
-        out.last_clause_rec = None;
+        out.last_clause_mention = None;
         out.pending_correction_from = None;
         return time_matches.first().cloned();
     }
@@ -2335,24 +2448,21 @@ fn process_clause(
     if raw_anchors.is_empty() {
         out.last_was_open_sleep = false;
         if let Some(after_corr_idx) = corr_after
-            && let Some((prev_ind, rec_idx, prev_start_b)) = out.last_clause_rec
+            && let Some((prev_ind, prev_seg_idx, prev_start_b)) = out.last_clause_mention
         {
-            if let Some(prev_rec) = out.records.get_mut(rec_idx) {
-                clear_record_values(prev_rec);
-            }
-            mark_record_cleared_by_correction(&mut out.segments, rec_idx);
+            clear_segment_by_correction(out, prev_seg_idx);
             if after_corr_idx >= c_end {
                 // "pulso 72, perdón, pulso 82": guardar inicio para combinarlo con la cláusula siguiente.
                 out.pending_correction_from =
-                    Some((prev_ind, rec_idx, prev_start_b, Some(clause_end_byte)));
+                    Some((prev_ind, prev_seg_idx, prev_start_b, Some(clause_end_byte)));
             } else if let Some(combined) = slice_from_bytes(orig, prev_start_b, clause_end_byte) {
                 out.uninterpreted.push(combined);
                 out.pending_correction_from = None;
             }
-            out.last_clause_rec = None;
+            out.last_clause_mention = None;
             return None;
         }
-        out.last_clause_rec = None;
+        out.last_clause_mention = None;
         out.pending_correction_from = None;
         if let Some(q) = slice_tokens(orig, tokens, c_start, c_end) {
             out.uninterpreted.push(q);
@@ -2368,7 +2478,11 @@ fn process_clause(
         let can_merge_same = if let Some(last) = groups.last_mut()
             && last.kind == a.kind
         {
-            last.anchor_end = a.end;
+            // Una unidad de contexto confirma la mención, pero no amplía la etiqueta
+            // sobre predicados ajenos que podrían apropiarse de su número.
+            if !matches!(a.kind, AnchorKind::MentionOnly(_)) || a.is_keyword {
+                last.anchor_end = a.end;
+            }
             if !a.is_keyword {
                 if has_correction_between(tokens, prev_anchor_end, a.start) {
                     last.has_conflict = true;
@@ -2413,8 +2527,9 @@ fn process_clause(
         prev_anchor_end = a.end;
     }
 
-    // Corrección contigua entre cláusulas del mismo indicador ("pulso 72, perdón pulso 82" / "pulso 72, perdón, pulso 82"):
-    // consolida a un solo registro ambiguo (value: None) y el span completo en uninterpreted.
+    // Corrección contigua: invalida las dos menciones originales aunque no tengan registro L1.
+    // Los demás indicadores de la cláusula conservan sus segmentos y su extracción.
+    let mut skip_corrected_first = false;
     if let Some(first_group) = groups.first() {
         let first_ind = first_group.kind.to_indicator();
         let active_corr = out
@@ -2424,45 +2539,39 @@ fn process_clause(
             .filter(|(ind, _, _)| *ind == first_ind)
             .or_else(|| {
                 if corr_after.is_some() {
-                    out.last_clause_rec.filter(|(ind, _, _)| *ind == first_ind)
+                    out.last_clause_mention
+                        .filter(|(ind, _, _)| *ind == first_ind)
                 } else {
                     None
                 }
             });
-        if let Some((_, rec_idx, prev_start_b)) = active_corr {
-            if let Some(prev_rec) = out.records.get_mut(rec_idx) {
-                clear_record_values(prev_rec);
-            }
-            mark_record_cleared_by_correction(&mut out.segments, rec_idx);
+        if let Some((_, prev_seg_idx, prev_start_b)) = active_corr {
+            clear_segment_by_correction(out, prev_seg_idx);
             let corr_seg_starts = compute_seg_starts(tokens, c_start, &groups, &time_mask);
-            for (pos, g) in groups.iter().enumerate() {
-                let seg_start = corr_seg_starts.get(pos).copied().unwrap_or(c_start);
-                let seg_end = corr_seg_starts.get(pos + 1).copied().unwrap_or(c_end);
-                if seg_start < seg_end {
-                    out.segments.push(AnalyzedSegment {
-                        clause_idx,
-                        seg_start,
-                        seg_end,
-                        cont_start: None,
-                        cont_end: None,
-                        anchor_start: g.anchor_start,
-                        anchor_end: g.anchor_end,
-                        indicator: g.kind.to_indicator(),
-                        negated: false,
-                        ambiguity: SegmentAmbiguity {
-                            cleared_by_correction: true,
-                            ..Default::default()
-                        },
-                        record_idx: None,
-                    });
-                }
-            }
-            if let Some(combined) = slice_from_bytes(orig, prev_start_b, clause_end_byte) {
+            let seg_end = corr_seg_starts.get(1).copied().unwrap_or(c_end);
+            out.segments.push(AnalyzedSegment {
+                clause_idx,
+                seg_start: c_start,
+                seg_end,
+                cont_start: None,
+                cont_end: None,
+                anchor_start: first_group.anchor_start,
+                anchor_end: first_group.anchor_end,
+                indicator: first_ind,
+                negated: false,
+                ambiguity: SegmentAmbiguity {
+                    cleared_by_correction: true,
+                    ..Default::default()
+                },
+                record_idx: None,
+            });
+            let correction_end_byte = tokens
+                .get(seg_end.saturating_sub(1))
+                .map_or(clause_end_byte, |tk| tk.end);
+            if let Some(combined) = slice_from_bytes(orig, prev_start_b, correction_end_byte) {
                 out.uninterpreted.push(combined);
             }
-            out.last_was_open_sleep = false;
-            out.last_clause_rec = None;
-            return None;
+            skip_corrected_first = true;
         }
     }
     if let Some((_, _, prev_start_b, Some(corr_end_b))) = out.pending_correction_from.take()
@@ -2476,8 +2585,12 @@ fn process_clause(
     let seg_starts = compute_seg_starts(tokens, c_start, &groups, &time_mask);
 
     let mut emitted_open_sleep = false;
-    let mut last_emitted_in_clause: Option<(Indicator, usize, usize)> = None;
-    for (pos, g) in groups.iter().enumerate() {
+    let mut last_mention_in_clause: Option<(Indicator, usize, usize)> = None;
+    for (pos, g) in groups
+        .iter()
+        .enumerate()
+        .skip(usize::from(skip_corrected_first))
+    {
         let seg_start = seg_starts.get(pos).copied().unwrap_or(c_start);
         let seg_end = seg_starts.get(pos + 1).copied().unwrap_or(c_end);
         if seg_start >= seg_end {
@@ -2530,7 +2643,7 @@ fn process_clause(
                 record_idx: None,
             });
             emitted_open_sleep = false;
-            last_emitted_in_clause = None;
+            last_mention_in_clause = None;
             continue;
         }
 
@@ -2564,8 +2677,10 @@ fn process_clause(
             AnchorKind::Mood => extract_single_numeric_record(&ctx, Indicator::Mood, "score"),
             AnchorKind::Sleep => extract_sleep_record(&ctx),
             AnchorKind::Symptom => extract_symptom_record(&ctx),
+            AnchorKind::MentionOnly(_) => analyze_mention_only(&ctx),
         };
 
+        let seg_idx = out.segments.len();
         let seg_rec_idx = rec.as_ref().map(|_| out.records.len());
         out.segments.push(AnalyzedSegment {
             clause_idx,
@@ -2591,24 +2706,28 @@ fn process_clause(
                 out.uninterpreted.push(q);
             }
             let start_b = tokens.get(seg_start).map_or(0, |t| t.start);
-            let rec_idx = out.records.len();
             let ind = r.indicator;
             out.records.push(r);
             out.record_start_bytes.push(start_b);
-            last_emitted_in_clause = if group_count == 1 && !ambiguous {
-                Some((ind, rec_idx, start_b))
+            last_mention_in_clause = if !ambiguous {
+                Some((ind, seg_idx, start_b))
             } else {
                 None
             };
         } else if let Some(q) = slice_tokens(orig, tokens, seg_start, seg_end) {
             emitted_open_sleep = false;
-            last_emitted_in_clause = None;
+            last_mention_in_clause = if !ambiguous {
+                let start_b = tokens.get(seg_start).map_or(0, |t| t.start);
+                Some((g.kind.to_indicator(), seg_idx, start_b))
+            } else {
+                None
+            };
             out.uninterpreted.push(q);
         }
     }
 
     out.last_was_open_sleep = emitted_open_sleep && group_count == 1;
-    out.last_clause_rec = last_emitted_in_clause;
+    out.last_clause_mention = last_mention_in_clause;
     None
 }
 
@@ -2963,18 +3082,6 @@ pub(crate) fn check_field_attribution_in_segment(
         explicit_unit,
         time_mask,
     )
-}
-
-/// Comprobación conservadora para ocurrencias fuera de segmentos clasificados por capa 1
-/// (p. ej. indicadores sin extractor en reglas o menciones sin ancla reconocida).
-pub(crate) fn check_fallback_field_attribution(
-    tokens: &[Token],
-    rec_occ: &BoundedOccurrence,
-    fq_occ: &BoundedOccurrence,
-) -> bool {
-    let bad_prefix =
-        fq_occ.first_tok > 0 && is_non_clinical_prefix_word(word_at(tokens, fq_occ.first_tok - 1));
-    !bad_prefix && !has_correction_between(tokens, rec_occ.first_tok, rec_occ.last_tok + 1)
 }
 
 pub(crate) fn analyze_input_for_check(text: &str) -> InputAnalysis {

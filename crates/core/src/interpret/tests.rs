@@ -845,6 +845,36 @@ fn revision3_n1_n2_n4_regressions_and_self_check_sweep() {
     }
 }
 
+#[test]
+fn revision4_context_mention_boundaries_leave_values_to_layer2() {
+    for text in [
+        "radiación 0.42 uSv/h",
+        "distancia 420 km",
+        "nutrición 2000 kcal",
+        "radiación 0.42 uSv/h, perdón radiación 0.84 uSv/h",
+        "distancia 420 km, perdón distancia 840 km",
+        "nutrición 2000 kcal, perdón nutrición 2200 kcal",
+    ] {
+        let proposal = assert_valid(text);
+        assert!(proposal.records.is_empty(), "{text:?}");
+        assert_eq!(proposal.uninterpreted, vec![text]);
+    }
+    for text in [
+        "pulso 72 sin medir radiación",
+        "sin medir radiación pulso 72",
+        "pulso 72 sin medir distancia",
+        "sin medir distancia pulso 72",
+        "pulso 72 sin medir nutrición",
+        "sin medir nutrición pulso 72",
+    ] {
+        let proposal = assert_valid(text);
+        assert_eq!(proposal.records.len(), 1, "{text:?}");
+        assert_eq!(proposal.records[0].indicator, Indicator::HeartRate);
+        assert_eq!(field_val(&proposal.records[0], "bpm"), Some(&json!(72)));
+        assert_eq!(proposal.negated.len(), 1, "{text:?}");
+    }
+}
+
 fn check_proposal_invariants(s: &str) -> Result<(), proptest::test_runner::TestCaseError> {
     let p = interpret(s);
     let issues = p.check(s);
@@ -883,6 +913,13 @@ proptest! {
                 Just("pulso 72 ahora ".to_owned()),
                 Just("pulso 72 sin medir glucosa ".to_owned()),
                 Just("pulso 72, perdón pulso 82 ".to_owned()),
+                Just("pulso 72 y radiación 0.42 uSv/h ".to_owned()),
+                Just("radiación 0.42 uSv/h y pulso 72 ".to_owned()),
+                Just("distancia 420 km y nutrición 2000 kcal ".to_owned()),
+                Just("nutrición 2000 kcal y distancia 420 km ".to_owned()),
+                Just("radiación 0.42 uSv/h, perdón radiación 0.84 uSv/h ".to_owned()),
+                Just("distancia 420 km, perdón distancia 840 km ".to_owned()),
+                Just("nutrición 2000 kcal, perdón nutrición 2200 kcal ".to_owned()),
                 Just("temperatura 37 °C/kg ".to_owned()),
                 Just("temperatura 98.6 fahrenheits ".to_owned()),
                 Just("98.6 farenheit ".to_owned()),

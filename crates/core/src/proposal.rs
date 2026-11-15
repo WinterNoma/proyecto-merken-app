@@ -20,11 +20,10 @@ use crate::{
     catalog::{BodyZone, Indicator, SleepQuality},
     interpret::{
         AnalyzedSegment, BoundedOccurrence, InputAnalysis, analyze_input_for_check,
-        check_fallback_field_attribution, check_field_attribution_in_segment,
-        check_numeric_unit_around_occurrence, find_token_bounded_occurrences_with_tokens,
-        has_token_bounded_occurrence, is_single_clause_quote, mentions_indicator,
-        occurrence_is_negated_in_input, quote_number, quote_sleep_quality, quote_unit_compatible,
-        quote_zone,
+        check_field_attribution_in_segment, check_numeric_unit_around_occurrence,
+        find_token_bounded_occurrences_with_tokens, has_token_bounded_occurrence,
+        is_single_clause_quote, mentions_indicator, occurrence_is_negated_in_input, quote_number,
+        quote_sleep_quality, quote_unit_compatible, quote_zone,
     },
     measurement::Measurement,
     validate_text,
@@ -190,17 +189,13 @@ fn check_field_occurrence_against_analysis(
     fq_occ: &BoundedOccurrence,
     is_numeric: bool,
 ) -> bool {
-    let ro = if valid_rec_occs.is_empty() {
-        None
-    } else {
-        let Some(found_ro) = valid_rec_occs
+    if !valid_rec_occs.is_empty()
+        && !valid_rec_occs
             .iter()
-            .find(|ro| fq_occ.first_tok >= ro.first_tok && fq_occ.last_tok <= ro.last_tok)
-        else {
-            return false;
-        };
-        Some(found_ro)
-    };
+            .any(|ro| fq_occ.first_tok >= ro.first_tok && fq_occ.last_tok <= ro.last_tok)
+    {
+        return false;
+    }
 
     if is_numeric
         && !check_numeric_unit_around_occurrence(
@@ -246,19 +241,9 @@ fn check_field_occurrence_against_analysis(
         return true;
     }
 
-    if let Some(ro) = ro {
-        if analysis
-            .segments
-            .iter()
-            .any(|s| s.indicator == rec.indicator && s.overlaps_occ(ro))
-            || analysis.segments.iter().any(|s| s.overlaps_occ(fq_occ))
-        {
-            return false;
-        }
-        return check_fallback_field_attribution(&analysis.tokens, ro, fq_occ);
-    }
-
-    true
+    // El reconocimiento cubre Indicator::ALL: un campo sin segmento local no tiene respaldo.
+    // No se vuelve a analizar una cita recortada que pueda ocultar correcciones de la entrada.
+    false
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1300,5 +1285,626 @@ mod tests {
 
         let p_ok = pulse("pulso 72 ahora", json!(72), Some("72"));
         assert!(p_ok.check("pulso 72 ahora").is_empty());
+    }
+
+    fn slm_numeric(
+        indicator: Indicator,
+        key: &str,
+        value: Value,
+        record_quote: &str,
+        field_quote: &str,
+    ) -> Proposal {
+        Proposal {
+            schema_version: PROPOSAL_SCHEMA_VERSION,
+            interpreter: InterpreterKind::Slm,
+            interpreter_version: "revision4-test".into(),
+            records: vec![ProposedRecord {
+                indicator,
+                fields: allowed_fields(indicator)
+                    .iter()
+                    .map(|&field_key| ProposedField {
+                        key: field_key.into(),
+                        value: (field_key == key).then(|| value.clone()),
+                        quote: (field_key == key).then(|| field_quote.into()),
+                    })
+                    .collect(),
+                time: TimeHint::Unspecified,
+                quote: record_quote.into(),
+            }],
+            negated: vec![],
+            uninterpreted: vec![],
+        }
+    }
+
+    #[test]
+    fn revision4_corrections_use_original_mentions_for_every_indicator() {
+        // Citas recortadas de las DOS ocurrencias: ninguna habilita un valor corregido.
+        // Casos escritos a mano; la tabla cubre exactamente Indicator::ALL.
+        let cases = [
+            (
+                Indicator::HeartRate,
+                "bpm",
+                "pulso 72",
+                "72",
+                json!(72),
+                "pulso 82",
+                "82",
+                json!(82),
+                "pulso 72, perdón pulso 82",
+            ),
+            (
+                Indicator::BloodPressure,
+                "systolic",
+                "presión 120/80",
+                "120",
+                json!(120),
+                "presión 130/85",
+                "130",
+                json!(130),
+                "presión 120/80, perdón presión 130/85",
+            ),
+            (
+                Indicator::BodyTemperature,
+                "celsius",
+                "temperatura 37 °C",
+                "37 °C",
+                json!(37),
+                "temperatura 38 °C",
+                "38 °C",
+                json!(38),
+                "temperatura 37 °C, perdón temperatura 38 °C",
+            ),
+            (
+                Indicator::Glucose,
+                "mg_dl",
+                "glucosa 95 mg/dL",
+                "95 mg/dL",
+                json!(95),
+                "glucosa 105 mg/dL",
+                "105 mg/dL",
+                json!(105),
+                "glucosa 95 mg/dL, perdón glucosa 105 mg/dL",
+            ),
+            (
+                Indicator::Sleep,
+                "hours",
+                "dormí 5 horas",
+                "5 horas",
+                json!(5),
+                "dormí 7 horas",
+                "7 horas",
+                json!(7),
+                "dormí 5 horas, perdón dormí 7 horas",
+            ),
+            (
+                Indicator::Mood,
+                "score",
+                "ánimo 5/10",
+                "5/10",
+                json!(5),
+                "ánimo 7/10",
+                "7/10",
+                json!(7),
+                "ánimo 5/10, perdón ánimo 7/10",
+            ),
+            (
+                Indicator::OxygenInBlood,
+                "percentage",
+                "saturación 98%",
+                "98%",
+                json!(98),
+                "saturación 97%",
+                "97%",
+                json!(97),
+                "saturación 98%, perdón saturación 97%",
+            ),
+            (
+                Indicator::SpaceRadiation,
+                "usv_h",
+                "radiación 0.42 uSv/h",
+                "0.42 uSv/h",
+                json!(0.42),
+                "radiación 0.84 uSv/h",
+                "0.84 uSv/h",
+                json!(0.84),
+                "radiación 0.42 uSv/h, perdón radiación 0.84 uSv/h",
+            ),
+            (
+                Indicator::DistanceFromEarth,
+                "km",
+                "distancia 420 km",
+                "420 km",
+                json!(420),
+                "distancia 840 km",
+                "840 km",
+                json!(840),
+                "distancia 420 km, perdón distancia 840 km",
+            ),
+            (
+                Indicator::Nutrition,
+                "kcal",
+                "nutrición 2000 kcal",
+                "2000 kcal",
+                json!(2000),
+                "nutrición 2200 kcal",
+                "2200 kcal",
+                json!(2200),
+                "nutrición 2000 kcal, perdón nutrición 2200 kcal",
+            ),
+            (
+                Indicator::Symptom,
+                "score",
+                "dolor de cabeza 5/10",
+                "5/10",
+                json!(5),
+                "dolor de cabeza 7/10",
+                "7/10",
+                json!(7),
+                "dolor de cabeza 5/10, perdón dolor de cabeza 7/10",
+            ),
+        ];
+        assert_eq!(cases.len(), Indicator::ALL.len());
+        for indicator in Indicator::ALL {
+            assert_eq!(cases.iter().filter(|case| case.0 == indicator).count(), 1);
+        }
+        for (indicator, key, first, fq1, v1, second, fq2, v2, input) in cases {
+            let first_proposal = slm_numeric(indicator, key, v1, first, fq1);
+            let second_proposal = slm_numeric(indicator, key, v2, second, fq2);
+            for (proposal, isolated) in [(&first_proposal, first), (&second_proposal, second)] {
+                assert!(proposal.check(isolated).is_empty(), "{isolated:?}");
+                assert!(
+                    proposal
+                        .check(input)
+                        .iter()
+                        .any(|issue| issue.error.field == key),
+                    "trimmed quote accepted for {input:?}: {proposal:?}"
+                );
+            }
+            assert!(crate::interpret::interpret(input).check(input).is_empty());
+        }
+    }
+
+    #[test]
+    fn revision4_context_corrections_in_both_orders_and_clause_forms() {
+        let cases = [
+            (
+                Indicator::SpaceRadiation,
+                "usv_h",
+                json!(0.42),
+                "radiación 0.42 uSv/h",
+                "0.42 uSv/h",
+                [
+                    "radiación 0.42 uSv/h, perdón radiación 0.84 uSv/h",
+                    "radiación 0.84 uSv/h, perdón radiación 0.42 uSv/h",
+                    "radiación 0.42 uSv/h perdón radiación 0.84 uSv/h",
+                    "radiación 0.84 uSv/h perdón radiación 0.42 uSv/h",
+                    "radiación 0.42 uSv/h, perdón, radiación 0.84 uSv/h",
+                    "radiación 0.84 uSv/h, perdón, radiación 0.42 uSv/h",
+                ],
+            ),
+            (
+                Indicator::DistanceFromEarth,
+                "km",
+                json!(420),
+                "distancia 420 km",
+                "420 km",
+                [
+                    "distancia 420 km, perdón distancia 840 km",
+                    "distancia 840 km, perdón distancia 420 km",
+                    "distancia 420 km perdón distancia 840 km",
+                    "distancia 840 km perdón distancia 420 km",
+                    "distancia 420 km, perdón, distancia 840 km",
+                    "distancia 840 km, perdón, distancia 420 km",
+                ],
+            ),
+            (
+                Indicator::Nutrition,
+                "kcal",
+                json!(2000),
+                "nutrición 2000 kcal",
+                "2000 kcal",
+                [
+                    "nutrición 2000 kcal, perdón nutrición 2200 kcal",
+                    "nutrición 2200 kcal, perdón nutrición 2000 kcal",
+                    "nutrición 2000 kcal perdón nutrición 2200 kcal",
+                    "nutrición 2200 kcal perdón nutrición 2000 kcal",
+                    "nutrición 2000 kcal, perdón, nutrición 2200 kcal",
+                    "nutrición 2200 kcal, perdón, nutrición 2000 kcal",
+                ],
+            ),
+        ];
+        for (indicator, key, value, record_quote, field_quote, inputs) in cases {
+            let proposal = slm_numeric(indicator, key, value, record_quote, field_quote);
+            assert!(proposal.check(record_quote).is_empty());
+            for input in inputs {
+                assert!(
+                    proposal
+                        .check(input)
+                        .iter()
+                        .any(|issue| issue.error.field == key),
+                    "{input:?}"
+                );
+                assert!(crate::interpret::interpret(input).check(input).is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn revision4_slm_values_survive_all_context_combinations_in_both_orders() {
+        let proposals = [
+            slm_numeric(Indicator::HeartRate, "bpm", json!(72), "pulso 72", "72"),
+            slm_numeric(
+                Indicator::SpaceRadiation,
+                "usv_h",
+                json!(0.42),
+                "radiación 0.42 uSv/h",
+                "0.42 uSv/h",
+            ),
+            slm_numeric(
+                Indicator::DistanceFromEarth,
+                "km",
+                json!(420),
+                "distancia 420 km",
+                "420 km",
+            ),
+            slm_numeric(
+                Indicator::Nutrition,
+                "kcal",
+                json!(2000),
+                "nutrición 2000 kcal",
+                "2000 kcal",
+            ),
+        ];
+        let inputs = [
+            "pulso 72 y radiación 0.42 uSv/h",
+            "radiación 0.42 uSv/h y pulso 72",
+            "pulso 72 y distancia 420 km",
+            "distancia 420 km y pulso 72",
+            "pulso 72 y nutrición 2000 kcal",
+            "nutrición 2000 kcal y pulso 72",
+            "radiación 0.42 uSv/h y distancia 420 km",
+            "distancia 420 km y radiación 0.42 uSv/h",
+            "radiación 0.42 uSv/h y nutrición 2000 kcal",
+            "nutrición 2000 kcal y radiación 0.42 uSv/h",
+            "distancia 420 km y nutrición 2000 kcal",
+            "nutrición 2000 kcal y distancia 420 km",
+            "radiación 0.42 uSv/h y distancia 420 km y nutrición 2000 kcal",
+            "radiación 0.42 uSv/h y nutrición 2000 kcal y distancia 420 km",
+            "distancia 420 km y radiación 0.42 uSv/h y nutrición 2000 kcal",
+            "distancia 420 km y nutrición 2000 kcal y radiación 0.42 uSv/h",
+            "nutrición 2000 kcal y radiación 0.42 uSv/h y distancia 420 km",
+            "nutrición 2000 kcal y distancia 420 km y radiación 0.42 uSv/h",
+            "pulso 72 y radiación 0.42 uSv/h y distancia 420 km y nutrición 2000 kcal",
+            "nutrición 2000 kcal y distancia 420 km y radiación 0.42 uSv/h y pulso 72",
+            // También se necesitan límites locales sin una conjunción separadora.
+            "pulso 72 radiación 0.42 uSv/h",
+            "radiación 0.42 uSv/h pulso 72",
+            "pulso 72 distancia 420 km",
+            "distancia 420 km pulso 72",
+            "pulso 72 nutrición 2000 kcal",
+            "nutrición 2000 kcal pulso 72",
+            "radiación 0.42 uSv/h distancia 420 km nutrición 2000 kcal",
+            "nutrición 2000 kcal distancia 420 km radiación 0.42 uSv/h",
+        ];
+        for input in inputs {
+            let mut combined = proposals[0].clone();
+            combined.records.clear();
+            for proposal in &proposals {
+                let record = &proposal.records[0];
+                if input.contains(&record.quote) {
+                    let issues = proposal.check(input);
+                    assert!(issues.is_empty(), "{input:?}: {issues:?}");
+                    combined.records.push(record.clone());
+                }
+            }
+            assert!(combined.records.len() >= 2);
+            assert!(combined.check(input).is_empty(), "{input:?}");
+            let rules = crate::interpret::interpret(input);
+            assert!(rules.check(input).is_empty(), "{input:?}: {rules:?}");
+            assert!(
+                rules
+                    .records
+                    .iter()
+                    .all(|r| r.indicator == Indicator::HeartRate)
+            );
+            if input.contains("pulso 72") {
+                assert_eq!(rules.records.len(), 1, "{input:?}");
+                assert_eq!(rules.records[0].value(), json!({"bpm": 72}), "{input:?}");
+            } else {
+                assert!(rules.records.is_empty(), "{input:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn revision4_context_mentions_keep_attribution_negation_units_and_times() {
+        let cases = [
+            (
+                Indicator::SpaceRadiation,
+                "usv_h",
+                json!(0.42),
+                "radiación 0.42",
+                "0.42",
+                [
+                    "radiación 0.42 uSv/h/kg",
+                    "no medí radiación 0.42 uSv/h y pulso 72",
+                    "pulso 72 y no medí radiación 0.42 uSv/h",
+                    "radiación desconocida tras 0.42 uSv/h",
+                    "radiación 0.42 o 0.84 uSv/h",
+                ],
+            ),
+            (
+                Indicator::DistanceFromEarth,
+                "km",
+                json!(420),
+                "distancia 420",
+                "420",
+                [
+                    "distancia 420 km/h",
+                    "no medí distancia 420 km y pulso 72",
+                    "pulso 72 y no medí distancia 420 km",
+                    "distancia desconocida tras 420 km",
+                    "distancia 420 o 840 km",
+                ],
+            ),
+            (
+                Indicator::Nutrition,
+                "kcal",
+                json!(2000),
+                "nutrición 2000",
+                "2000",
+                [
+                    "nutrición 2000 kcal/kg",
+                    "no medí nutrición 2000 kcal y pulso 72",
+                    "pulso 72 y no medí nutrición 2000 kcal",
+                    "nutrición desconocida tras 2000 kcal",
+                    "nutrición 2000 o 2200 kcal",
+                ],
+            ),
+        ];
+        for (indicator, key, value, short_record_quote, short_field_quote, inputs) in cases {
+            for input in inputs {
+                // Para los predicados ajenos la cita debe incluirlos para llegar al número.
+                let record_quote = if input.contains(short_record_quote) {
+                    short_record_quote
+                } else {
+                    input
+                };
+                let proposal = slm_numeric(
+                    indicator,
+                    key,
+                    value.clone(),
+                    record_quote,
+                    short_field_quote,
+                );
+                assert!(
+                    proposal
+                        .check(input)
+                        .iter()
+                        .any(|issue| issue.error.field == key),
+                    "{input:?}"
+                );
+                assert!(
+                    crate::interpret::interpret(input).check(input).is_empty(),
+                    "{input:?}"
+                );
+                if input.contains("pulso 72") {
+                    assert!(
+                        pulse("pulso 72", json!(72), Some("72"))
+                            .check(input)
+                            .is_empty()
+                    );
+                }
+            }
+        }
+        for (indicator, key, record_quote) in [
+            (Indicator::SpaceRadiation, "usv_h", "radiación a las 08:"),
+            (Indicator::DistanceFromEarth, "km", "distancia a las 08:"),
+            (Indicator::Nutrition, "kcal", "nutrición a las 08:"),
+        ] {
+            let proposal = slm_numeric(indicator, key, json!(8), record_quote, "08");
+            assert!(
+                proposal
+                    .check(record_quote)
+                    .iter()
+                    .any(|issue| issue.error.field == key)
+            );
+        }
+    }
+
+    #[test]
+    fn revision4_context_corrections_do_not_clear_neighboring_pulse() {
+        let corrected_proposals = [
+            slm_numeric(
+                Indicator::SpaceRadiation,
+                "usv_h",
+                json!(0.42),
+                "radiación 0.42 uSv/h",
+                "0.42 uSv/h",
+            ),
+            slm_numeric(
+                Indicator::SpaceRadiation,
+                "usv_h",
+                json!(0.84),
+                "radiación 0.84 uSv/h",
+                "0.84 uSv/h",
+            ),
+            slm_numeric(
+                Indicator::DistanceFromEarth,
+                "km",
+                json!(420),
+                "distancia 420 km",
+                "420 km",
+            ),
+            slm_numeric(
+                Indicator::DistanceFromEarth,
+                "km",
+                json!(840),
+                "distancia 840 km",
+                "840 km",
+            ),
+            slm_numeric(
+                Indicator::Nutrition,
+                "kcal",
+                json!(2000),
+                "nutrición 2000 kcal",
+                "2000 kcal",
+            ),
+            slm_numeric(
+                Indicator::Nutrition,
+                "kcal",
+                json!(2200),
+                "nutrición 2200 kcal",
+                "2200 kcal",
+            ),
+        ];
+        for input in [
+            "pulso 72 y radiación 0.42 uSv/h, perdón radiación 0.84 uSv/h",
+            "radiación 0.42 uSv/h, perdón radiación 0.84 uSv/h y pulso 72",
+            "pulso 72 y distancia 420 km, perdón distancia 840 km",
+            "distancia 420 km, perdón distancia 840 km y pulso 72",
+            "pulso 72 y nutrición 2000 kcal, perdón nutrición 2200 kcal",
+            "nutrición 2000 kcal, perdón nutrición 2200 kcal y pulso 72",
+            "pulso 72 radiación 0.42 uSv/h, perdón radiación 0.84 uSv/h",
+            "radiación 0.42 uSv/h, perdón radiación 0.84 uSv/h pulso 72",
+            "pulso 72 distancia 420 km, perdón distancia 840 km",
+            "distancia 420 km, perdón distancia 840 km pulso 72",
+            "pulso 72 nutrición 2000 kcal, perdón nutrición 2200 kcal",
+            "nutrición 2000 kcal, perdón nutrición 2200 kcal pulso 72",
+        ] {
+            assert!(
+                pulse("pulso 72", json!(72), Some("72"))
+                    .check(input)
+                    .is_empty(),
+                "{input:?}"
+            );
+            for proposal in &corrected_proposals {
+                let record = &proposal.records[0];
+                if input.contains(&record.quote) {
+                    let key = &record.fields[0].key;
+                    assert!(
+                        proposal
+                            .check(input)
+                            .iter()
+                            .any(|issue| &issue.error.field == key),
+                        "{input:?}: {proposal:?}"
+                    );
+                }
+            }
+            let rules = crate::interpret::interpret(input);
+            assert!(rules.check(input).is_empty(), "{input:?}: {rules:?}");
+            assert_eq!(rules.records.len(), 1, "{input:?}");
+            assert_eq!(rules.records[0].value(), json!({"bpm": 72}), "{input:?}");
+        }
+    }
+
+    #[test]
+    fn revision4_numbers_remain_attributed_to_their_own_indicator() {
+        for input in [
+            "pulso 72 y radiación 0.42 uSv/h",
+            "radiación 0.42 uSv/h y pulso 72",
+            "pulso 72 y distancia 420 km",
+            "distancia 420 km y pulso 72",
+            "pulso 72 y nutrición 2000 kcal",
+            "nutrición 2000 kcal y pulso 72",
+            "radiación 0.42 uSv/h y distancia 420 km y nutrición 2000 kcal",
+            "nutrición 2000 kcal y distancia 420 km y radiación 0.42 uSv/h",
+        ] {
+            for (indicator, key, value, field_quote) in [
+                (Indicator::SpaceRadiation, "usv_h", json!(72), "72"),
+                (Indicator::DistanceFromEarth, "km", json!(72), "72"),
+                (Indicator::Nutrition, "kcal", json!(72), "72"),
+                (Indicator::SpaceRadiation, "usv_h", json!(420), "420"),
+                (Indicator::Nutrition, "kcal", json!(420), "420"),
+                (Indicator::DistanceFromEarth, "km", json!(2000), "2000"),
+            ] {
+                if input.contains(field_quote) && mentions_indicator(indicator, input) {
+                    let proposal = slm_numeric(indicator, key, value, input, field_quote);
+                    assert!(
+                        proposal
+                            .check(input)
+                            .iter()
+                            .any(|issue| issue.error.field == key),
+                        "{input:?}: {proposal:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn revision4_context_aliases_and_unit_only_mentions_have_local_segments() {
+        for (indicator, key, value, record_quote, field_quote, inputs) in [
+            (
+                Indicator::SpaceRadiation,
+                "usv_h",
+                json!(0.42),
+                "radiación espacial 0.42 uSv/h",
+                "0.42 uSv/h",
+                [
+                    "pulso 72 y radiación espacial 0.42 uSv/h",
+                    "radiación espacial 0.42 uSv/h y pulso 72",
+                ],
+            ),
+            (
+                Indicator::DistanceFromEarth,
+                "km",
+                json!(420),
+                "distancia a la Tierra 420 km",
+                "420 km",
+                [
+                    "pulso 72 y distancia a la Tierra 420 km",
+                    "distancia a la Tierra 420 km y pulso 72",
+                ],
+            ),
+            (
+                Indicator::Nutrition,
+                "kcal",
+                json!(2000),
+                "comida 2000 kcal",
+                "2000 kcal",
+                ["pulso 72 y comida 2000 kcal", "comida 2000 kcal y pulso 72"],
+            ),
+            (
+                Indicator::SpaceRadiation,
+                "usv_h",
+                json!(0.42),
+                "0.42 uSv/h",
+                "0.42 uSv/h",
+                ["pulso 72 0.42 uSv/h", "0.42 uSv/h pulso 72"],
+            ),
+            (
+                Indicator::DistanceFromEarth,
+                "km",
+                json!(420),
+                "420 km",
+                "420 km",
+                ["pulso 72 420 km", "420 km pulso 72"],
+            ),
+            (
+                Indicator::Nutrition,
+                "kcal",
+                json!(2000),
+                "2000 kcal",
+                "2000 kcal",
+                ["pulso 72 2000 kcal", "2000 kcal pulso 72"],
+            ),
+        ] {
+            let proposal = slm_numeric(indicator, key, value, record_quote, field_quote);
+            assert!(proposal.check(record_quote).is_empty(), "{record_quote:?}");
+            for input in inputs {
+                assert!(proposal.check(input).is_empty(), "{input:?}");
+                assert!(
+                    pulse("pulso 72", json!(72), Some("72"))
+                        .check(input)
+                        .is_empty(),
+                    "{input:?}"
+                );
+                let rules = crate::interpret::interpret(input);
+                assert!(rules.check(input).is_empty(), "{input:?}: {rules:?}");
+                assert_eq!(rules.records.len(), 1, "{input:?}");
+                assert_eq!(rules.records[0].value(), json!({"bpm": 72}), "{input:?}");
+            }
+        }
     }
 }
