@@ -30,6 +30,8 @@ use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
 mod strings;
+mod voice;
+use voice::VoiceState;
 
 /// Versión de la app que viaja en cada registro (`app_version`).
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -525,6 +527,7 @@ pub fn run() {
                 std::sync::Arc::new(move |event: merken_slm::service::ServiceProgress| {
                     let _ = handle.emit("slm-progress", event);
                 });
+            app.manage(VoiceState::new(root.clone()));
             let (service, fichas) = SlmService::start_with_interpreter(
                 root,
                 factory,
@@ -535,6 +538,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            voice::speak_text,
+            voice::speak_cancel,
+            voice::voice_release,
             interpret_text,
             explain_indicator,
             slm_status,

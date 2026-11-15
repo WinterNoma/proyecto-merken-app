@@ -13,3 +13,19 @@ pub const SIM_INTERRUPTED: &str = "The simulation download was interrupted";
 pub const UNKNOWN_SCENARIO: &str =
     "Unknown demo scenario. Use routine, persistent_change or alarm_event";
 pub const ASTRONAUT_NOT_FOUND: &str = "Astronaut not found in the simulation";
+
+pub const VOICE_UNAVAILABLE: &str = "Local voice is unavailable";
+#[cfg(feature = "voice-tts")]
+pub const VOICE_MODEL_MISSING: &str = "The local voice model is missing";
+#[cfg(feature = "voice-tts")]
+pub const VOICE_TEXT_INVALID: &str = "The text is invalid for local voice";
+#[cfg(feature = "voice-tts")]
+pub const VOICE_TEXT_UNSUPPORTED: &str = "The text contains unsupported words";
+#[cfg(feature = "voice-tts")]
+pub const VOICE_CANCELLED: &str = "Voice synthesis was cancelled";
+#[cfg(feature = "voice-tts")]
+pub const VOICE_SYNTHESIS_FAILED: &str = "Local voice synthesis failed";
+#[cfg(feature = "voice-tts")]
+pub const VOICE_BUSY: &str = "Local voice is busy. Try again shortly";
+#[cfg(feature = "voice-tts")]
+pub const VOICE_CONFIG_INVALID: &str = "The voice or speed is invalid";

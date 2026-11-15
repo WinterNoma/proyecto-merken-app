@@ -171,3 +171,19 @@ const explanation = await core.explainIndicator({
 for (const fact of explanation.facts) show(fact.text);
 if (explanation.note) show(explanation.note.label);
 ```
+
+
+## Local voice (TTS)
+
+Build with the optional `voice-tts` feature to enable local English synthesis. Without it, these commands return `voice_unavailable`; the UI can hide its voice button. No audio or user text is sent to a server.
+
+- `speakText({ request_id, text, voice?, speed? })` invokes `speak_text({ input })` and returns `{ request_id, chunks, duration_ms }`; duration is the total generated audio duration. The ID follows the SLM rules (1–64 ASCII letters, digits, underscores or hyphens). Use a fresh ID per request. Text is limited to 600 characters and the voice engine supports English lexicon vocabulary. The default voice is `af_heart`, default speed is 1.0, and speed must be between 0.7 and 1.3. See [merken-voice](../../crates/voice/README.md) for voice IDs and text limitations. Invalid voice or speed returns `text_invalid` with the corresponding field.
+- Listen for `voice-chunk` before invoking synthesis. Each event is `{ request_id, index, wav_base64 }`: index starts at zero and the base64 decodes to a complete PCM16 mono WAV for that chunk. Queue chunks in order as they arrive and ignore stale request IDs.
+- `speakCancel(requestId)` invokes `speak_cancel({ request_id })` and returns whether that request is active. Cancellation is cooperative between chunks; a native synthesis already running finishes before cancellation takes effect. Already emitted audio is not recalled.
+- `voiceRelease()` unloads the model and returns whether one was loaded. Await it when entering record entry or before loading the SLM (RNF-09). It returns `busy` while synthesis is active; cancel and wait for the request to finish before retrying. The UI must coordinate SLM and voice releases; the services do not unload each other automatically.
+
+One request at a time is admitted; another returns `busy`. The model loads on the first request and is reused. Changing voice or speed reloads it because those settings are fixed at engine construction. Errors use `{ code, field, message }` with stable codes `voice_unavailable`, `model_missing`, `text_invalid`, `text_unsupported`, `busy`, `cancelled`, and `synthesis_failed`; malformed request IDs use the SLM error `invalid_value` with field `request_id`. Errors do not include user text.
+
+Install the sherpa-onnx Kokoro v1.0 int8 package in `<app_data_dir>/models/kokoro-int8-multi-lang-v1_0/`, with `model.int8.onnx`, `voices.bin`, `tokens.txt` and `lexicon-us-en.txt`. Also copy [merken-us-en.txt](../../crates/voice/lexicon/merken-us-en.txt) into that directory. Debug builds use `MERKEN_SLM_MODELS_DIR` as the parent models directory when set, just like the SLM. The native sherpa-onnx libraries must also be available for the target platform; see the crate README.
+
+On the measured PC, first audio arrived in about 2 seconds and real-time factor was about 1.3 with four threads. Mobile playback may pause between sentences; measure on the target device.
