@@ -1,8 +1,10 @@
 //! Persistencia local y cola de sincronización.
 pub mod api;
+pub mod export;
 pub mod records;
 pub mod telemetry;
 
+pub use export::{ExportCounts, ExportInput};
 pub use merken_seed::Scenario;
 pub use records::PulledChange;
 pub use telemetry::{

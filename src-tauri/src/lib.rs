@@ -7,8 +7,8 @@
 
 use merken_core::time::Timestamp;
 use merken_store::{
-    ListTelemetryInput, RecordTelemetryInput, RecordTelemetryResult, Scenario, Store, StoreError,
-    TelemetryItem, VerifyTelemetryResult,
+    ExportCounts, ExportInput, ListTelemetryInput, RecordTelemetryInput, RecordTelemetryResult,
+    Scenario, Store, StoreError, TelemetryItem, VerifyTelemetryResult,
     api::{
         CorrectRecordInput, EventItem, ImportResult, ListRecordsInput, LogRecordInput, LogResult,
         ProfileResponse, RaiseEventInput, RaiseEventResult, RecordItem, StatusResponse,
@@ -19,6 +19,7 @@ use merken_sync::{
     simulation::{DEFAULT_BASE_URL, SimAstronaut, SimClient},
 };
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::Manager;
 
@@ -161,6 +162,128 @@ pub fn handle_verify_telemetry(
     store.verify_telemetry(astronaut_key)
 }
 
+// ---------- Exportación a JSON ----------
+
+/// Respuesta del comando `export_json` (contrato en `ui/src/core-api.ts`).
+#[derive(Debug, Serialize)]
+pub struct ExportJsonResult {
+    pub path: String,
+    pub file_name: String,
+    pub bytes: u64,
+    pub exported_at: String,
+    pub counts: ExportCounts,
+}
+
+const MAX_EXPORT_NAME_ATTEMPTS: u32 = 20;
+
+fn export_io_error(message: &str) -> StoreError {
+    StoreError {
+        code: "storage_error".into(),
+        field: None,
+        message: message.into(),
+    }
+}
+
+/// `merken-export-AAAAMMDDTHHMMSSZ` a partir del instante en UTC.
+fn export_stem(now: Timestamp) -> String {
+    let iso = now.to_rfc3339(); // AAAA-MM-DDTHH:MM:SS.mmmZ
+    let compact: String = iso
+        .chars()
+        .take_while(|c| *c != '.')
+        .filter(|c| c.is_ascii_digit() || *c == 'T')
+        .collect();
+    format!("merken-export-{compact}Z")
+}
+
+/// Escribe el documento en `<dir>/exports/` sin sobrescribir nunca un archivo.
+///
+/// El contenido se escribe completo en un temporal exclusivo (`create_new`, nombre
+/// único) y solo entonces se publica con `hard_link`, que falla si el nombre final ya
+/// existe: nunca queda un `.json` vacío ni se reemplaza uno ajeno. Si el nombre está
+/// ocupado se prueba con `-2`, `-3`… (hasta 20 intentos).
+pub fn write_export(
+    dir: &Path,
+    now: Timestamp,
+    doc: &serde_json::Value,
+) -> Result<(PathBuf, u64), StoreError> {
+    use std::io::Write as _;
+    let exports = dir.join("exports");
+    std::fs::create_dir_all(&exports)
+        .map_err(|_| export_io_error("Could not create the exports folder"))?;
+    let mut text = serde_json::to_string_pretty(doc)?;
+    text.push('\n');
+
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let tmp = exports.join(format!(
+        ".merken-export-{}-{unique}.tmp",
+        std::process::id()
+    ));
+    let written = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)
+        .and_then(|mut f| f.write_all(text.as_bytes()).and_then(|()| f.sync_all()));
+    if written.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(export_io_error("Could not write the export file"));
+    }
+
+    let stem = export_stem(now);
+    let mut result = Err(export_io_error(
+        "Too many exports with the same timestamp. Try again in a moment",
+    ));
+    for attempt in 1..=MAX_EXPORT_NAME_ATTEMPTS {
+        let name = if attempt == 1 {
+            format!("{stem}.json")
+        } else {
+            format!("{stem}-{attempt}.json")
+        };
+        let target = exports.join(&name);
+        match std::fs::hard_link(&tmp, &target) {
+            Ok(()) => {
+                let bytes = u64::try_from(text.len()).unwrap_or(u64::MAX);
+                result = Ok((target, bytes));
+                break;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(_) => {
+                result = Err(export_io_error("Could not create the export file"));
+                break;
+            }
+        }
+    }
+    // Solo se borra el temporal propio, creado arriba con create_new.
+    let _ = std::fs::remove_file(&tmp);
+    result
+}
+
+/// Construye el snapshot y lo escribe. El candado de la base solo se mantiene
+/// mientras se lee; la escritura del archivo ocurre después.
+fn handle_export_json(
+    state: &tauri::State<'_, AppState>,
+    dir: &Path,
+    input: Option<ExportInput>,
+    now: Timestamp,
+) -> Result<ExportJsonResult, StoreError> {
+    let input = input.unwrap_or_default();
+    let (doc, counts) = with_store(state, |s| s.export_snapshot(&input, now, APP_VERSION))?;
+    let (path, bytes) = write_export(dir, now, &doc)?;
+    let file_name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    Ok(ExportJsonResult {
+        path: path.to_string_lossy().into_owned(),
+        file_name,
+        bytes,
+        exported_at: now.to_rfc3339(),
+        counts,
+    })
+}
+
 // ---------- Comandos ----------
 
 /// Comprueba de punta a punta que la interfaz llega al núcleo en Rust.
@@ -265,6 +388,20 @@ fn verify_telemetry(
     with_store(&state, |s| handle_verify_telemetry(s, input))
 }
 
+/// Exporta todos los datos locales a un archivo JSON en `<datos de la app>/exports/`.
+#[tauri::command]
+fn export_json(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    input: Option<ExportInput>,
+) -> Result<ExportJsonResult, StoreError> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| export_io_error("The app data folder is unavailable"))?;
+    handle_export_json(&state, &dir, input, now())
+}
+
 /// Lista los astronautas de la API de simulación (datos inventados).
 #[tauri::command]
 async fn sim_list_astronauts(
@@ -348,7 +485,8 @@ pub fn run() {
             sim_import,
             record_telemetry,
             list_telemetry,
-            verify_telemetry
+            verify_telemetry,
+            export_json
         ])
         .run(tauri::generate_context!());
     if let Err(e) = result {
@@ -545,6 +683,75 @@ mod tests {
                 "problem": null,
             })
         );
+        Ok(())
+    }
+
+    fn scratch_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "merken-export-test-{tag}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    #[test]
+    fn write_export_never_overwrites_and_leaves_no_tmp() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = scratch_dir("write");
+        let store = Store::open_in_memory()?;
+        let now = Timestamp::from_millis(1_800_000_000_123);
+        let (doc, counts) = store.export_snapshot(&ExportInput::default(), now, APP_VERSION)?;
+        assert_eq!(counts, ExportCounts::default());
+
+        let (first, bytes) = write_export(&dir, now, &doc)?;
+        let (second, _) = write_export(&dir, now, &doc)?;
+        let (third, _) = write_export(&dir, now, &doc)?;
+        let name = |p: &Path| p.file_name().map(|n| n.to_string_lossy().into_owned());
+        assert_eq!(
+            name(&first).as_deref(),
+            Some("merken-export-20270115T080000Z.json")
+        );
+        assert_eq!(
+            name(&second).as_deref(),
+            Some("merken-export-20270115T080000Z-2.json")
+        );
+        assert_eq!(
+            name(&third).as_deref(),
+            Some("merken-export-20270115T080000Z-3.json")
+        );
+
+        let text = std::fs::read_to_string(&first)?;
+        assert_eq!(u64::try_from(text.len())?, bytes);
+        assert!(text.ends_with("}\n"));
+        let parsed: serde_json::Value = serde_json::from_str(&text)?;
+        assert_eq!(parsed["format"], "merken-export");
+        assert_eq!(parsed, doc);
+
+        let leftovers = std::fs::read_dir(dir.join("exports"))?
+            .filter_map(Result::ok)
+            .filter(|e| e.file_name().to_string_lossy().ends_with(".tmp"))
+            .count();
+        assert_eq!(leftovers, 0);
+        let _ = std::fs::remove_dir_all(&dir);
+        Ok(())
+    }
+
+    #[test]
+    fn write_export_gives_up_after_twenty_name_collisions() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let dir = scratch_dir("collide");
+        let now = Timestamp::from_millis(1_800_000_000_000);
+        let doc = serde_json::json!({"format": "merken-export"});
+        for _ in 0..20 {
+            write_export(&dir, now, &doc)?;
+        }
+        let err = write_export(&dir, now, &doc).err().map(|e| e.code);
+        assert_eq!(err.as_deref(), Some("storage_error"));
+        let _ = std::fs::remove_dir_all(&dir);
         Ok(())
     }
 }
