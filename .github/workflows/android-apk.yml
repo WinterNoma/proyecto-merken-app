@@ -64,8 +64,22 @@ jobs:
         run: cargo test --locked -p merken-core -p merken-store -p merken-sync -p merken-seed -p merken-slm
       - name: Initialize Android project
         run: npm run tauri -- android init --ci --skip-targets-install
+      # sherpa-onnx (offline dictation): official prebuilt Android libraries, pinned by SHA-256.
+      - name: Add sherpa-onnx Android libraries
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/sherpa-android.tar.bz2" https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-v2.0.1-android.tar.bz2
+          echo "39003753ec293425ed56723ea9b972b98841a490af3311670c3060548d654330  $RUNNER_TEMP/sherpa-android.tar.bz2" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/sherpa-android"
+          tar -xjf "$RUNNER_TEMP/sherpa-android.tar.bz2" -C "$RUNNER_TEMP/sherpa-android"
+          libs=$(dirname "$(find "$RUNNER_TEMP/sherpa-android" -path '*arm64-v8a/libsherpa-onnx-c-api.so' | head -n1)")
+          test -f "$libs/libonnxruntime.so"
+          dest=src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p "$dest"
+          cp "$libs/libsherpa-onnx-c-api.so" "$libs/libonnxruntime.so" "$dest/"
+          echo "SHERPA_ONNX_LIB_DIR=$libs" >> "$GITHUB_ENV"
+          rm -f "$RUNNER_TEMP/sherpa-android.tar.bz2"
       - name: Build installable ARM64 debug APK
-        run: npm run tauri -- android build --ci --debug --apk --target aarch64
+        run: npm run tauri -- android build --ci --debug --apk --target aarch64 --features voice-stt
       # Test models from a private Release of this repository (no AWS).
       - name: Download test models
         if: github.event_name != 'pull_request'
@@ -73,7 +87,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$RUNNER_TEMP/models"
-          gh release download modelos-prueba-v1 --repo "$GITHUB_REPOSITORY" --pattern '*.gguf' --dir "$RUNNER_TEMP/models"
+          gh release download modelos-prueba-v1 --repo "$GITHUB_REPOSITORY" --pattern '*.gguf' --pattern '*.onnx' --pattern 'base-tokens.txt' --dir "$RUNNER_TEMP/models"
           ls -la "$RUNNER_TEMP/models"
       - name: Verify APK signature and export
         env:
