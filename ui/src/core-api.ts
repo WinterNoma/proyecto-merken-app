@@ -83,6 +83,11 @@ export interface Evaluation {
 // ---------- Errores ----------
 
 export type ErrorCode =
+  | "voice_unavailable"
+  | "model_missing"
+  | "text_invalid"
+  | "text_unsupported"
+  | "synthesis_failed"
   | "busy"
   | "model_unavailable"
   | "cancelled"
@@ -415,7 +420,14 @@ export interface ExplainResponse { facts: FactLine[]; note: AiNote | null; note_
 export interface SlmModelStatus { model_id: string; installed: boolean; verified: boolean; loaded: boolean; available: boolean }
 export interface SlmStatus { interpreter: SlmModelStatus; explainer: SlmModelStatus }
 
+export interface SpeakResponse { request_id: string; chunks: number; duration_ms: number }
+/** Each event contains one complete PCM16 mono WAV file in base64. */
+export interface VoiceChunkEvent { request_id: string; index: number; wav_base64: string }
+
 export const core = {
+  speakText: (input: { request_id: string; text: string; voice?: string | null; speed?: number | null }) => invoke<SpeakResponse>("speak_text", { input }),
+  speakCancel: (requestId: string) => invoke<boolean>("speak_cancel", { request_id: requestId }),
+  voiceRelease: () => invoke<boolean>("voice_release"),
   interpretText: (input: { request_id: string; text: string; source?: "text" | "voice" | null }) => invoke<InterpretResponse>("interpret_text", { input }),
   explainIndicator: (input: { request_id: string; indicator: Indicator; body_zone?: BodyZone | null }) => invoke<ExplainResponse>("explain_indicator", { input }),
   slmStatus: () => invoke<SlmStatus>("slm_status"),
