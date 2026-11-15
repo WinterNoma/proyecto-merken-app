@@ -668,7 +668,7 @@ fn worker<F: EngineFactory>(
                     let load = if loaded {
                         Ok(())
                     } else {
-                        ModelStore::new(root.join(&model.model_id))
+                        ModelStore::new(model_dir(&root, &model.model_id))
                             .and_then(|store| factory.load(&store, model, &mut slot, &mut ctl))
                     };
                     match load {
@@ -720,7 +720,7 @@ fn worker<F: EngineFactory>(
                         let load = if loaded {
                             Ok(())
                         } else {
-                            ModelStore::new(root.join(V5_ID)).and_then(|store| {
+                            ModelStore::new(model_dir(&root, V5_ID)).and_then(|store| {
                                 factory.load(&store, &manifest, &mut slot, &mut ctl)
                             })
                         };
@@ -757,7 +757,7 @@ fn worker<F: EngineFactory>(
                 reply.send(result);
             }
             JobKind::Status { reply } => {
-                let dir = root.join(V5_ID);
+                let dir = model_dir(&root, V5_ID);
                 let installed = dir.join("space-health-base-Q4_K_M.gguf").is_file()
                     && dir.join("space-health-lora-f16.gguf").is_file();
                 let verified = installed
@@ -771,7 +771,7 @@ fn worker<F: EngineFactory>(
                     .as_ref()
                     .filter(|m| m.role == ModelRole::Interpreter)
                 {
-                    let d = root.join(&m.model_id);
+                    let d = model_dir(&root, &m.model_id);
                     let installed = match &m.package {
                         ModelPackage::Single { file } => d.join(&file.name).is_file(),
                         ModelPackage::BaseWithAdapter { base, adapter, .. } => {
@@ -816,6 +816,19 @@ fn worker<F: EngineFactory>(
     }
 }
 /// Standard job deadline, including time spent waiting in the queue.
+/// Carpeta de un modelo: `<root>/<model_id>/` si existe; si no, la propia raíz.
+/// La raíz plana es la de Android, donde el plugin `slm-assets` deja la base y los
+/// adaptadores juntos (la base la comparten el intérprete, el v5 y V7). Es seguro
+/// porque cada archivo se verifica igual por nombre, tamaño y SHA-256 del manifiesto.
+pub fn model_dir(root: &std::path::Path, model_id: &str) -> PathBuf {
+    let nested = root.join(model_id);
+    if nested.is_dir() {
+        nested
+    } else {
+        root.to_path_buf()
+    }
+}
+
 pub fn default_deadline() -> Deadline {
     Deadline::after(Duration::from_secs(120))
 }
@@ -1077,6 +1090,15 @@ mod tests {
                 .map(|_| ())
         }
     }
+    #[test]
+    fn model_dir_prefers_subfolder_and_falls_back_to_flat_root() {
+        let root = std::env::temp_dir().join(format!("merken-model-dir-{}", std::process::id()));
+        std::fs::create_dir_all(root.join(V5_ID)).unwrap();
+        assert_eq!(model_dir(&root, V5_ID), root.join(V5_ID));
+        assert_eq!(model_dir(&root, "space-health-base"), root);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
     fn test_service(responses: Vec<String>, gate: Option<Gate>) -> (SlmService, LoadCount) {
         static SEQ: AtomicUsize = AtomicUsize::new(0);
         let id = SEQ.fetch_add(1, Ordering::SeqCst);
