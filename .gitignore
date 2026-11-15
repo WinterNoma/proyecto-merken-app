@@ -34,3 +34,6 @@ CLAUDE.md
 
 # Copias de seguridad locales de la base de datos (datos de astronautas)
 backups/
+
+# Python
+__pycache__/

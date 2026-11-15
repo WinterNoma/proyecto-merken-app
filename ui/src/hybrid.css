@@ -50,6 +50,35 @@ body { min-width: 280px; min-height: 100dvh; background: var(--mk-bg); isolation
 #help-open:hover { background: #343039; border-color: var(--mk-alarm); }
 #help-open .icon { display: none; }
 .workspace { padding-top: 8px; }
+/* Horizontal page gestures leave vertical scrolling and pinch zoom native. */
+#screens { position: relative; touch-action: pan-y pinch-zoom; }
+.app-shell.has-page-rail {
+  height: 100dvh; min-height: 0; display: flex; flex-direction: column;
+}
+.has-page-rail > .app-header, .has-page-rail > .preview-banner { flex-shrink: 0; }
+.has-page-rail > main { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+#screens.pager-ready { display: block; padding: 0; flex: 1; min-height: 0; overflow: clip; }
+.page-rail { position: relative; width: 100%; height: 100%; }
+.page-slot {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain;
+  scrollbar-width: none;
+}
+.page-slot::-webkit-scrollbar { display: none; }
+.page-slot[data-page="0"] { left: 100%; right: auto; }
+.page-slot > .screen { width: 100%; min-height: 100%; margin: 0 auto; }
+#screens.is-page-dragging { user-select: none; -webkit-user-select: none; }
+#screens.is-page-dragging .page-rail { will-change: transform; }
+#screens.is-page-dragging .page-slot { pointer-events: none; }
+.has-page-rail .screen-pagination {
+  position: relative; display: grid; grid-template-columns: 44px 44px;
+  justify-content: center; align-items: center; flex-shrink: 0; gap: 0;
+  min-height: 44px; padding: 0; margin-top: 2px;
+}
+.has-page-rail #page-name {
+  position: absolute; left: calc(50% + 48px); width: calc(50% - 48px);
+  margin: 0; text-align: left; font-size: .6875rem;
+}
 .overview { max-width: 760px; margin-inline: auto; }
 .overview-heading { margin: 4px 0 20px; }
 .overview-heading .eyebrow { font-family: var(--mk-font-body); color: #a4adb8; font-size: 10px; letter-spacing: .16em; margin-bottom: 9px; }
@@ -527,6 +556,15 @@ dialog::backdrop { background: #05090ebd; }
   line-height: 1.35;
   color: var(--mk-text-muted);
 }
+.tele-hist-export { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tele-hist-export-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.tele-hist-export-include { display: flex; align-items: center; gap: 8px; min-height: 44px; font-size: 12px; }
+.tele-hist-export-checkbox { width: 20px; height: 20px; }
+.tele-hist-export-button, .tele-hist-export-copy { min-height: 44px; padding: 8px 12px; border-radius: 999px; font-size: 12px; }
+.tele-hist-export-copy { align-self: flex-start; }
+.tele-hist-export-help, .tele-hist-export-status, .tele-hist-export-path { margin: 0; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.tele-hist-export-help, .tele-hist-export-path { color: var(--mk-text-muted); }
+.tele-hist-export-path { user-select: text; }
 .tele-hist-body {
   display: flex;
   flex-direction: column;

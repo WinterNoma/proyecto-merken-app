@@ -74,7 +74,7 @@ const renderFeed = (state: FeedState): void => {
   vitals.feed(state);
   dashboard.feed(state);
 };
-const feed = preview ? createPreviewFeed(renderFeed) : createTelemetryFeed(renderFeed);
+const feed = preview ? createPreviewFeed(renderFeed) : createTelemetryFeed(renderFeed, available && !import.meta.env.DEV);
 element("#feed-retry").addEventListener("click", () => { void feed.refresh(); });
 const panel = createCorePanel(available, dashboard.core);
 setupHelp(available, panel);
