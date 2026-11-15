@@ -1,9 +1,10 @@
-import { core, isCoreError, type Evaluation, type Indicator, type ProfileResponse, type RecordItem, type StatusResponse, type RaiseEventResult, type EventItem, type LogResult } from "../core-api";
+import { core, isCoreError, type Evaluation, type ExplainResponse, type Indicator, type NoteStatus, type ProfileResponse, type RecordItem, type StatusResponse, type RaiseEventResult, type EventItem, type LogResult } from "../core-api";
 import { element, el, setText, timestamp, utc } from "./dom";
 import { evaluationCopy, statusCopy, escalationCopy, paintBadge, badge } from "./status-copy";
 import { indicatorName, recordValue } from "./core-format";
 import { zoneName } from "./body-map";
 import { sparkline } from "./sparkline";
+import { runWithSlmProgress } from "./assistant";
 
 const chartIndicators: Indicator[] = ["heart_rate", "body_temperature", "oxygen_in_blood", "glucose", "sleep"];
 interface EvaluationView {
@@ -11,7 +12,20 @@ interface EvaluationView {
   update: (evaluation: Evaluation, demo: boolean) => void;
   history: (records: RecordItem[] | null, stale: boolean) => void;
 }
-export function evaluationView(withHistory: boolean): EvaluationView {
+function noteUnavailableMessage(status: NoteStatus): string | null {
+  switch (status) {
+    case "available":
+    case "no_fichas":
+      return null;
+    case "model_unavailable":
+    case "timeout":
+    case "slm_error":
+    case "discarded":
+    case "cancelled":
+      return `AI note unavailable (${status}). The facts above come from the local core.`;
+  }
+}
+export function evaluationView(withHistory: boolean, available = false): EvaluationView {
   const node = el("article", "evaluation-row panel");
   const heading = el("div", "evaluation-heading");
   const name = el("h4");
@@ -23,15 +37,76 @@ export function evaluationView(withHistory: boolean): EvaluationView {
   const source = el("p", "caption");
   const qualification = el("p", "caption");
   const escalation = el("p", "caption");
+  const actions = el("div", "evaluation-actions");
+  const explainButton = el("button", "button secondary", "Explain");
+  explainButton.type = "button";
+  explainButton.disabled = !available;
+  const explainProgress = el("p", "caption explain-progress");
+  explainProgress.setAttribute("role", "status");
+  actions.append(explainButton, explainProgress);
+  const explainBox = el("div", "notice explain-notice");
+  explainBox.dataset.tone = "neutral";
+  explainBox.hidden = true;
   const history = el("details", "history-disclosure");
   const historyBody = el("div");
   history.append(el("summary", "", "View recorded history"), historyBody);
-  node.append(heading, value, when, summary, source, qualification, escalation);
+  node.append(heading, value, when, summary, source, qualification, escalation, actions, explainBox);
   if (withHistory) node.append(history);
   let historySignature = "";
+  let currentEvaluation: Evaluation | null = null;
+  let explaining = false;
+  function renderExplanation(response: ExplainResponse): void {
+    const nodes: HTMLElement[] = [];
+    if (response.facts.length > 0) {
+      const factsList = el("ul", "explain-facts");
+      for (const fact of response.facts) factsList.append(el("li", "", fact.text));
+      nodes.push(factsList);
+    }
+    if (response.note) {
+      nodes.push(el("p", "explain-note-heading", response.note.label));
+      if (response.note.statements.length > 0) {
+        const statementsList = el("ul", "explain-note-list");
+        for (const statement of response.note.statements) statementsList.append(el("li", "", statement.text));
+        nodes.push(statementsList);
+      }
+    }
+    const unavailable = noteUnavailableMessage(response.note_status);
+    if (unavailable) nodes.push(el("p", "caption", unavailable));
+    explainBox.replaceChildren(...nodes);
+    explainBox.hidden = nodes.length === 0;
+  }
+  explainButton.addEventListener("click", async () => {
+    if (!available || explaining || !currentEvaluation) return;
+    const evaluation = currentEvaluation;
+    const requestId = crypto.randomUUID();
+    explaining = true;
+    explainButton.disabled = true;
+    explainButton.setAttribute("aria-busy", "true");
+    setText(explainProgress, "Loading explanation…");
+    try {
+      const response = await runWithSlmProgress(
+        requestId,
+        message => { if (message) setText(explainProgress, message); },
+        () => core.explainIndicator({
+          request_id: requestId,
+          indicator: evaluation.indicator as Indicator,
+          body_zone: evaluation.body_zone,
+        }),
+      );
+      setText(explainProgress, "");
+      renderExplanation(response);
+    } catch (error) {
+      setText(explainProgress, isCoreError(error) ? error.message : "Local service unavailable.");
+    } finally {
+      explaining = false;
+      explainButton.disabled = !available;
+      explainButton.setAttribute("aria-busy", "false");
+    }
+  });
   return {
     node,
     update(evaluation, demo): void {
+      currentEvaluation = evaluation;
       const copy = evaluationCopy(evaluation);
       node.dataset.tone = copy.tone;
       node.classList.toggle("context-row", evaluation.reason === "not_applicable");
@@ -148,7 +223,7 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
       const key = evaluation.indicator + ":" + (evaluation.body_zone ?? "");
       keys.add(key);
       let view = views.get(key);
-      if (!view) { view = evaluationView(chartIndicators.includes(evaluation.indicator as Indicator)); views.set(key, view); container.append(view.node); }
+      if (!view) { view = evaluationView(chartIndicators.includes(evaluation.indicator as Indicator), available); views.set(key, view); container.append(view.node); }
       view.update(evaluation, demo);
     }
     for (const [key, view] of views) if (!keys.has(key)) { view.node.remove(); views.delete(key); }
@@ -282,7 +357,7 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
       const key = evaluation.indicator + ":" + (evaluation.body_zone ?? "");
       let view = views.get(key);
       if (!view) {
-        view = evaluationView(chartIndicators.includes(evaluation.indicator as Indicator));
+        view = evaluationView(chartIndicators.includes(evaluation.indicator as Indicator), available);
         views.set(key, view);
         element(symptom ? "#core-symptoms" : "#core-indicators").append(view.node);
       }

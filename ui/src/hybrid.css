@@ -675,3 +675,101 @@ dialog::backdrop { background: #05090ebd; }
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.assist-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mk-space-2, 8px);
+  margin-bottom: var(--mk-space-4, 16px);
+  padding-bottom: var(--mk-space-4, 16px);
+  border-bottom: 1px solid var(--mk-divider);
+  min-width: 0;
+}
+.assist-block textarea {
+  margin-bottom: 0;
+}
+.assist-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mk-space-2, 8px);
+}
+#assist-progress {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+#assist-progress:empty,
+#assist-results:empty,
+.explain-progress:empty {
+  display: none;
+}
+#assist-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mk-space-3, 12px);
+  min-width: 0;
+}
+.assist-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mk-space-2, 8px);
+  min-width: 0;
+  background: var(--mk-bg);
+  border-color: var(--hybrid-rim);
+}
+.assist-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--mk-space-1, 4px) var(--mk-space-2, 8px);
+  min-width: 0;
+}
+.assist-origin {
+  color: var(--mk-text-muted);
+}
+.assist-fields,
+.explain-facts,
+.explain-note-list {
+  margin: 0;
+  padding-left: 1.125rem;
+  display: grid;
+  gap: 4px;
+  font-size: var(--mk-text-sm);
+  overflow-wrap: anywhere;
+}
+.assist-quote,
+.assist-time-hint,
+.assist-meta,
+.explain-progress {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.assist-card .button {
+  align-self: flex-start;
+}
+.evaluation-row {
+  min-width: 0;
+}
+.evaluation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mk-space-2, 8px);
+  margin-top: var(--mk-space-3, 12px);
+}
+.explain-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mk-space-2, 8px);
+  margin-top: var(--mk-space-3, 12px);
+  margin-bottom: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.explain-note-heading {
+  margin: 0;
+  font-size: var(--mk-text-sm);
+  font-weight: var(--mk-weight-semibold);
+  color: var(--mk-text);
+}

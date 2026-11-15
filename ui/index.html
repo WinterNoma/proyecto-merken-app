@@ -103,6 +103,13 @@
 <form id="manual-form" hidden>
 <p id="manual-profile" class="profile-context"></p><p id="manual-availability" class="caption"></p>
 <div id="manual-demo" class="notice" data-tone="neutral" hidden><strong>DEMO · Demo data will be removed</strong><p>Saving real data will remove the demo data.</p></div>
+<div class="assist-block">
+<label for="assist-text">Describe what you measured</label>
+<textarea id="assist-text" rows="2" maxlength="2000"></textarea>
+<div class="assist-actions"><button id="assist-interpret" class="button secondary" type="button">Interpret</button><button id="assist-cancel" class="button secondary" type="button" hidden>Cancel</button></div>
+<p id="assist-progress" class="caption" role="status"></p>
+<div id="assist-results"></div>
+</div>
 <fieldset id="manual-fields"><legend class="sr-only">Manual reading</legend><label for="manual-indicator">Reading</label><select id="manual-indicator"></select><div id="manual-values"></div><label for="manual-time">Measured at (UTC)</label><input id="manual-time" type="datetime-local" step="1" required /><label for="manual-note">Note (optional)</label><textarea id="manual-note" rows="2" maxlength="2000"></textarea></fieldset>
 <div id="manual-result" role="status" class="action-result"></div><button id="manual-save" class="button primary" type="submit">Save reading</button>
 </form>

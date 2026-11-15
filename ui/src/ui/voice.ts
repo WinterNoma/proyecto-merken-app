@@ -1,9 +1,24 @@
-import { core, isCoreError, type Indicator, type LogRecordInput, type RecordValue } from "../core-api";
+import { core, isCoreError, type Indicator, type LogRecordInput, type ProposedRecord, type RecordValue } from "../core-api";
 import type { CorePanel } from "./core-panel";
 import { element, el, setText, utc } from "./dom";
 import { modal } from "./dialog";
 import { bodyZones, zoneName } from "./body-map";
 import { indicatorName } from "./core-format";
+import { setupAssistant, type AssistSource } from "./assistant";
+
+const fieldSelectors: Record<Indicator, Record<string, string>> = {
+  heart_rate: { bpm: "#manual-a" },
+  blood_pressure: { systolic: "#manual-a", diastolic: "#manual-b" },
+  body_temperature: { celsius: "#manual-a" },
+  glucose: { mg_dl: "#manual-a" },
+  sleep: { hours: "#manual-a" },
+  mood: { score: "#manual-a" },
+  oxygen_in_blood: { percentage: "#manual-a" },
+  nutrition: { kcal: "#manual-a" },
+  space_radiation: { usv_h: "#manual-a" },
+  distance_from_earth: { km: "#manual-a" },
+  symptom: { body_zone: "#manual-zone", score: "#manual-a" },
+};
 
 export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (active: boolean) => void): void {
   const dialog = element<HTMLDialogElement>("#voice-dialog");
@@ -25,6 +40,7 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
   let saved = false;
   let warnedDemo = false;
   let confirmedDraft: LogRecordInput | null = null;
+  let entrySource: "form" | AssistSource = "form";
   let opening = 0;
   const controls = modal(dialog, () => !busy);
   const indicators: Indicator[] = ["heart_rate", "blood_pressure", "oxygen_in_blood", "mood", "body_temperature", "glucose", "sleep", "nutrition", "symptom", "space_radiation", "distance_from_earth"];
@@ -58,16 +74,52 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
     confirmedDraft = null; result.replaceChildren();
     setText(save, warnedDemo ? "Save real data" : "Save reading");
   }
-  select.addEventListener("change", () => { renderFields(); resetConfirmation(); });
+  function applyProposal(record: ProposedRecord, source: AssistSource): void {
+    if (busy) return;
+    if (saved) {
+      saved = false; fields.disabled = false; save.disabled = !available;
+      result.replaceChildren(); confirmedDraft = null;
+      if (!time.value) time.value = new Date().toISOString().slice(0, 19);
+      setText(close, "Discard");
+    }
+    select.value = record.indicator;
+    renderFields();
+    const mapping = fieldSelectors[record.indicator];
+    for (const field of record.fields) {
+      if (field.value === null) continue;
+      const selector = mapping[field.key];
+      if (!selector) continue;
+      const target = values.querySelector<HTMLInputElement | HTMLSelectElement>(selector);
+      if (!target) continue;
+      if (target instanceof HTMLSelectElement) {
+        if (typeof field.value === "string" && bodyZones.some(zone => zone === field.value)) {
+          target.value = field.value;
+        }
+      } else if (typeof field.value === "number" && Number.isFinite(field.value)) {
+        target.value = String(field.value);
+      } else if (typeof field.value === "string") {
+        target.value = field.value;
+      }
+    }
+    entrySource = source;
+    form.dispatchEvent(new Event("input", { bubbles: true }));
+    const firstEmpty = Array.from(
+      fields.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input[required], select[required]"),
+    ).find(inputNode => !inputNode.value.trim());
+    if (firstEmpty) firstEmpty.focus();
+    else if (!save.disabled) save.focus();
+  }
+  const assistant = setupAssistant({ available, onUseProposal: applyProposal });
+  select.addEventListener("change", () => { entrySource = "form"; renderFields(); resetConfirmation(); });
   form.addEventListener("input", resetConfirmation);
   renderFields();
   function resetSaved(): void {
     if (!saved) return;
     saved = false; fields.disabled = false; form.reset(); renderFields(); result.replaceChildren();
-    confirmedDraft = null; time.value = "";
+    confirmedDraft = null; time.value = ""; entrySource = "form"; assistant.reset();
   }
   function openSheet(): void {
-    resetSaved(); opening += 1; warnedDemo = false;
+    resetSaved(); entrySource = "form"; assistant.reset(); opening += 1; warnedDemo = false;
     element("#manual-demo").hidden = true;
     close.disabled = false; save.disabled = !available; setText(close, "Discard");
     controls.open(close);
@@ -112,7 +164,7 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
   window.addEventListener("pagehide", () => release(true));
   document.addEventListener("visibilitychange", () => { if (document.hidden) release(true); });
   close.addEventListener("click", controls.close);
-  dialog.addEventListener("close", () => { holding = false; pointer = null; opening += 1; hold.setAttribute("aria-pressed", "false"); onHolding?.(false); });
+  dialog.addEventListener("close", () => { holding = false; pointer = null; opening += 1; hold.setAttribute("aria-pressed", "false"); onHolding?.(false); assistant.reset(); });
   async function manual(): Promise<void> {
     if (!dialog.open) openSheet();
     const revision = opening;
@@ -165,7 +217,7 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
         value = { body_zone: zone, score: n }; break;
       }
     }
-    return { indicator, value, measured_at: date("#manual-time"), source: "form", note: note.value.trim() || undefined };
+    return { indicator, value, measured_at: date("#manual-time"), source: entrySource, note: note.value.trim() || undefined };
   }
   form.addEventListener("submit", async event => {
     event.preventDefault(); if (busy || saved || !available || !form.reportValidity()) return;

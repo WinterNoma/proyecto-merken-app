@@ -112,7 +112,7 @@ export function createDashboard(available: boolean, onZoneSelection?: (zone: Bod
     if (stateResult.status !== "fulfilled") { local.append(el("p", "", "Local service unavailable. Evaluation and history could not be confirmed.")); return; }
     const evaluation = stateResult.value.indicators.find(entry => entry.indicator === link.indicator);
     if (!evaluation) { local.append(el("p", "caption", "No on-device evaluation or reading available.")); return; }
-    const view = evaluationView(true);
+    const view = evaluationView(true, available);
     view.update(evaluation, stateResult.value.is_demo);
     view.history(records.status === "fulfilled" ? records.value.records : null, evaluation.reason === "stale");
     const history = view.node.querySelector("details"); if (history) history.open = true;
