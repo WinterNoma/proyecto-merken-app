@@ -4,6 +4,8 @@ export interface BloodPressure {
   diastolic: number | null;
 }
 export interface AstronautTelemetry {
+  /** Present but malformed feed values, kept distinct from absent readings. */
+  invalidIndicators?: string[];
   astronaut_name: string;
   space_radiation: number | null;
   distance_from_earth: number | null;

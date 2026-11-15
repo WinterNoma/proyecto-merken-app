@@ -37,3 +37,6 @@ backups/
 
 # Python
 __pycache__/
+
+# Generado por tauri-plugin en cada build (no se versiona)
+plugins/*/android/.tauri/

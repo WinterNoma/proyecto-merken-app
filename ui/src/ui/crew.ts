@@ -5,7 +5,11 @@ import { crewStatus, paintBadge } from "./status-copy";
 import { modal } from "./dialog";
 import type { FeedState } from "./telemetry";
 
-export function createCrewSelector(onSelect: (member: AstronautProfile | null) => void) {
+export function createCrewSelector(
+  onSelect: (member: AstronautProfile | null) => void,
+  // Installed app only: loads the member's history saved on this device into the local core (as DEMO).
+  importToCore?: (member: AstronautProfile) => Promise<string>,
+) {
   const trigger = element<HTMLButtonElement>("#crew-open");
   const dialog = element<HTMLDialogElement>("#crew-dialog");
   const close = element<HTMLButtonElement>("#crew-close");
@@ -13,6 +17,11 @@ export function createCrewSelector(onSelect: (member: AstronautProfile | null) =
   const previous = element<HTMLButtonElement>("#crew-prev");
   const next = element<HTMLButtonElement>("#crew-next");
   const confirm = element<HTMLButtonElement>("#crew-confirm");
+  const useInCore = element<HTMLButtonElement>("#crew-core");
+  const coreStatus = element("#crew-core-status");
+  let importing = false;
+  let statusFor: string | null | undefined;
+  useInCore.hidden = !importToCore;
   const dots = element("#crew-dots");
   const headerStatus = element("#header-crew-status");
   const previewStatus = element("#crew-preview-status");
@@ -30,6 +39,12 @@ export function createCrewSelector(onSelect: (member: AstronautProfile | null) =
   function renderPreview(): void {
     const member = crew.find(entry => entry.id === previewId);
     confirm.disabled = !member;
+    useInCore.disabled = importing || !member;
+    // Only reset the message when another member is shown: the feed re-renders every few seconds.
+    if (importToCore && !importing && statusFor !== (member?.id ?? null)) {
+      statusFor = member?.id ?? null;
+      setText(coreStatus, "");
+    }
     if (!member) {
       setText(element("#crew-preview-name"), "No crew available");
       setText(element("#crew-preview-id"), "--");
@@ -70,6 +85,19 @@ export function createCrewSelector(onSelect: (member: AstronautProfile | null) =
       event.preventDefault();
       previewId = (event.key === "Home" ? crew[0] : crew[crew.length - 1])?.id ?? null;
       renderPreview();
+    }
+  });
+  useInCore.addEventListener("click", async () => {
+    const member = crew.find(entry => entry.id === previewId);
+    if (!importToCore || !member || importing) return;
+    importing = true; useInCore.disabled = true;
+    setText(coreStatus, "Loading " + member.name + "'s saved history into the on-device core…");
+    try {
+      setText(coreStatus, await importToCore(member));
+    } catch (error) {
+      setText(coreStatus, typeof error === "object" && error !== null && "message" in error ? String(error.message) : "The readings could not be saved in the core");
+    } finally {
+      importing = false; useInCore.disabled = false;
     }
   });
   confirm.addEventListener("click", () => {

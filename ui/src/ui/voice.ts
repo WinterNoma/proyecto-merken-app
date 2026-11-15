@@ -1,15 +1,29 @@
-import { core, isCoreError, type Indicator, type LogRecordInput, type RecordValue } from "../core-api";
+import { core, isCoreError, type Indicator, type LogRecordInput, type ProposedRecord, type RecordValue } from "../core-api";
 import type { CorePanel } from "./core-panel";
 import { element, el, setText, utc } from "./dom";
 import { modal } from "./dialog";
 import { bodyZones, zoneName } from "./body-map";
 import { indicatorName } from "./core-format";
+import { setupAssistant, type AssistSource } from "./assistant";
+import { createReadingChat, type PulseProposal } from "./reading-chat";
+import { setupDictation } from "./dictation";
+
+const fieldSelectors: Record<Indicator, Record<string, string>> = {
+  heart_rate: { bpm: "#manual-a" },
+  blood_pressure: { systolic: "#manual-a", diastolic: "#manual-b" },
+  body_temperature: { celsius: "#manual-a" },
+  glucose: { mg_dl: "#manual-a" },
+  sleep: { hours: "#manual-a" },
+  mood: { score: "#manual-a" },
+  oxygen_in_blood: { percentage: "#manual-a" },
+  nutrition: { kcal: "#manual-a" },
+  space_radiation: { usv_h: "#manual-a" },
+  distance_from_earth: { km: "#manual-a" },
+  symptom: { body_zone: "#manual-zone", score: "#manual-a" },
+};
 
 export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (active: boolean) => void): void {
   const dialog = element<HTMLDialogElement>("#voice-dialog");
-  const hold = element<HTMLButtonElement>("#talk-hold");
-  const entry = element(".voice-entry");
-  const inlineStatus = element("#voice-inline-status");
   const close = element<HTMLButtonElement>("#voice-close");
   const form = element<HTMLFormElement>("#manual-form");
   const fields = element<HTMLFieldSetElement>("#manual-fields");
@@ -19,14 +33,14 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
   const note = element<HTMLTextAreaElement>("#manual-note");
   const save = element<HTMLButtonElement>("#manual-save");
   const result = element("#manual-result");
-  let holding = false;
-  let pointer: number | null = null;
   let busy = false;
   let saved = false;
   let warnedDemo = false;
   let confirmedDraft: LogRecordInput | null = null;
+  let entrySource: "form" | AssistSource = "form";
   let opening = 0;
   const controls = modal(dialog, () => !busy);
+  const chat = createReadingChat(proposal => void manual(proposal));
   const indicators: Indicator[] = ["heart_rate", "blood_pressure", "oxygen_in_blood", "mood", "body_temperature", "glucose", "sleep", "nutrition", "symptom", "space_radiation", "distance_from_earth"];
   for (const indicator of indicators) { const option = el("option", "", indicatorName(indicator)); option.value = indicator; select.append(option); }
   function input(id: string, label: string, type = "number"): HTMLInputElement {
@@ -58,72 +72,86 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
     confirmedDraft = null; result.replaceChildren();
     setText(save, warnedDemo ? "Save real data" : "Save reading");
   }
-  select.addEventListener("change", () => { renderFields(); resetConfirmation(); });
+  function applyProposal(record: ProposedRecord, source: AssistSource): void {
+    if (busy) return;
+    if (saved) {
+      saved = false; fields.disabled = false; save.disabled = !available;
+      result.replaceChildren(); confirmedDraft = null;
+      if (!time.value) time.value = new Date().toISOString().slice(0, 19);
+      setText(close, "Discard");
+    }
+    select.value = record.indicator;
+    renderFields();
+    const mapping = fieldSelectors[record.indicator];
+    for (const field of record.fields) {
+      if (field.value === null) continue;
+      const selector = mapping[field.key];
+      if (!selector) continue;
+      const target = values.querySelector<HTMLInputElement | HTMLSelectElement>(selector);
+      if (!target) continue;
+      if (target instanceof HTMLSelectElement) {
+        if (typeof field.value === "string" && bodyZones.some(zone => zone === field.value)) {
+          target.value = field.value;
+        }
+      } else if (typeof field.value === "number" && Number.isFinite(field.value)) {
+        target.value = String(field.value);
+      } else if (typeof field.value === "string") {
+        target.value = field.value;
+      }
+    }
+    entrySource = source;
+    form.dispatchEvent(new Event("input", { bubbles: true }));
+    const firstEmpty = Array.from(
+      fields.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input[required], select[required]"),
+    ).find(inputNode => !inputNode.value.trim());
+    if (firstEmpty) firstEmpty.focus();
+    else if (!save.disabled) save.focus();
+  }
+  const assistant = setupAssistant({ available, onUseProposal: applyProposal });
+  select.addEventListener("change", () => { entrySource = "form"; renderFields(); resetConfirmation(); });
   form.addEventListener("input", resetConfirmation);
   renderFields();
   function resetSaved(): void {
     if (!saved) return;
     saved = false; fields.disabled = false; form.reset(); renderFields(); result.replaceChildren();
-    confirmedDraft = null; time.value = "";
+    confirmedDraft = null; time.value = ""; entrySource = "form"; assistant.reset();
   }
   function openSheet(): void {
-    resetSaved(); opening += 1; warnedDemo = false;
+    resetSaved(); entrySource = "form"; assistant.reset(); opening += 1; warnedDemo = false;
     element("#manual-demo").hidden = true;
     close.disabled = false; save.disabled = !available; setText(close, "Discard");
     controls.open(close);
   }
-  function release(cancelled = false): void {
-    if (!holding) return;
-    const captured = pointer;
-    holding = false; pointer = null; hold.setAttribute("aria-pressed", "false");
-    entry.dataset.voiceState = "idle";
-    if (captured !== null && hold.hasPointerCapture(captured)) hold.releasePointerCapture(captured);
-    onHolding?.(false);
-    setText(inlineStatus, cancelled ? "Preview stopped · No audio captured" : "Voice unavailable · Use Type");
-  }
-  function begin(): boolean {
-    if (holding || busy || dialog.open) return false;
-    hold.focus({ preventScroll: true }); holding = true; hold.setAttribute("aria-pressed", "true");
-    entry.dataset.voiceState = "holding";
-    setText(inlineStatus, "Visual preview · No audio captured");
-    onHolding?.(true);
-    return true;
-  }
-  hold.addEventListener("pointerdown", event => {
-    if (!event.isPrimary || event.button !== 0) return;
-    event.preventDefault();
-    if (!begin()) return;
-    pointer = event.pointerId;
-    hold.setPointerCapture(pointer);
-  });
-  window.addEventListener("pointerup", event => { if (pointer === event.pointerId) release(); }, true);
-  window.addEventListener("pointercancel", event => { if (pointer === event.pointerId) release(true); }, true);
-  hold.addEventListener("lostpointercapture", () => { if (pointer !== null) release(true); });
-  hold.addEventListener("keydown", event => {
-    if (event.key === " " || event.key === "Enter") { event.preventDefault(); if (!event.repeat) begin(); }
-  });
-  window.addEventListener("keydown", event => { if (holding && event.key === "Escape") { event.preventDefault(); release(true); } });
-  window.addEventListener("keyup", event => {
-    if (holding && pointer === null && (event.key === " " || event.key === "Enter")) { event.preventDefault(); release(); }
-  }, true);
-  // An AT-generated click has no down/up sequence; announce availability inline.
-  hold.addEventListener("click", event => { if (event.detail === 0 && begin()) release(); });
-  window.addEventListener("blur", () => release(true));
-  window.addEventListener("pagehide", () => release(true));
-  document.addEventListener("visibilitychange", () => { if (document.hidden) release(true); });
+  const dictation = setupDictation(available, text => void manual(undefined, text), onHolding);
   close.addEventListener("click", controls.close);
-  dialog.addEventListener("close", () => { holding = false; pointer = null; opening += 1; hold.setAttribute("aria-pressed", "false"); onHolding?.(false); });
-  async function manual(): Promise<void> {
+  dialog.addEventListener("close", () => {
+    if (dialog.open) return;
+    opening += 1;
+    assistant.reset();
+    dictation.hide();
+  });
+  async function manual(proposal?: PulseProposal, transcript?: string): Promise<void> {
     if (!dialog.open) openSheet();
     const revision = opening;
-    release(true); entry.dataset.voiceState = "idle"; setText(inlineStatus, "");
+    dictation.hide();
+    chat.hide();
     form.hidden = false;
-    setText(element("#voice-title"), "Type a reading");
+    entrySource = proposal ? "text" : "form";
+    setText(element("#voice-title"), proposal || transcript ? "Review reading" : "Type a reading");
+    if (proposal) {
+      select.value = "heart_rate";
+      renderFields();
+      element<HTMLInputElement>("#manual-a").value = String(proposal.bpm);
+      time.value = proposal.measuredAt.slice(0, 19);
+      note.value = "";
+      resetConfirmation();
+    }
     if (!time.value) time.value = new Date().toISOString().slice(0, 19);
     setText(element("#manual-profile"), available ? "On-device profile · Checking…" : "Browser mode");
     setText(element("#manual-availability"), available ? "Saved to the on-device profile, separate from the selected MySQL crew member." : "Local service unavailable. Entries are not recorded in the browser.");
     save.disabled = !available; select.focus();
     if (!available) return;
+    if (transcript) void assistant.interpretInto(transcript, "voice");
     const [status, identity] = await Promise.allSettled([core.getStatus(), core.getProfile()]);
     if (revision !== opening || !dialog.open || busy || saved) return;
     setText(element("#manual-profile"), "On-device profile · " + (identity.status === "fulfilled" ? identity.value.profile?.astronaut.display_name ?? "No profile available" : "Profile unavailable"));
@@ -132,7 +160,23 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
       setText(save, confirmedDraft ? "Confirm warnings and save" : warnedDemo ? "Save real data" : "Save reading");
     } else setText(result, "Local service unavailable. Your entry has been kept; try saving again.");
   }
-  element("#manual-open").addEventListener("click", () => { void manual(); });
+  function showChat(): void {
+    if (!dialog.open) openSheet();
+    dictation.hide();
+    form.hidden = true;
+    setText(element("#voice-title"), "Onboard assistant");
+    chat.show();
+  }
+  element("#talk-hold").addEventListener("click", () => {
+    openSheet();
+    chat.hide();
+    form.hidden = true;
+    setText(element("#voice-title"), "Voice dictation");
+    dictation.show();
+  });
+  element("#manual-open").addEventListener("click", showChat);
+  element("#voice-type").addEventListener("click", showChat);
+  element("#chat-manual").addEventListener("click", () => { void manual(); });
   function date(id: string): string {
     const raw = element<HTMLInputElement>(id).value;
     const parsed = new Date(raw + "Z");
@@ -165,7 +209,7 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
         value = { body_zone: zone, score: n }; break;
       }
     }
-    return { indicator, value, measured_at: date("#manual-time"), source: "form", note: note.value.trim() || undefined };
+    return { indicator, value, measured_at: date("#manual-time"), source: entrySource, note: note.value.trim() || undefined };
   }
   form.addEventListener("submit", async event => {
     event.preventDefault(); if (busy || saved || !available || !form.reportValidity()) return;

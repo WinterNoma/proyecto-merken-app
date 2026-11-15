@@ -118,3 +118,113 @@ const status = await core.getStatus(); // el núcleo ya los evalúa
 
 - Login y descarga del perfil real: llegan con la sincronización (`crates/sync`), cuando el backend tenga URL. Hasta entonces `getProfile` devuelve `profile: null` salvo con DEMO.
 - Subida y descarga con Tierra: los datos quedan en la cola (`sync.pending`).
+
+
+## Interpreter and explainer (SLM)
+
+`interpretText` returns a proposal and a layer-2 status; it does not save anything. Show fields from `proposal` and `layer2_proposal` alongside each literal `quote`, labeling layer-2 fields **interpreted by AI**. Keep the original input. The user confirms or corrects every field. Put both `unresolved` and `proposal.uninterpreted` fragments and ambiguous times in the form. Once the user confirms each record, use `logRecord` with `source: "text"` or `"voice"`, including the usual warning confirmation flow. Negated mentions are not records.
+
+Both `interpret_text` and `explain_indicator` require `input.request_id`: a caller-generated string of 1–64 ASCII characters from `[A-Za-z0-9_-]`. Use a fresh ID for every UI request, including retries. A duplicate ID still admitted to the service returns `busy`; malformed IDs return `invalid_value` with field `request_id`. Input `source` and `body_zone` may be omitted or null.
+
+`explainIndicator` obtains the evaluation from the local store in Rust. Acquiring `Mutex<Store>` and calling `Store::status` both happen in `spawn_blocking`; the guard is released before waiting for the model. Like `get_status`, this can persist deterministic evaluations and enqueue them for synchronization. It never saves SLM proposals or unconfirmed measurements. Always show its deterministic facts. When a note exists, show its label **AI-generated suggestion** and its curated statements. Selection is restricted to statements applicable to the existing state and cannot change that state. There are currently no curated fichas, so the note is null with `no_fichas`. Fact IDs are the closed set `indicator`, `status`, `reason`, `direction`, `latest_reading`, `baseline`, `history`, `escalation`, `source`.
+
+Layer 2 can be `not_needed`, `unavailable`, `used`, `model_unavailable`, `cancelled`, `timeout`, `discarded` or `slm_error`. The rules proposal is unchanged. `layer2_proposal` is separate and contains only checked SLM records for indicators absent from the rules proposal, with each full quote inside `unresolved` or `proposal.uninterpreted`; it is null if none survive. The filtered proposal is checked against the original input. `note_status` can be `available`, `no_fichas`, `model_unavailable`, `cancelled`, `timeout`, `discarded` or `slm_error`. Failures do not expose engine output.
+
+Residual coverage uses complete Unicode alphanumeric words (including combining marks) with UTF-8 byte offsets into the original input. The attached numeric signs `-`, `−` (U+2212) and `+`, as well as decimal dots/commas followed by digits, stay inside the numeric token. A pending number retains its literal sign and decimal separator, even when core rejects the value: `temperatura -0,5` leaves `-0,5`, and `pulse −72` leaves `−72`. Citation matching compares complete word sequences and their exact original spacing and punctuation; `72` cannot cover any part of `172`, `-72` or `−72`. Other punctuation has no content; the connector list is `y, e, pero, también, tambien, and, but, also` (case-insensitive).
+
+Inside a record citation, a word is covered only by supported value evidence, its ambiguous time citation, a mention of that record's indicator, or the function-word list below. A scalar field citation never covers its entire text merely because it is evidence. Numeric coverage uses expressions accepted by core's `quote_number` with the proposed value, including supported units. Enum coverage uses minimal supporting spans recognized by `quote_sleep_quality` or `quote_zone` for the proposed value. This includes the recognized sleep negation (`no`/`not` and the immediately preceding `did` in `did not`), sleep mention and quality words, leaving unrelated text pending. Fields without a value cover no evidence words. The free-text exception is a symptom `description` whose literal value equals its citation: it covers that entire citation because the content travels in the value. Repeated field/time citations within a broad record citation are conservatively left pending. Record citations remain unchanged and never provide full semantic coverage by themselves.
+
+Indicator mentions use core's public `mentions_indicator` on contiguous windows of up to four words, preserving punctuation such as the slash in `mg/dL`. Minimal mentions cannot absorb arbitrary neighbours. Exact compound aliases from core's lexicon may also cover their full name, including `blood glucose`, `estado de ánimo`, `heart rate`, `frecuencia cardiaca` and `distancia desde la tierra`; matching normalizes case, Latin accents and horizontal whitespace. The local compound-alias allowlist must track core because the public predicate exposes only a boolean, not mention spans. Coverage remains confined to the record citation.
+
+The closed function-word list is `de, la, el, los, las, un, una, me, mi, my, the, a, of, en, in, con, with, al, del, at, i` (case-insensitive; `a las` is covered as two words). A negated fragment is covered only if it names an indicator (including symptoms) and every content word is an indicator mention, a function word, or one of these closed negation scaffold particles: `no, not, sin, without, nunca, never, ni, nor, tengo, have, has, siento, feel, hay, any`. Thus `no tengo fiebre` and `no headache` are understood, while `no pegué ojo` remains pending in full. Any unaccounted content inside a negation keeps the entire negated fragment pending.
+
+Unresolved fragments are contiguous original slices from the first to the last uncovered word. Intermediate function words and immediately preceding function words are retained; connectors separate ordinary fragments. Thus `no dormí bien estoy agotado` leaves **`estoy agotado`**, and `I did not sleep well I feel exhausted` leaves **`I feel exhausted`** (the chosen English form includes `I`). The short forms `dormí mal` and `I slept poorly` leave nothing pending. Text already shown in `proposal.uninterpreted` is not duplicated in `unresolved`; it triggers layer 2 only when it contains content beyond punctuation/connectors. When uncertain, keep content pending rather than silently considering it interpreted.
+
+`slmCancel(requestId)` invokes `slm_cancel({ request_id })`. The service creates the cancellation token when admitting a job, including queued jobs. Cancellation affects exactly that ID. It returns false for an unknown or completed ID and never cancels a successor. Cancellation is cooperative; a queued cancelled job is rejected before model loading. After a command-side timeout its ID is removed and late cancellation returns false, while its cancelled native work may still be unwinding.
+
+The layer-1 proposal, residual text and `render_facts` run on the command's blocking thread, outside the optional model worker. Jobs have a 120-second cooperative model deadline including queue time. The command waits with `recv_timeout` for the remaining deadline plus a 2-second margin, returning the unchanged deterministic result with `timeout` if the wait expires. The token remains cancelled in the background. This bounds the wait for the model, not the preceding database acquisition/evaluation or blocking-pool scheduling. A full queue (two waiting jobs), or native work still alive after a response timeout, returns `busy`.
+
+If a worker channel closes or a panic unwinds, the response keeps its deterministic proposal/residual or facts with `slm_error`, without a model proposal/note. Tokens are cleaned on completion, timeout, admission failure and worker unwind. The next request restarts a finished worker; the service checks thread completion before restarting, so two model engines cannot coexist. A worker still alive and stuck is not replaced. With the workspace release setting `panic = "abort"`, a Rust/native abort ends the entire process; unwind recovery cannot handle that case.
+
+`slmStatus` reports installed, verified, loaded and backend availability without paths. `slmRelease()` invokes `slm_release()` and unloads the single model slot on the worker (RNF-09); it returns true if a model was unloaded, false if already empty. The UI should await it when entering record entry. It does not load an engine, persist health data or confirm records; subsequent inference reloads on demand. Release uses the same bounded queue and command wait; if the worker is still hung, `busy` is returned. A release wait timeout returns `timeout`; a release already queued can still finish later.
+
+Tauri emits `slm-progress` with `{ request_id, phase, tokens, max_tokens }`. Phases are `loading`, `generating`, `validating`, `done`; token counts are zero outside generation. Events contain no input, prompt or generated text. Ignore events for stale IDs. Visible Tauri messages are centralized in `src-tauri/src/strings.rs` in English (RNF-14).
+
+For manual desktop installation, create `<app_data_dir>/models/space-health-v5/` and copy both `space-health-base-Q4_K_M.gguf` and `space-health-lora-f16.gguf` from the v5 package. In a debug build `MERKEN_SLM_MODELS_DIR` selects the parent models directory. The embedded trusted manifest fixes sizes and SHA-256; a disk manifest is not trusted. Build with `slm-llama` to enable the backend. No interpreter model or curated fichas currently ships. Android integration and benchmarking remain Phase 3.
+
+```ts
+await core.slmRelease(); // Entering record entry; await model unloading first.
+const requestId = crypto.randomUUID();
+const { proposal, layer2_proposal, unresolved } = await core.interpretText({
+  request_id: requestId, text, source: "voice",
+});
+// Present both proposals and their quotes; label layer2_proposal fields as interpreted by AI.
+// Put unresolved, proposal.uninterpreted and ambiguous times in the form.
+// After explicit confirmation and constructing a valid value:
+await core.logRecord({ indicator, value, source: "voice" });
+// On cancellation of this specific request:
+await core.slmCancel(requestId);
+
+const explanation = await core.explainIndicator({
+  request_id: crypto.randomUUID(), indicator: "heart_rate", body_zone: null,
+});
+for (const fact of explanation.facts) show(fact.text);
+if (explanation.note) show(explanation.note.label);
+```
+
+
+## Local voice (TTS)
+
+Build with the optional `voice-tts` feature to enable local English synthesis. Without it, these commands return `voice_unavailable`; the UI can hide its voice button. No audio or user text is sent to a server.
+
+- `speakText({ request_id, text, voice?, speed? })` invokes `speak_text({ input })` and returns `{ request_id, chunks, duration_ms }`; duration is the total generated audio duration. The ID follows the SLM rules (1–64 ASCII letters, digits, underscores or hyphens). Use a fresh ID per request. Text is limited to 600 characters and the voice engine supports English lexicon vocabulary. The default voice is `af_heart`, default speed is 1.0, and speed must be between 0.7 and 1.3. See [merken-voice](../../crates/voice/README.md) for voice IDs and text limitations. Invalid voice or speed returns `text_invalid` with the corresponding field.
+- Listen for `voice-chunk` before invoking synthesis. Each event is `{ request_id, index, wav_base64 }`: index starts at zero and the base64 decodes to a complete PCM16 mono WAV for that chunk. Queue chunks in order as they arrive and ignore stale request IDs.
+- `speakCancel(requestId)` invokes `speak_cancel({ request_id })` and returns whether that request is active. Cancellation is cooperative between chunks; a native synthesis already running finishes before cancellation takes effect. Already emitted audio is not recalled.
+- `voiceRelease()` unloads the model and returns whether one was loaded. Await it when entering record entry or before loading the SLM (RNF-09). It returns `busy` while synthesis is active; cancel and wait for the request to finish before retrying. The UI must coordinate SLM and voice releases; the services do not unload each other automatically.
+
+One request at a time is admitted; another returns `busy`. The model loads on the first request and is reused. Changing voice or speed reloads it because those settings are fixed at engine construction. Errors use `{ code, field, message }` with stable codes `voice_unavailable`, `model_missing`, `text_invalid`, `text_unsupported`, `busy`, `cancelled`, and `synthesis_failed`; malformed request IDs use the SLM error `invalid_value` with field `request_id`. Errors do not include user text.
+
+Install the sherpa-onnx Kokoro v1.0 int8 package in `<app_data_dir>/models/kokoro-int8-multi-lang-v1_0/`, with `model.int8.onnx`, `voices.bin`, `tokens.txt` and `lexicon-us-en.txt`. Also copy [merken-us-en.txt](../../crates/voice/lexicon/merken-us-en.txt) into that directory. Debug builds use `MERKEN_SLM_MODELS_DIR` as the parent models directory when set, just like the SLM. The native sherpa-onnx libraries must also be available for the target platform; see the crate README.
+
+On the measured PC, first audio arrived in about 2 seconds and real-time factor was about 1.3 with four threads. Mobile playback may pause between sentences; measure on the target device.
+
+
+## Local dictation (STT)
+
+Build with the optional `voice-stt` feature (alone or alongside `voice-tts`) to enable offline speech-to-text dictation. Without it, `transcribe_audio` and `stt_release` return `voice_unavailable`. No audio or transcribed text leaves the device.
+
+- `core.transcribeAudio({ request_id, pcm_f32le_base64, sample_rate, language? })` invokes `transcribe_audio({ input })` and returns `{ request_id, text, duration_ms }`, where `duration_ms` is the transcription runtime measured in Rust (not the audio duration).
+  - `request_id`: 1–64 ASCII letters, digits, underscores, or hyphens (malformed IDs return `invalid_value` with field `request_id`).
+  - `pcm_f32le_base64`: strict standard RFC 4648 base64 (`=`-padded, no whitespace or URL-safe alphabet) of mono IEEE 754 `f32` little-endian samples in `[-1, 1]`. Hard limits: max 30 seconds at 48 kHz (5,760,000 raw bytes / 7,680,000 base64 characters, checked before decoding). Empty audio, invalid base64, byte length not divisible by 4, non-finite samples, or exceeding the limit returns `audio_invalid` with field `pcm_f32le_base64`.
+  - `sample_rate`: integer in `8000..=48000` Hz (values outside `i32` or `8000..=48000` return `audio_invalid` with field `sample_rate`).
+  - `language`: optional `"es"`, `"en"`, or `"auto"` (defaults to `"auto"` when omitted or `null`; unknown values return `audio_invalid` with field `language`).
+- `core.sttRelease()` invokes `stt_release()` and unloads the cached STT model, returning `true` if a model was loaded or `false` if already empty. Returns `busy` while a transcription is active.
+- Browser capture helpers in [`ui/src/core-api.ts`](../../ui/src/core-api.ts):
+  - `recordDictation()` returns `{ ready, limitReached, stop(), cancel() }`. `ready` resolves when the microphone is active and rejects if permission or Web Audio setup fails. It captures via `AudioWorklet` (with `ScriptProcessorNode` fallback), mixes to mono, resamples to `16000` Hz, and caps recording at 30 s. When the 30 s limit is reached, capture stops automatically (stopping `MediaStream` tracks, the audio processor, and closing the `AudioContext`) while retaining the accumulated audio for `stop()`, and `limitReached` (`Promise<void>`, which never rejects) resolves. `stop()` and `cancel()` always release all audio resources and clear retained PCM chunks.
+  - `dictate(recording, language?)` stops the recording, encodes the `Float32Array` as little-endian base64, generates a unique `request_id`, calls `core.transcribeAudio`, and returns `{ request_id, text, duration_ms }`.
+- **Mandatory workflow rule**: `dictate` / `transcribe_audio` is strictly voice-to-text and **never** interprets or saves health records on its own. Always pass the resulting `text` into `core.interpretText({ request_id, text, source: "voice" })` and require the user to confirm or edit every field before calling `core.logRecord({ ..., source: "voice" })`.
+
+One STT transcription runs at a time, using its own state separate from TTS so speech synthesis and dictation do not block each other; a concurrent call returns `busy`. Transcription cannot be cancelled once dispatched: if the caller stops awaiting the promise, the native call continues running and new requests receive `busy` until it finishes. Error codes: `busy`, `audio_invalid`, `model_missing`, `transcription_failed`, `voice_unavailable`, and `invalid_value` for malformed `request_id`.
+
+STT uses the same models root as SLM and TTS (`<app_data_dir>/models/`, or `MERKEN_SLM_MODELS_DIR` in debug builds) and probes these subdirectories in order, loading the first directory that exists with 2 threads:
+
+1. `stt-whisper-base/`
+2. `stt-whisper-small/`
+3. `stt-canary-180m/`
+
+`SttPaths::from_dir` detects the model by filenames inside the chosen directory (`<x>-encoder.int8.onnx` for Whisper, `encoder.int8.onnx` for Canary).
+
+The Android plugin manifest (`plugins/slm-assets/android/src/main/AndroidManifest.xml`) declares `android.permission.RECORD_AUDIO` so the WebView can prompt for microphone access when `recordDictation()` runs.
+
+```ts
+const recording = recordDictation();
+await recording.ready;
+// ... user speaks, then taps stop:
+const { text } = await dictate(recording, "auto");
+// Never save directly: always run through the interpreter and confirm field by field.
+const interpreted = await core.interpretText({
+  request_id: crypto.randomUUID(),
+  text,
+  source: "voice",
+});
+```

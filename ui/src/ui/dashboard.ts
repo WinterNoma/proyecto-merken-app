@@ -15,35 +15,6 @@ export const readingLinks: Record<string, { indicator: Indicator; zone: BodyZone
   sleep: { indicator: "sleep", zone: "head" }, nutrition: { indicator: "nutrition", zone: "abdomen" },
   radiation: { indicator: "space_radiation", zone: "other" }, distance: { indicator: "distance_from_earth", zone: "other" },
 };
-export function setupPages(onChange?: (index: number) => void) {
-  const pages = [element("#overview"), element("#core-panel")];
-  const dots = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-page]"));
-  let active = 0;
-  function show(index: number, focus = false): void {
-    active = Math.max(0, Math.min(pages.length - 1, index));
-    pages.forEach((page, i) => { page.hidden = i !== active; });
-    dots.forEach((dot, i) => { if (i === active) dot.setAttribute("aria-current", "page"); else dot.removeAttribute("aria-current"); });
-    setText(element("#page-name"), active === 0 ? "Overview" : "History / On-device record");
-    if (focus) pages[active].focus();
-    onChange?.(active);
-  }
-  dots.forEach((dot, index) => dot.addEventListener("click", () => show(index)));
-  element("#sync-open").addEventListener("click", () => show(1, true));
-  element("#overview-alerts").addEventListener("click", () => show(1, true));
-  document.querySelector(".wordmark")?.addEventListener("click", () => show(0, true));
-  let start: { x: number; y: number; id: number } | null = null;
-  const container = element("#screens");
-  container.addEventListener("pointerdown", event => {
-    if (event.pointerType !== "touch" || (event.target as Element).closest('button, input, select, textarea, summary, a, [role="button"]')) return;
-    start = { x: event.clientX, y: event.clientY, id: event.pointerId };
-  });
-  container.addEventListener("pointerup", event => {
-    if (!start || event.pointerId !== start.id) return;
-    const dx = event.clientX - start.x; const dy = event.clientY - start.y; start = null;
-    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) show(active + (dx < 0 ? 1 : -1), true);
-  });
-  container.addEventListener("pointercancel", () => { start = null; });
-}
 export function createDashboard(available: boolean, onZoneSelection?: (zone: BodyZone) => void) {
   const map = createBodyMap(zone => {
     highlight(zone);
@@ -55,6 +26,7 @@ export function createDashboard(available: boolean, onZoneSelection?: (zone: Bod
   let profile: ProfileResponse | null = null;
   let online = false;
   let confirmedAlert: Evaluation | null = null;
+  let persistentAlerts: Evaluation[] = [];
   let feed: FeedState | null = null;
   let detailRevision = 0;
   const dialog = element<HTMLDialogElement>("#reading-dialog");
@@ -67,7 +39,7 @@ export function createDashboard(available: boolean, onZoneSelection?: (zone: Bod
     onZoneSelection?.(zone);
   }
   function overall(): void {
-    const copy = available ? status ? statusCopy(status.overall.status) : statusCopy(confirmedAlert?.status ?? "not_evaluated")
+    const copy = available ? confirmedAlert ? statusCopy(confirmedAlert.status) : status ? statusCopy(status.overall.status) : statusCopy("not_evaluated")
       : member ? crewStatus(member.telemetry) : { tone: "neutral" as const, label: "No data", icon: "no_data" as const };
     paintBadge(element("#overall-status"), copy);
     element("#overall-box").dataset.tone = copy.tone;
@@ -75,13 +47,13 @@ export function createDashboard(available: boolean, onZoneSelection?: (zone: Bod
     setText(element("#overall-scope"), available
       ? "On-device · " + (profile?.profile?.astronaut.display_name ?? "Profile unavailable") + (!online ? " · Local service unavailable" : "")
       : feed?.preview ? "Synthetic crew · Reading-level assessment" : "MySQL · Reading-level assessment");
-    if (available) setText(element("#feed-status"), status ? (online ? "Live · " : "Last update · ") + utc(status.evaluated_at, true) : "Awaiting local record");
+    if (available) setText(element("#feed-status"), status ? (online ? "Live · " : "Last update · ") + utc(status.evaluated_at, true) : confirmedAlert ? "Summary update pending" : "Awaiting local record");
     const extra = element("#overall-extra");
     const unknown = status?.indicators.filter(evaluation => evaluation.status === "not_evaluated" && evaluation.reason !== "not_applicable").length ?? 0;
     setText(extra, status ? [unknown ? unknown + " indicators not evaluated" : "", status.overall.worst.length ? "Review: " + status.overall.worst.map(key => key.replace(/_/g, " ")).join(", ") : ""].filter(Boolean).join(" · ") : "");
     extra.hidden = !extra.textContent;
-    element("#overview-alerts").hidden = !status?.alerts.length && !confirmedAlert;
-    setText(element("#overview-alerts"), "View persistent alerts (" + (status?.alerts.length || (confirmedAlert ? 1 : 0)) + ")");
+    element("#overview-alerts").hidden = persistentAlerts.length === 0;
+    setText(element("#overview-alerts"), "View persistent alerts (" + persistentAlerts.length + ")");
     setText(element("#overview-sync"), status ? status.sync.pending + " pending · " + status.sync.failed + " failed" : "Unavailable");
     setText(element("#body-source"), available ? "Cards: MySQL crew · Zones: on-device symptoms" + (status?.is_demo ? " · DEMO" : "") : feed?.preview ? "DEMO readings · Body navigation only · Zones not evaluated" : "Local service unavailable · Body zones not evaluated");
   }
@@ -112,7 +84,7 @@ export function createDashboard(available: boolean, onZoneSelection?: (zone: Bod
     if (stateResult.status !== "fulfilled") { local.append(el("p", "", "Local service unavailable. Evaluation and history could not be confirmed.")); return; }
     const evaluation = stateResult.value.indicators.find(entry => entry.indicator === link.indicator);
     if (!evaluation) { local.append(el("p", "caption", "No on-device evaluation or reading available.")); return; }
-    const view = evaluationView(true);
+    const view = evaluationView(true, available);
     view.update(evaluation, stateResult.value.is_demo);
     view.history(records.status === "fulfilled" ? records.value.records : null, evaluation.reason === "stale");
     const history = view.node.querySelector("details"); if (history) history.open = true;
@@ -125,6 +97,11 @@ export function createDashboard(available: boolean, onZoneSelection?: (zone: Bod
     core(value: StatusResponse | null, identity: ProfileResponse | null, live: boolean, alert?: Evaluation): void {
       if (live) confirmedAlert = null;
       if (alert) confirmedAlert = alert;
+      if (value) persistentAlerts = value.alerts;
+      else if (identity === null && (!alert || status?.is_demo)) persistentAlerts = [];
+      if (alert?.input_event_ids.length && !persistentAlerts.some(entry => entry.input_event_ids.some(id => alert.input_event_ids.includes(id)))) {
+        persistentAlerts = [...persistentAlerts, alert];
+      }
       status = value; profile = identity; online = live; map.update(value?.body_zones ?? []); overall();
     },
   };

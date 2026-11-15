@@ -1,0 +1,16 @@
+# Derived from Kokoro v1.0 lexicon-us-en.txt singulars: add s after voiceless p t k f θ, ᵻ z after sibilants, z otherwise.
+degrees d ə ɡ ɹ ˈ i z
+milligrams m ˈ ɪ l ə ɡ ɹ ˌ æ m z
+millimeters m ˈ ɪ l ə m ˌ i ɾ ə ɹ z
+deciliters d ˈ ɛ s ə l ˌ i ɾ ə ɹ z
+kilograms k ˈ ɪ l ə ɡ ɹ ˌ æ m z
+liters l ˈ i ɾ ə ɹ z
+milliliters m ˈ ɪ l ə l ˌ i ɾ ə ɹ z
+kilocalories k ˈ ɪ l ə k ˌ æ l ə ɹ i z
+minutes m ˈ ɪ n ə t s
+seconds s ˈ ɛ k ə n d z
+breaths b ɹ ˈ ɛ θ s
+hours ˈ W ə ɹ z
+beats b ˈ i t s
+calories k ˈ æ l ə ɹ i z
+heartbeats h ˈ ɑ ɹ t b ˌ i t s

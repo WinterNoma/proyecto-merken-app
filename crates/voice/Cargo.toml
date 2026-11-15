@@ -1,0 +1,25 @@
+[package]
+name = "merken-voice"
+description = "Local offline text-to-speech for Merken"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+tts = ["dep:sherpa-onnx"]
+stt = ["dep:sherpa-onnx"]
+
+[dependencies]
+sherpa-onnx = { version = "=2.0.1", default-features = false, features = ["shared"], optional = true }
+
+[lints]
+workspace = true
+
+[[example]]
+name = "say"
+required-features = ["tts"]
+
+[[example]]
+name = "transcribe"
+required-features = ["stt"]

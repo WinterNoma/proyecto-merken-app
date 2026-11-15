@@ -6,6 +6,12 @@ on:
   push:
     branches: [desarrollo]
   workflow_dispatch:
+    inputs:
+      abi:
+        description: CPU of the target device (x86_64 = Android Studio emulator on a PC)
+        type: choice
+        options: [aarch64, x86_64]
+        default: aarch64
 
 permissions:
   contents: read
@@ -18,10 +24,23 @@ jobs:
   apk:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions:
+      contents: read
     env:
       CI: 'true'
       CARGO_TERM_COLOR: always
       GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx3g
+      CARGO_BUILD_JOBS: '2'
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_DEV_INCREMENTAL: 'false'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      LLAMA_LIB_PROFILE: Release
+      # aarch64 = phones; x86_64 = PC emulators (ARM translation crashes onnxruntime).
+      TAURI_TARGET: ${{ inputs.abi || 'aarch64' }}
+      ANDROID_ABI: ${{ inputs.abi == 'x86_64' && 'x86_64' || 'arm64-v8a' }}
+      RUST_ANDROID_TARGET: ${{ inputs.abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,30 +64,71 @@ jobs:
         run: |
           rustup update stable --no-self-update
           rustup default stable
-          rustup target add aarch64-linux-android
+          rustup target add "$RUST_ANDROID_TARGET"
       - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: native-slim-v7-1
+          key: ${{ inputs.abi || 'aarch64' }}
       - name: Install locked JavaScript dependencies
         run: npm ci
       - name: Test Rust domain and adapters with synthetic fixtures
-        run: cargo test --locked --workspace --exclude merken
+        run: cargo test --locked -p merken-core -p merken-store -p merken-sync -p merken-seed -p merken-slm
       - name: Initialize Android project
         run: npm run tauri -- android init --ci --skip-targets-install
-      - name: Build installable ARM64 debug APK
-        run: npm run tauri -- android build --ci --debug --apk --target aarch64
+      # sherpa-onnx (offline dictation): official prebuilt Android libraries, pinned by SHA-256.
+      - name: Add sherpa-onnx Android libraries
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/sherpa-android.tar.bz2" https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-v2.0.1-android.tar.bz2
+          echo "39003753ec293425ed56723ea9b972b98841a490af3311670c3060548d654330  $RUNNER_TEMP/sherpa-android.tar.bz2" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/sherpa-android"
+          tar -xjf "$RUNNER_TEMP/sherpa-android.tar.bz2" -C "$RUNNER_TEMP/sherpa-android"
+          libs=$(dirname "$(find "$RUNNER_TEMP/sherpa-android" -path "*/$ANDROID_ABI/libsherpa-onnx-c-api.so" | head -n1)")
+          test -f "$libs/libonnxruntime.so"
+          dest=src-tauri/gen/android/app/src/main/jniLibs/$ANDROID_ABI
+          mkdir -p "$dest"
+          cp "$libs/libsherpa-onnx-c-api.so" "$libs/libonnxruntime.so" "$dest/"
+          echo "SHERPA_ONNX_LIB_DIR=$libs" >> "$GITHUB_ENV"
+          rm -f "$RUNNER_TEMP/sherpa-android.tar.bz2"
+      - name: Build installable debug APK
+        run: npm run tauri -- android build --ci --debug --apk --target "$TAURI_TARGET" --features voice-stt
+      # The runner has ~14 GB free; the APK with models needs ~4 GB more during
+      # alignment. Drop preinstalled toolchains this job never uses.
+      - name: Free disk space for the models
+        if: github.event_name != 'pull_request'
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/powershell /usr/local/share/chromium /opt/microsoft
+          df -h /
+      # Test models from a private Release of this repository (no AWS).
+      - name: Download test models
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/models"
+          gh release download modelos-prueba-v1 --repo "$GITHUB_REPOSITORY" --pattern '*.gguf' --pattern '*.onnx' --pattern 'base-tokens.txt' --dir "$RUNNER_TEMP/models"
+          ls -la "$RUNNER_TEMP/models"
       - name: Verify APK signature and export
+        env:
+          MODELS_DIR: ${{ runner.temp }}/models
+          TRUSTED_MODEL_BUILD: ${{ github.event_name != 'pull_request' }}
         run: |
           mkdir -p artifacts
           mapfile -t apks < <(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk')
           test "${#apks[@]}" -eq 1
-          cp "${apks[0]}" artifacts/merken-arm64-debug.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose artifacts/merken-arm64-debug.apk
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging artifacts/merken-arm64-debug.apk > artifacts/apk-info.txt
-          (cd artifacts && sha256sum merken-arm64-debug.apk > SHA256SUMS.txt)
+          python3 .github/scripts/bundle_offline_models.py "${apks[0]}" artifacts/merken-${ANDROID_ABI}-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose artifacts/merken-${ANDROID_ABI}-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging artifacts/merken-${ANDROID_ABI}-debug.apk > artifacts/apk-info.txt
+          (cd artifacts && sha256sum merken-${ANDROID_ABI}-debug.apk > SHA256SUMS.txt)
           printf '%s\n' "$GITHUB_SHA" > artifacts/source-revision.txt
-          echo 'Debug APK for Android ARM64. GGUF/voice models are provisioned separately. No device validation has been performed.' > artifacts/README.txt
+          if [[ "${{ github.event_name }}" != pull_request ]]; then
+            echo 'Test build: models from the private Release modelos-prueba-v1 are embedded and verified (see the build log for which ones). Offline inference uses native llama.cpp. Backend synchronization is optional and requires the ground-station login. Debug APK, not clinically validated; physical-device validation remains pending.' > artifacts/README.txt
+          else
+            echo 'PR compile-check APK only: model assets are not included. Use the trusted workflow-dispatch artifact for the complete offline app.' > artifacts/README.txt
+          fi
       - uses: actions/upload-artifact@v4
         with:
-          name: merken-android-arm64-debug-${{ github.run_number }}
+          name: merken-android-${{ inputs.abi == 'x86_64' && 'x86_64' || 'arm64' }}-debug-${{ github.run_number }}
           path: artifacts/
           if-no-files-found: error
           retention-days: 14

@@ -335,6 +335,8 @@ export function mountTelemetryHistory(
   host: HTMLElement,
   getCrew: () => CrewChoice[],
 ): TelemetryHistoryHandle {
+  const localCrew = new Map<string, CrewChoice>();
+  let catalogPending: Promise<void> | null = null;
   const uid = ++instanceCounter;
   const crewSelectId = `tele-hist-crew-${uid}`;
   const indicatorSelectId = `tele-hist-ind-${uid}`;
@@ -612,14 +614,42 @@ export function mountTelemetryHistory(
     void runVerify(crewId);
   }
 
+  // The saved backend snapshot is an offline catalog, not proof of SQLite contents.
+  // Keep its known IDs even if a later feed no longer includes those members.
+  function loadLocalCrew(): void {
+    if (catalogPending || destroyed || !isTauriRuntime()) return;
+    catalogPending = (async () => {
+      try {
+        const snapshot = await core.cachedCrew();
+        if (destroyed) return;
+        let changed = false;
+        for (const row of snapshot?.crew ?? []) {
+          if (typeof row.id !== "string" && typeof row.id !== "number") continue;
+          const id = String(row.id).trim();
+          if (!id) continue;
+          const name = typeof row.astronautName === "string" ? row.astronautName.trim() : id;
+          if (localCrew.get(id)?.name !== name) {
+            localCrew.set(id, { id, name });
+            changed = true;
+          }
+        }
+        if (changed) await refreshList();
+      } catch {
+        // A missing/unreadable snapshot says nothing about saved telemetry.
+        // The feed catalog, if available, still permits normal local queries.
+      }
+    })().finally(() => { catalogPending = null; });
+  }
   function syncCrewOptions(): CrewChoice[] {
-    const crew = getCrew();
+    const combined = new Map(localCrew);
+    for (const member of getCrew()) combined.set(member.id, member);
+    const crew = [...combined.values()];
     const signature = JSON.stringify(crew.map(member => [member.id, member.name]));
     if (signature !== crewSignature) {
       crewSignature = signature;
       crewSelect.replaceChildren();
       if (crew.length === 0) {
-        const emptyOpt = el("option", "", "No crew available");
+        const emptyOpt = el("option", "", "No crew list available");
         emptyOpt.value = "";
         crewSelect.append(emptyOpt);
       } else {
@@ -676,9 +706,9 @@ export function mountTelemetryHistory(
       clearLoadingBusy();
       lastTrackedCrewId = "";
       delete statusLine.dataset.tone;
-      setText(statusLine, "No readings stored yet");
+      setText(statusLine, "No crew list available");
       traceLine.hidden = true;
-      body.replaceChildren(el("p", "tele-hist-empty", "No readings stored yet"));
+      body.replaceChildren(el("p", "tele-hist-empty", "No crew list available. Stored readings cannot be listed without a crew ID."));
       return;
     }
 
@@ -761,7 +791,7 @@ export function mountTelemetryHistory(
   }
 
   /** Ejecuta el listado evitando llamadas simultáneas: 1 en vuelo y como máximo 1 pendiente. */
-  function refresh(): Promise<void> {
+  function refreshList(): Promise<void> {
     if (destroyed) return Promise.resolve();
     syncCrewOptions();
     if (!isTauriRuntime() || !selectedCrewId) {
@@ -799,6 +829,11 @@ export function mountTelemetryHistory(
         finishPendingWaiters();
       }
     })();
+  }
+
+  function refresh(): Promise<void> {
+    loadLocalCrew();
+    return refreshList();
   }
 
   /** Agrupa cambios rápidos de selector con debounce de 250 ms. */

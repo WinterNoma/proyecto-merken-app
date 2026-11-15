@@ -1,0 +1,83 @@
+.recommendations-page {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+  padding-block: 10px 4px;
+}
+.recommendations-heading { margin-bottom: 20px; }
+.recommendations-heading h2 {
+  margin-bottom: 6px;
+  font-family: var(--mk-font-body);
+  font-size: clamp(1.625rem, 6vw, 2.45rem);
+  font-weight: 400;
+  letter-spacing: -.04em;
+}
+.recommendations-heading p { color: var(--mk-text-muted); font-size: .875rem; }
+.recommendations-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 12px; }
+.recommendation-panel, .recommendation-disclosure {
+  min-width: 0;
+  padding: clamp(14px, 4vw, 22px);
+  border: 1px solid var(--hybrid-rim, var(--mk-divider));
+  border-radius: 18px;
+  background: var(--hybrid-glass, var(--mk-surface));
+  overflow-wrap: anywhere;
+}
+.recommendation-panel h3 {
+  margin-bottom: 14px;
+  font: 600 1rem/1.35 var(--mk-font-body);
+}
+.recommendation-fields, .recommendation-sync { display: grid; gap: 12px; }
+.recommendation-fields label, .recommendation-sync label { min-width: 0; font-size: .875rem; }
+.recommendation-fields select, .recommendation-sync input { margin-top: 4px; font-size: 16px; }
+#recommendation-source-note { margin: 10px 0 14px; font-size: .75rem; }
+.recommendation-actions { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px; }
+.recommendation-actions .primary { flex: 1 1 auto; }
+#recommendation-status:not(:empty) { margin-top: 10px; }
+#recommendation-status:empty, #recommendation-sync-status:empty { display: none; }
+.recommendation-result { background: #1b2530; }
+.recommendation-provider {
+  margin: 0 0 8px;
+  color: var(--mk-accent);
+  font: 400 .75rem/1.5 var(--mk-font-data);
+}
+.recommendation-copy { margin-bottom: 12px; font-size: 1.0625rem; line-height: 1.55; }
+.recommendation-caveat {
+  border-inline-start: 2px solid var(--mk-border);
+  padding-inline-start: 10px;
+  color: var(--mk-text-muted);
+  font-size: .875rem;
+}
+.recommendation-caveat:empty { display: none; }
+.recommendation-context {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 14px 0 10px;
+  font-size: .8125rem;
+}
+.recommendation-context dt, .recommendation-readings dt { color: var(--mk-text-muted); }
+.recommendation-context dd, .recommendation-readings dd { margin: 0; }
+.recommendation-result-details { border-block-start: 1px solid var(--hybrid-rim, var(--mk-divider)); }
+.recommendation-result-details summary, .recommendation-disclosure summary {
+  min-height: 44px;
+  padding-block: 10px;
+  cursor: pointer;
+  font-size: .875rem;
+}
+.recommendation-result-details summary { font-weight: 600; }
+.recommendation-readings { margin-bottom: 10px; font-size: .8125rem; }
+.recommendation-readings > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; padding: 6px 0; }
+.recommendation-readings dd time, .recommendation-readings dd span { display: block; color: var(--mk-text-muted); font-size: .6875rem; }
+.recommendation-result-details + .caption { margin-top: 10px; font-size: .75rem; }
+.recommendation-disclosure { margin-top: 12px; padding-block: 0; }
+.recommendation-disclosure[open] { padding-bottom: 16px; }
+.recommendation-sync { margin-top: 12px; }
+.recommendation-sync .button { justify-self: start; }
+@media (min-width: 650px) {
+  .recommendations-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr); gap: 16px; }
+  .recommendation-sync { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .recommendation-sync .button, #recommendation-sync-status { grid-column: 1 / -1; }
+}
+@media (forced-colors: active) {
+  .recommendation-panel, .recommendation-disclosure { color: CanvasText; background: Canvas; border-color: ButtonText; }
+}
