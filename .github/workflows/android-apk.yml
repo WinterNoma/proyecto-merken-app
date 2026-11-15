@@ -22,6 +22,8 @@ jobs:
       CI: 'true'
       CARGO_TERM_COLOR: always
       GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx3g
+      CARGO_BUILD_JOBS: '2'
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -49,8 +51,21 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install locked JavaScript dependencies
         run: npm ci
+      - name: Bundle verified offline model assets on trusted builds
+        if: github.event_name != 'pull_request'
+        env:
+          SLM_BASE_URL: ${{ secrets.SLM_BASE_DOWNLOAD_URL }}
+          SLM_ADAPTER_URL: ${{ secrets.SLM_ADAPTER_DOWNLOAD_URL }}
+        run: |
+          test -n "$SLM_BASE_URL" && test -n "$SLM_ADAPTER_URL"
+          mkdir -p plugins/slm-assets/android/src/main/assets/slm
+          cd plugins/slm-assets/android/src/main/assets/slm
+          curl --fail --silent --show-error --retry 2 "$SLM_BASE_URL" -o space-health-base-Q4_K_M.gguf
+          curl --fail --silent --show-error --retry 2 "$SLM_ADAPTER_URL" -o wellbeing-v7-lora-f16.gguf
+          echo '4fce4f8510d16a058a9e6eef90d6ffd992135259e0fcadd42e69b06d1243dea1  space-health-base-Q4_K_M.gguf' | sha256sum --check --status
+          echo '521290d5207de280a7fc1ebc7517138e2dd994405347cc451a16fa60d5ffc2ef  wellbeing-v7-lora-f16.gguf' | sha256sum --check --status
       - name: Test Rust domain and adapters with synthetic fixtures
-        run: cargo test --locked --workspace --exclude merken
+        run: cargo test --locked -p merken-core -p merken-store -p merken-sync -p merken-seed -p merken-slm
       - name: Initialize Android project
         run: npm run tauri -- android init --ci --skip-targets-install
       - name: Build installable ARM64 debug APK
@@ -65,7 +80,18 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging artifacts/merken-arm64-debug.apk > artifacts/apk-info.txt
           (cd artifacts && sha256sum merken-arm64-debug.apk > SHA256SUMS.txt)
           printf '%s\n' "$GITHUB_SHA" > artifacts/source-revision.txt
-          echo 'Debug APK for Android ARM64. GGUF/voice models are provisioned separately. No device validation has been performed.' > artifacts/README.txt
+          if [[ "${{ github.event_name }}" != pull_request ]]; then
+            python3 - <<'PY'
+          import zipfile,hashlib
+          with zipfile.ZipFile('artifacts/merken-arm64-debug.apk') as apk:
+              for name,expected in [('space-health-base-Q4_K_M.gguf','4fce4f8510d16a058a9e6eef90d6ffd992135259e0fcadd42e69b06d1243dea1'),('wellbeing-v7-lora-f16.gguf','521290d5207de280a7fc1ebc7517138e2dd994405347cc451a16fa60d5ffc2ef')]:
+                  with apk.open('assets/slm/'+name) as stream:
+                      assert hashlib.file_digest(stream,'sha256').hexdigest()==expected
+          PY
+            echo 'Models embedded and APK asset hashes verified. Offline inference uses native llama.cpp plus the V7 adapter. Backend synchronization is optional and requires the ground-station login. Debug APK, not clinically validated; physical-device validation remains pending.' > artifacts/README.txt
+          else
+            echo 'PR compile-check APK only: model assets are not included. Use the trusted workflow-dispatch artifact for the complete offline app.' > artifacts/README.txt
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: merken-android-arm64-debug-${{ github.run_number }}

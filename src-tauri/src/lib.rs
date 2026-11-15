@@ -5,6 +5,8 @@
 //! `merken-store` y `merken-core` como argumento (RNF-03).
 //! Contrato de los comandos: `docs/api/comandos-core.md` y `ui/src/core-api.ts`.
 
+mod recommendations;
+
 use merken_core::time::Timestamp;
 use merken_store::{
     ListTelemetryInput, RecordTelemetryInput, RecordTelemetryResult, Scenario, Store, StoreError,
@@ -328,9 +330,11 @@ fn open_store(app: &tauri::App) -> Result<Store, Box<dyn std::error::Error>> {
 pub fn run() {
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_slm_assets::init())
         .setup(|app| {
             let store = open_store(app)?;
             app.manage(AppState(Mutex::new(store)));
+            app.manage(recommendations::RecommendationState::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -348,7 +352,11 @@ pub fn run() {
             sim_import,
             record_telemetry,
             list_telemetry,
-            verify_telemetry
+            verify_telemetry,
+            recommendations::recommendations_cached_crew,
+            recommendations::recommendations_sync_backend,
+            recommendations::recommendations_generate,
+            recommendations::recommendations_cancel
         ])
         .run(tauri::generate_context!());
     if let Err(e) = result {
