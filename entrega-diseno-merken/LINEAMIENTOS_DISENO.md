@@ -139,6 +139,10 @@ Respetar áreas seguras y mantener controles HTML de al menos 44 × 44 px. Permi
 
 [Ver transición de reposo a pulsación y regreso](imagenes/20-microfono-integrado.gif).
 
+**Pulido final de esta tanda:** transición cápsula/círculo de 480 ms, centro fijo, etiqueta que entra cuando tiene espacio y halos más tenues con respiración lenta. Las partículas conservan su cantidad y suavizan velocidad, atracción y salida; se atenúan en los bordes. Evitar saltos de forma, destellos instantáneos y cortes de movimiento al soltar. Se respeta movimiento reducido.
+
+[Ver la transición suavizada actual](imagenes/21-animaciones-suaves.gif).
+
 ### Figura humana
 
 Silueta clara, proporcionada y discreta, con acabado gris translúcido y contornos suaves. La figura visible de esta iteración es una imagen generada con transparencia, con una capa SVG separada para las zonas seleccionables.
@@ -287,6 +291,7 @@ Los parámetros pertenecen al prompt compartido. No son requisitos del frontend 
 | `18-particulas-en-reposo.gif` | Muestra animada de la implementación real; datos DEMO y movimiento en reposo. |
 | `19-microfono-integrado.jpg` | Estado activo dentro de la vista, con halo y texto debajo, sin modal. |
 | `20-microfono-integrado.gif` | Transición real entre cápsula en reposo, círculo mantenido y regreso. |
+| `21-animaciones-suaves.gif` | Versión actual pulida: transición gradual, halo menos intenso y partículas más calmadas. |
 
 ## 12. Fuentes y entrega
 

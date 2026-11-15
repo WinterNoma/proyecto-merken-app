@@ -1,0 +1,1292 @@
+{
+  "motion": [
+    {
+      "center": 180,
+      "dialog": false,
+      "entryHeight": 78,
+      "halo": 0,
+      "label": 1,
+      "pageHeight": 800,
+      "particles": {
+        "canvasPixels": 288000,
+        "count": 72,
+        "energy": 0,
+        "frames": 1757,
+        "height": 800,
+        "holding": true,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.20000000298023224,
+        "renderMsP95": 0.30000001192092896,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "phase": "down-0",
+      "pressed": "true",
+      "width": 192
+    },
+    {
+      "center": 180,
+      "dialog": false,
+      "entryHeight": 78,
+      "halo": 0.0927681,
+      "label": 0.391041,
+      "pageHeight": 800,
+      "particles": {
+        "canvasPixels": 288000,
+        "count": 72,
+        "energy": 0.1372410989588594,
+        "frames": 1759,
+        "height": 800,
+        "holding": true,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.20000000298023224,
+        "renderMsP95": 0.30000001192092896,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "phase": "down-80",
+      "pressed": "true",
+      "width": 187.96875
+    },
+    {
+      "center": 180,
+      "dialog": false,
+      "entryHeight": 78,
+      "halo": 0.448027,
+      "label": 0,
+      "pageHeight": 800,
+      "particles": {
+        "canvasPixels": 288000,
+        "count": 72,
+        "energy": 0.3549709987378239,
+        "frames": 1763,
+        "height": 800,
+        "holding": true,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.20000000298023224,
+        "renderMsP95": 0.4000000059604645,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "phase": "down-200",
+      "pressed": "true",
+      "width": 152.1875
+    },
+    {
+      "center": 180,
+      "dialog": false,
+      "entryHeight": 78,
+      "halo": 0.628527,
+      "label": 0,
+      "pageHeight": 800,
+      "particles": {
+        "canvasPixels": 288000,
+        "count": 72,
+        "energy": 0.554278071453071,
+        "frames": 1768,
+        "height": 800,
+        "holding": true,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.20000000298023224,
+        "renderMsP95": 0.4000000059604645,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "phase": "down-360",
+      "pressed": "true",
+      "width": 81.4375
+    },
+    {
+      "center": 180,
+      "dialog": false,
+      "entryHeight": 78,
+      "halo": 0.65,
+      "label": 0,
+      "pageHeight": 800,
+      "particles": {
+        "canvasPixels": 288000,
+        "count": 72,
+        "energy": 0.7130651234654037,
+        "frames": 1774,
+        "height": 800,
+        "holding": true,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.20000000298023224,
+        "renderMsP95": 0.4000000059604645,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "phase": "down-560",
+      "pressed": "true",
+      "width": 56
+    },
+    {
+      "center": 180,
+      "dialog": false,
+      "entryHeight": 78,
+      "halo": 0.65,
+      "label": 0,
+      "pageHeight": 800,
+      "particles": {
+        "canvasPixels": 288000,
+        "count": 72,
+        "energy": 0.9762772315993562,
+        "frames": 1808,
+        "height": 800,
+        "holding": false,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.20000000298023224,
+        "renderMsP95": 0.4000000059604645,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "phase": "up-0",
+      "pressed": "false",
+      "width": 56
+    },
+    {
+      "center": 180,
+      "dialog": false,
+      "entryHeight": 78,
+      "halo": 0.500984,
+      "label": 0,
+      "pageHeight": 800,
+      "particles": {
+        "canvasPixels": 288000,
+        "count": 72,
+        "energy": 0.8101882230833101,
+        "frames": 1811,
+        "height": 800,
+        "holding": false,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.20000000298023224,
+        "renderMsP95": 0.5,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "phase": "up-80",
+      "pressed": "false",
+      "width": 63.15625
+    },
+    {
+      "center": 180,
+      "dialog": false,
+      "entryHeight": 78,
+      "halo": 0.116026,
+      "label": 0,
+      "pageHeight": 800,
+      "particles": {
+        "canvasPixels": 288000,
+        "count": 72,
+        "energy": 0.63861808193913,
+        "frames": 1815,
+        "height": 800,
+        "holding": false,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.20000000298023224,
+        "renderMsP95": 0.5,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "phase": "up-240",
+      "pressed": "false",
+      "width": 118.6875
+    },
+    {
+      "center": 180,
+      "dialog": false,
+      "entryHeight": 78,
+      "halo": 0,
+      "label": 1,
+      "pageHeight": 800,
+      "particles": {
+        "canvasPixels": 288000,
+        "count": 72,
+        "energy": 0.35322547586392217,
+        "frames": 1825,
+        "height": 800,
+        "holding": false,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.20000000298023224,
+        "renderMsP95": 0.5,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "phase": "up-560",
+      "pressed": "false",
+      "width": 192
+    }
+  ],
+  "profiles": [
+    {
+      "button": {
+        "center": 180,
+        "height": 56,
+        "width": 192
+      },
+      "dialog": false,
+      "entry": {
+        "height": 78,
+        "y": 670
+      },
+      "page": [
+        360,
+        800
+      ],
+      "pressed": "false",
+      "viewport": [
+        360,
+        800
+      ]
+    },
+    {
+      "idle": {
+        "button": {
+          "center": 206,
+          "height": 56,
+          "width": 244
+        },
+        "dialog": false,
+        "entry": {
+          "height": 78,
+          "y": 785
+        },
+        "page": [
+          412,
+          915
+        ],
+        "pressed": "false",
+        "viewport": [
+          412,
+          915
+        ]
+      },
+      "held": {
+        "button": {
+          "center": 206,
+          "height": 56,
+          "width": 56
+        },
+        "dialog": false,
+        "entry": {
+          "height": 78,
+          "y": 785
+        },
+        "page": [
+          412,
+          915
+        ],
+        "pressed": "true",
+        "viewport": [
+          412,
+          915
+        ]
+      },
+      "released": {
+        "button": {
+          "center": 206,
+          "height": 56,
+          "width": 244
+        },
+        "dialog": false,
+        "entry": {
+          "height": 78,
+          "y": 785
+        },
+        "page": [
+          412,
+          915
+        ],
+        "pressed": "false",
+        "viewport": [
+          412,
+          915
+        ]
+      }
+    },
+    {
+      "idle": {
+        "button": {
+          "center": 215,
+          "height": 56,
+          "width": 262
+        },
+        "dialog": false,
+        "entry": {
+          "height": 78,
+          "y": 802
+        },
+        "page": [
+          430,
+          932
+        ],
+        "pressed": "false",
+        "viewport": [
+          430,
+          932
+        ]
+      },
+      "held": {
+        "button": {
+          "center": 215,
+          "height": 56,
+          "width": 56
+        },
+        "dialog": false,
+        "entry": {
+          "height": 78,
+          "y": 802
+        },
+        "page": [
+          430,
+          932
+        ],
+        "pressed": "true",
+        "viewport": [
+          430,
+          932
+        ]
+      },
+      "released": {
+        "button": {
+          "center": 215,
+          "height": 56,
+          "width": 262
+        },
+        "dialog": false,
+        "entry": {
+          "height": 78,
+          "y": 802
+        },
+        "page": [
+          430,
+          932
+        ],
+        "pressed": "false",
+        "viewport": [
+          430,
+          932
+        ]
+      }
+    }
+  ],
+  "reduced": {
+    "after": {
+      "canvasPixels": 288000,
+      "count": 72,
+      "energy": 0,
+      "frames": 8368,
+      "height": 800,
+      "holding": true,
+      "mode": "reduced",
+      "pulseActive": false,
+      "renderMsP50": 0.20000000298023224,
+      "renderMsP95": 0.4000000059604645,
+      "resolution": 1,
+      "sampleCount": 120,
+      "slowIntervals": 7,
+      "targetFps": 30,
+      "width": 360
+    },
+    "animation": "none",
+    "before": {
+      "canvasPixels": 288000,
+      "count": 72,
+      "energy": 0,
+      "frames": 8368,
+      "height": 800,
+      "holding": true,
+      "mode": "reduced",
+      "pulseActive": false,
+      "renderMsP50": 0.20000000298023224,
+      "renderMsP95": 0.4000000059604645,
+      "resolution": 1,
+      "sampleCount": 120,
+      "slowIntervals": 7,
+      "targetFps": 30,
+      "width": 360
+    },
+    "dialog": false,
+    "transition": "0s",
+    "width": 56
+  },
+  "pulse": {
+    "after": {
+      "canvasPixels": 288000,
+      "count": 72,
+      "energy": 0,
+      "frames": 8433,
+      "height": 800,
+      "holding": false,
+      "mode": "running",
+      "pulseActive": false,
+      "renderMsP50": 0.20000000298023224,
+      "renderMsP95": 0.4000000059604645,
+      "resolution": 1,
+      "sampleCount": 120,
+      "slowIntervals": 7,
+      "targetFps": 30,
+      "width": 360
+    },
+    "before": {
+      "canvasPixels": 288000,
+      "count": 72,
+      "energy": 0,
+      "frames": 8370,
+      "height": 800,
+      "holding": false,
+      "mode": "running",
+      "pulseActive": true,
+      "renderMsP50": 0.20000000298023224,
+      "renderMsP95": 0.4000000059604645,
+      "resolution": 1,
+      "sampleCount": 120,
+      "slowIntervals": 7,
+      "targetFps": 30,
+      "width": 360
+    }
+  },
+  "quickTap": {
+    "button": {
+      "center": 180,
+      "height": 56,
+      "width": 192
+    },
+    "dialog": false,
+    "entry": {
+      "height": 78,
+      "y": 670
+    },
+    "page": [
+      360,
+      800
+    ],
+    "pressed": "false",
+    "viewport": [
+      360,
+      800
+    ],
+    "visual": {
+      "halo": 0,
+      "holding": false,
+      "label": 1
+    }
+  },
+  "capture": {
+    "frames": 75,
+    "frameRate": 15,
+    "durationMs": 4969,
+    "frameDirectory": "C:/Users/Salva/AppData/Local/Temp/merken-soft-motion-1794713263130",
+    "states": [
+      {
+        "frame": 0,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 1,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 2,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 3,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 4,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 5,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 6,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 7,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 8,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 9,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 192
+      },
+      {
+        "frame": 10,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 0.391041,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 187.96875
+      },
+      {
+        "frame": 11,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 0.0382618,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 173.40625
+      },
+      {
+        "frame": 12,
+        "center": 179.9921875,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 149.234375
+      },
+      {
+        "frame": 13,
+        "center": 179.9921875,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 112.859375
+      },
+      {
+        "frame": 14,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 86.71875
+      },
+      {
+        "frame": 15,
+        "center": 179.9921875,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 66.609375
+      },
+      {
+        "frame": 16,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 57.78125
+      },
+      {
+        "frame": 17,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 18,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 19,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 20,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 21,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 22,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 23,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 24,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 25,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 26,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 27,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 28,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 29,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 30,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 31,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 32,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 33,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 34,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "true",
+        "width": 56
+      },
+      {
+        "frame": 35,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 56.25
+      },
+      {
+        "frame": 36,
+        "center": 179.9921875,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 66.203125
+      },
+      {
+        "frame": 37,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 82.0625
+      },
+      {
+        "frame": 38,
+        "center": 179.9921875,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 115.359375
+      },
+      {
+        "frame": 39,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": true,
+        "labelOpacity": 0,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 146.90625
+      },
+      {
+        "frame": 40,
+        "center": 179.9921875,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 0.323353,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 171.703125
+      },
+      {
+        "frame": 41,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 0.932293,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 188.71875
+      },
+      {
+        "frame": 42,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 43,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 44,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 45,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 46,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 47,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 48,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 49,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 50,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 51,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 52,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 53,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 54,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 55,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 56,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 57,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 58,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 59,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 60,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 61,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 62,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 63,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 64,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 65,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 66,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 67,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 68,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 69,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 70,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 71,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 72,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 73,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      },
+      {
+        "frame": 74,
+        "center": 180,
+        "dialog": false,
+        "labelClipped": false,
+        "labelOpacity": 1,
+        "pageHeight": 800,
+        "pressed": "false",
+        "width": 192
+      }
+    ]
+  },
+  "cost": {
+    "after": {
+      "canvasPixels": 288000,
+      "count": 72,
+      "energy": 0,
+      "frames": 5838,
+      "height": 800,
+      "holding": false,
+      "mode": "running",
+      "pulseActive": false,
+      "renderMsP50": 0.20000000298023224,
+      "renderMsP95": 0.20000000298023224,
+      "resolution": 1,
+      "sampleCount": 120,
+      "slowIntervals": 0,
+      "targetFps": 30,
+      "width": 360
+    },
+    "drawFps": 29.97901468973952,
+    "draws": 60,
+    "durationMs": 2001.39999999851
+  },
+  "console": []
+}
