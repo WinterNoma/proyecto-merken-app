@@ -32,6 +32,8 @@ pub(crate) struct ClauseSpan {
     pub(crate) start: usize,
     pub(crate) end: usize,
     after_comma: bool,
+    // El marcador sigue activo a través de una enumeración aditiva.
+    correction_scope: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -429,6 +431,7 @@ fn split_clauses(tokens: &[Token]) -> Vec<ClauseSpan> {
                 start,
                 end: idx,
                 after_comma: next_after_comma,
+                correction_scope: false,
             });
             start = idx;
             next_after_comma = false;
@@ -441,6 +444,7 @@ fn split_clauses(tokens: &[Token]) -> Vec<ClauseSpan> {
                     start,
                     end: idx,
                     after_comma: next_after_comma,
+                    correction_scope: false,
                 });
             }
             next_after_comma = tk.kind == TokenKind::ClauseSep && tk.norm == ",";
@@ -452,6 +456,7 @@ fn split_clauses(tokens: &[Token]) -> Vec<ClauseSpan> {
             start,
             end: n,
             after_comma: next_after_comma,
+            correction_scope: false,
         });
     }
 
@@ -479,6 +484,7 @@ fn split_clauses(tokens: &[Token]) -> Vec<ClauseSpan> {
                         start: sub_start,
                         end: i,
                         after_comma: sub_after_comma,
+                        correction_scope: false,
                     });
                 }
                 sub_start = i + 1;
@@ -491,8 +497,28 @@ fn split_clauses(tokens: &[Token]) -> Vec<ClauseSpan> {
                 start: sub_start,
                 end: c.end,
                 after_comma: sub_after_comma,
+                correction_scope: false,
             });
         }
+    }
+    // La segmentación no debe perder el alcance de "corrijo A y B, C".
+    // Solo los separadores aditivos lo propagan; punto, punto y coma y
+    // conectores de cambio de cláusula ("pero", "then", etc.) lo terminan.
+    let mut correction_scope = false;
+    let mut previous_end = 0;
+    for clause in &mut refined {
+        let additive_gap = previous_end < clause.start
+            && tokens.get(previous_end..clause.start).is_some_and(|gap| {
+                gap.iter().all(|tk| {
+                    (tk.kind == TokenKind::ClauseSep && tk.norm == ",")
+                        || (tk.kind == TokenKind::Word
+                            && matches!(tk.norm.as_str(), "y" | "e" | "and"))
+                })
+            });
+        correction_scope = starts_with_correction_at(tokens, clause.start, clause.end).is_some()
+            || (correction_scope && additive_gap);
+        clause.correction_scope = correction_scope;
+        previous_end = clause.end;
     }
     refined
 }
@@ -2369,6 +2395,110 @@ fn previous_mention(
         .and_then(|(idx, seg)| tokens.get(seg.seg_start).map(|tk| (idx, tk.start)))
 }
 
+/// Identidad conservadora, independiente de los campos que una corrección vacía.
+#[derive(PartialEq, Eq)]
+enum SymptomIdentity {
+    Zone(BodyZone),
+    Description(Vec<String>),
+    Unresolved,
+}
+
+fn symptom_identity(tokens: &[Token], start: usize, end: usize) -> SymptomIdentity {
+    let mut zone = None;
+    let mut description = Vec::new();
+    for k in start..end {
+        // Una puntuación (también escrita con palabras) no forma parte de la identidad.
+        if parse_simple_number(tokens, k).is_some()
+            || tokens
+                .get(k)
+                .is_some_and(|tk| tk.kind == TokenKind::InvalidNumber)
+        {
+            break;
+        }
+        if let Some((found, _)) = match_body_zone_phrase(tokens, k, end)
+            && found != BodyZone::Other
+        {
+            if zone.is_some_and(|previous| previous != found) {
+                return SymptomIdentity::Unresolved;
+            }
+            zone = Some(found);
+        }
+        if let Some(word) = word_at(tokens, k)
+            && !is_value_link_word(word)
+        {
+            description.push(word.to_owned());
+        }
+    }
+    if let Some(zone) = zone {
+        return SymptomIdentity::Zone(zone);
+    }
+    // "Síntoma" o "dolor" sin calificar no distinguen entre candidatos.
+    // P2, Fase 1: ampliar alias y paráfrasis sin zona; si no hay coincidencia
+    // descriptiva exacta, se mantienen pendientes los candidatos por precaución.
+    let qualified = description.iter().any(|word| {
+        !matches!(
+            word.as_str(),
+            "sintoma"
+                | "sintomas"
+                | "symptom"
+                | "symptoms"
+                | "dolor"
+                | "pain"
+                | "duele"
+                | "duelen"
+                | "hurt"
+                | "hurts"
+                | "ache"
+                | "molestia"
+        )
+    });
+    if qualified {
+        SymptomIdentity::Description(description)
+    } else {
+        SymptomIdentity::Unresolved
+    }
+}
+
+fn explicit_correction_targets(
+    out: &ProposalOut,
+    tokens: &[Token],
+    group: &AnchorGroup,
+    end: usize,
+) -> Vec<(usize, usize)> {
+    let indicator = group.kind.to_indicator();
+    if indicator != Indicator::Symptom {
+        return previous_mention(out, tokens, Some(indicator))
+            .into_iter()
+            .collect();
+    }
+    let identity = symptom_identity(tokens, group.anchor_start, end);
+    let candidates: Vec<_> = out
+        .segments
+        .iter()
+        .enumerate()
+        .filter(|(_, seg)| seg.indicator == Indicator::Symptom)
+        .filter_map(|(idx, seg)| {
+            let start_byte = tokens.get(seg.seg_start)?.start;
+            Some((
+                (idx, start_byte),
+                symptom_identity(tokens, seg.anchor_start, seg.seg_end),
+            ))
+        })
+        .collect();
+    let has_match = candidates.iter().any(|(_, previous)| *previous == identity);
+    candidates
+        .into_iter()
+        .filter(|(_, previous)| {
+            *previous == identity
+                || matches!(previous, SymptomIdentity::Unresolved)
+                || matches!(identity, SymptomIdentity::Unresolved)
+                // Sin coincidencia descriptiva no se elige el último síntoma.
+                || (!has_match && matches!(identity, SymptomIdentity::Description(_)))
+        })
+        .map(|(target, _)| target)
+        .collect()
+}
+
 /// Sin etiqueta, la corrección alcanza solo la última mención, sin elegir un valor nuevo.
 fn clear_implicit_correction(
     orig: &str,
@@ -2451,7 +2581,7 @@ fn process_clause(
     // Continuación inequívoca de sueño: "<dormí mal>, <5 horas>" sin otros verbos ni cambio de tiempo.
     if raw_anchors.is_empty()
         && clause.after_comma
-        && corr_after.is_none()
+        && !clause.correction_scope
         && time_matches.is_empty()
         && carried_time.is_none()
         && out.last_was_open_sleep
@@ -2492,11 +2622,16 @@ fn process_clause(
     if raw_anchors.is_empty() {
         out.last_was_open_sleep = false;
         let pending = out.pending_correction.take();
-        if let Some(correction_start) = corr_after.map(|_| c_start).or(pending.map(|c| c.start)) {
+        if let Some(correction_start) = corr_after
+            .map(|_| c_start)
+            .or(pending.map(|c| c.start))
+            .or(clause.correction_scope.then_some(c_start))
+        {
             let correction = ClauseSpan {
                 start: correction_start,
                 end: c_end,
                 after_comma: clause.after_comma,
+                correction_scope: clause.correction_scope,
             };
             if corr_after.is_some_and(|after| after >= c_end) {
                 // "perdón, radiación ...": esperar la etiqueta antes de invalidar una mención.
@@ -2570,9 +2705,8 @@ fn process_clause(
     }
 
     let pending = out.pending_correction.take();
-    let is_correction = corr_after.is_some() || pending.is_some();
+    let is_correction = clause.correction_scope || pending.is_some();
     // "perdón pulso ... o glucosa ..." no permite escoger entre indicadores alternativos.
-    // Una conjunción aditiva ya delimita otra cláusula y conserva sus valores.
     let alternative_indicators = groups.windows(2).any(|pair| {
         pair.first().zip(pair.get(1)).is_some_and(|(left, right)| {
             (left.anchor_end..right.anchor_start)
@@ -2597,20 +2731,20 @@ fn process_clause(
     } else {
         None
     };
-    let corrected_count = if is_correction {
-        if alternative_indicators || implicit_alternative {
-            groups.len()
-        } else {
-            1
-        }
-    } else {
-        0
-    };
-    // Resolver todos los destinos ANTES de añadir segmentos de la corrección.
-    let correction_targets: Vec<Option<(usize, usize)>> = groups
+    // Resolver todos los destinos ANTES de añadir o vaciar segmentos: la identidad
+    // depende del texto original, incluso para menciones negadas o sin registro L1.
+    let seg_starts = compute_seg_starts(tokens, c_start, &groups, &time_mask);
+    let correction_targets: Vec<Vec<(usize, usize)>> = groups
         .iter()
-        .take(corrected_count)
-        .map(|g| previous_mention(out, tokens, Some(g.kind.to_indicator())))
+        .enumerate()
+        .map(|(pos, g)| {
+            if is_correction {
+                let end = seg_starts.get(pos + 1).copied().unwrap_or(c_end);
+                explicit_correction_targets(out, tokens, g, end)
+            } else {
+                Vec::new()
+            }
+        })
         .collect();
     for &(idx, _) in correction_targets.iter().flatten() {
         clear_segment_by_correction(out, idx);
@@ -2619,9 +2753,7 @@ fn process_clause(
         clear_segment_by_correction(out, idx);
     }
 
-    // Calcular límites de cada segmento, retrocediendo por negaciones locales entre anclas.
     let group_count = groups.len();
-    let seg_starts = compute_seg_starts(tokens, c_start, &groups, &time_mask);
 
     let mut emitted_open_sleep = false;
     for (pos, g) in groups.iter().enumerate() {
@@ -2630,7 +2762,14 @@ fn process_clause(
         if seg_start >= seg_end {
             continue;
         }
-        if pos < corrected_count {
+        // El marcador alcanza cada indicador repetido. Una medición nueva, sin
+        // destino anterior y fuera de la primera etiqueta explícita, sigue siendo
+        // independiente (p. ej. "corrijo radiación ... y pulso 72").
+        let has_target = correction_targets.get(pos).is_some_and(|v| !v.is_empty());
+        let explicit_first = pos == 0 && (corr_after.is_some() || pending.is_some());
+        if is_correction
+            && (has_target || explicit_first || alternative_indicators || implicit_alternative)
+        {
             out.segments.push(AnalyzedSegment {
                 clause_idx,
                 seg_start,
@@ -2649,9 +2788,7 @@ fn process_clause(
             });
             let start_byte = correction_targets
                 .get(pos)
-                .copied()
-                .flatten()
-                .map(|(_, start)| start)
+                .and_then(|targets| targets.iter().map(|&(_, start)| start).min())
                 .or_else(|| pending.and_then(|c| tokens.get(c.start).map(|tk| tk.start)))
                 .or_else(|| tokens.get(seg_start).map(|tk| tk.start));
             let end_byte = tokens
