@@ -1,5 +1,7 @@
 # Etapa 3 — micrófono integrado en la vista
 
+**Pulido posterior:** [etapa 4: transiciones más suaves](../etapa-4/README.md), conservando esta composición y el flujo sin modal.
+
 Se conserva el diseño híbrido y la cápsula centrada en reposo. La pulsación ya no abre un diálogo: el botón se recoge a un círculo de 56 px con dos halos suaves y un texto debajo. Al soltar recupera la cápsula y anuncia la disponibilidad de voz en esa misma zona.
 
 La hoja `voice-dialog` queda exclusivamente para la escritura manual elegida mediante Type. Se retiraron los paneles de pulsación/revisión antiguos y la referencia del micrófono a un popup. El formulario y su lógica de guardado no cambian; pulsar el micrófono tampoco reinicia un borrador manual.

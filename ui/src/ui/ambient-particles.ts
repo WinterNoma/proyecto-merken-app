@@ -4,6 +4,7 @@ export function createAmbientParticles(canvas: HTMLCanvasElement) {
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
   const forcedColors = matchMedia("(forced-colors: active)");
   const frameMs = 1000 / 30;
+  const pulseDuration = 2000;
   const maxParticles = 126;
   const samples = new Float32Array(120);
   const particles = Array.from({ length: maxParticles }, () => ({
@@ -32,6 +33,14 @@ export function createAmbientParticles(canvas: HTMLCanvasElement) {
   let pulse: { x: number; y: number; started: number } | null = null;
   let holdPoint = { x: .5, y: .85 };
   const supported = context !== null && spriteContext !== null;
+  const smooth = (value: number): number => value * value * (3 - 2 * value);
+  function driftToward(p: typeof particles[number], point: { x: number; y: number }, strength: number, dt: number): void {
+    const dx = point.x - p.x, dy = point.y - p.y;
+    const distance = Math.hypot(dx * width, dy * height);
+    const influence = Math.max(0, 1 - distance / 240) * strength;
+    p.x += (dx * .18 - dy * .06) * influence * dt;
+    p.y += (dy * .18 + dx * .06) * influence * dt;
+  }
   function mode(): string {
     if (destroyed) return "destroyed";
     if (!supported) return "unavailable";
@@ -46,11 +55,12 @@ export function createAmbientParticles(canvas: HTMLCanvasElement) {
     const start = performance.now();
     const moving = !reduced.matches;
     if (moving) {
-      energy += ((holding ? 1 : 0) - energy) * (1 - Math.exp(-dt * 5));
+      energy += ((holding ? 1 : 0) - energy) * (1 - Math.exp(-dt * (holding ? 2.2 : 1.8)));
       if (!holding && energy < .0001) energy = 0;
-      elapsed += dt * (1 + energy * 1.8);
+      elapsed += dt * (1 + energy * .45);
     }
-    const impulse = moving && pulse ? Math.max(0, 1 - (now - pulse.started) / 1600) : 0;
+    const pulseProgress = pulse ? Math.max(0, Math.min(1, (now - pulse.started) / pulseDuration)) : 1;
+    const impulse = moving && pulse ? smooth(Math.min(1, pulseProgress / .15)) * (1 - smooth(pulseProgress)) : 0;
     context.clearRect(0, 0, width, height);
     // Broad, low contrast currents behind the glass, without a grid or neon.
     context.lineWidth = .8;
@@ -58,7 +68,7 @@ export function createAmbientParticles(canvas: HTMLCanvasElement) {
     for (let i = 0; i < 3; i++) {
       const sway = Math.sin(elapsed * .13 + i * 1.8) * height * .055;
       const base = height * (.35 + i * .21);
-      context.globalAlpha = .055 + energy * .045;
+      context.globalAlpha = .055 + energy * .02;
       context.beginPath();
       context.moveTo(-width * .2, base + sway);
       context.bezierCurveTo(width * .2, base - height * .18, width * .65,
@@ -69,39 +79,35 @@ export function createAmbientParticles(canvas: HTMLCanvasElement) {
       const p = particles[i];
       if (moving) {
         const flow = Math.sin(p.y * 5 + elapsed * .12 + p.phase);
-        p.x += (5 + flow * 5) * p.depth * dt * (1 + energy * 2.5) / width;
-        p.y += Math.cos(p.x * 4 + elapsed * .09 + p.phase) * p.depth * dt * 5 / height;
-        const target = holding ? holdPoint : impulse && pulse ? pulse : null;
-        if (target) {
-          const dx = target.x - p.x, dy = target.y - p.y;
-          const distance = Math.hypot(dx * width, dy * height);
-          const influence = Math.max(0, 1 - distance / 240) * (holding ? energy : impulse);
-          p.x += (dx * .4 - dy * .15) * influence * dt;
-          p.y += (dy * .4 + dx * .15) * influence * dt;
-        }
+        p.x += (3.5 + flow * 3.5) * p.depth * dt * (1 + energy * .8) / width;
+        p.y += Math.cos(p.x * 4 + elapsed * .09 + p.phase) * p.depth * dt * 3.5 / height;
+        // Keep the pull during release so velocity settles instead of cutting out.
+        if (energy > .001) driftToward(p, holdPoint, energy, dt);
+        if (impulse && pulse) driftToward(p, pulse, impulse, dt);
         p.x = (p.x + 1) % 1;
         p.y = (p.y + 1) % 1;
       }
-      const twinkle = .8 + Math.sin(elapsed * .5 + p.phase) * .2;
-      const size = p.size * (1 + energy * .4);
-      context.globalAlpha = (.24 + p.depth * .3 + energy * .16) * twinkle;
+      const twinkle = .9 + Math.sin(elapsed * .25 + p.phase) * .1;
+      const size = p.size * (1 + energy * .15);
+      const edge = Math.max(0, Math.min(1, p.x * width / 24, (1 - p.x) * width / 24, p.y * height / 24, (1 - p.y) * height / 24));
+      context.globalAlpha = (.24 + p.depth * .3 + energy * .08) * twinkle * smooth(edge);
       context.drawImage(sprite, p.x * width - size / 2, p.y * height - size / 2, size, size);
     }
     // Local orbit follows press activity, not an inferred audio waveform.
     if (energy > .01) {
       for (let i = 0; i < 14; i++) {
-        const angle = i / 14 * Math.PI * 2 + elapsed * .6;
-        const radius = 37 + Math.sin(angle * 3 + elapsed * .5) * 4;
+        const angle = i / 14 * Math.PI * 2 + elapsed * .28;
+        const radius = 37 + Math.sin(angle * 3 + elapsed * .28) * 1.8;
         const x = holdPoint.x * width + Math.cos(angle) * radius;
         const y = holdPoint.y * height + Math.sin(angle) * radius;
         const size = 3 + (i % 3);
-        context.globalAlpha = energy * (.35 + (i % 3) * .12);
+        context.globalAlpha = energy * (.24 + (i % 3) * .08);
         context.drawImage(sprite, x - size / 2, y - size / 2, size, size);
       }
     }
     if (impulse && pulse) {
-      const radius = 65 + (1 - impulse) * 65;
-      context.globalAlpha = impulse * .13;
+      const radius = 65 + smooth(pulseProgress) * 50;
+      context.globalAlpha = impulse * .065;
       context.drawImage(sprite, pulse.x * width - radius, pulse.y * height - radius, radius * 2, radius * 2);
     }
     context.globalAlpha = 1;
@@ -183,7 +189,7 @@ export function createAmbientParticles(canvas: HTMLCanvasElement) {
     snapshot() {
       const times = Array.from(samples.subarray(0, sampleCount)).sort((a, b) => a - b);
       return { mode: mode(), count, resolution, width, height, frames, targetFps: 30,
-        holding, energy, pulseActive: !!pulse && performance.now() - pulse.started < 1600,
+        holding, energy, pulseActive: !!pulse && performance.now() - pulse.started < pulseDuration,
         sampleCount, renderMsP50: times[Math.floor(times.length * .5)] ?? 0,
         renderMsP95: times[Math.min(times.length - 1, Math.floor(times.length * .95))] ?? 0,
         slowIntervals, canvasPixels: canvas.width * canvas.height };
