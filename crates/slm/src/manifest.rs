@@ -516,7 +516,7 @@ impl ModelManifest {
     /// Si faltan todos los archivos devuelve [`SlmError::ModelMissing`].
     /// Si falta parte de un paquete `BaseWithAdapter` devuelve [`SlmError::IncompletePair`].
     pub fn verify(&self, dir: &Path, ctl: &mut Control<'_>) -> Result<VerifiedModel, SlmError> {
-        crate::store::with_dir_read_lock(dir, || self.verify_unlocked(dir, ctl))
+        crate::store::with_dir_read_lock(dir, ctl, |ctl| self.verify_unlocked(dir, ctl))
     }
 
     pub(crate) fn verify_unlocked(

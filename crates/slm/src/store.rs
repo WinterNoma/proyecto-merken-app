@@ -25,24 +25,257 @@ use crate::{
 };
 use sha2::{Digest, Sha256};
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
     ffi::OsString,
     fmt::Write as _,
     fs::{self, File, OpenOptions},
     io::{ErrorKind, Read, Write},
+    marker::PhantomData,
     path::{Component, Path, PathBuf},
     sync::{
-        Arc, Mutex, OnceLock, RwLock,
+        Arc, Mutex, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError,
         atomic::{AtomicU64, Ordering},
     },
+    time::Duration,
 };
+
+const LOCK_POLL_INTERVAL: Duration = Duration::from_millis(2);
 
 static STORE_LOCKS: OnceLock<Mutex<HashMap<PathBuf, std::sync::Weak<RwLock<()>>>>> =
     OnceLock::new();
 static INSTALL_SEQ: AtomicU64 = AtomicU64::new(0);
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LockMode {
+    Read,
+    Write,
+}
+
+#[derive(Clone, Copy)]
+struct HeldLock {
+    lock_id: usize,
+    mode: LockMode,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ReadAccess {
+    NeedAcquire,
+    AlreadyHeld,
+}
+
+thread_local! {
+    static HELD_STORE_LOCKS: RefCell<Vec<HeldLock>> = const { RefCell::new(Vec::new()) };
+}
+
 fn lock_registry() -> &'static Mutex<HashMap<PathBuf, std::sync::Weak<RwLock<()>>>> {
     STORE_LOCKS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn component_eq(a: Component<'_>, b: Component<'_>) -> bool {
+    #[cfg(windows)]
+    {
+        a.as_os_str().to_string_lossy().to_lowercase()
+            == b.as_os_str().to_string_lossy().to_lowercase()
+    }
+    #[cfg(not(windows))]
+    {
+        a == b
+    }
+}
+
+fn path_starts_with_components(path: &Path, prefix: &Path) -> bool {
+    let mut path_comps = path.components();
+    for prefix_comp in prefix.components() {
+        let Some(path_comp) = path_comps.next() else {
+            return false;
+        };
+        if !component_eq(path_comp, prefix_comp) {
+            return false;
+        }
+    }
+    true
+}
+
+fn paths_equal(a: &Path, b: &Path) -> bool {
+    path_starts_with_components(a, b) && path_starts_with_components(b, a)
+}
+
+fn paths_overlap(a: &Path, b: &Path) -> bool {
+    path_starts_with_components(a, b) || path_starts_with_components(b, a)
+}
+
+fn read_lock_reentrancy(lock_id: usize) -> Result<ReadAccess, SlmError> {
+    HELD_STORE_LOCKS
+        .try_with(|cell| {
+            let held = cell
+                .try_borrow()
+                .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?;
+            if held
+                .iter()
+                .any(|entry| entry.lock_id == lock_id && entry.mode == LockMode::Write)
+            {
+                return Err(SlmError::Engine(EngineErrorCode::LockReentrant));
+            }
+            if held
+                .iter()
+                .any(|entry| entry.lock_id == lock_id && entry.mode == LockMode::Read)
+            {
+                return Ok(ReadAccess::AlreadyHeld);
+            }
+            Ok(ReadAccess::NeedAcquire)
+        })
+        .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?
+}
+
+fn ensure_write_not_reentrant(lock_id: usize) -> Result<(), SlmError> {
+    HELD_STORE_LOCKS
+        .try_with(|cell| {
+            let held = cell
+                .try_borrow()
+                .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?;
+            if held.iter().any(|entry| entry.lock_id == lock_id) {
+                return Err(SlmError::Engine(EngineErrorCode::LockReentrant));
+            }
+            Ok(())
+        })
+        .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?
+}
+
+fn push_held_lock(lock_id: usize, mode: LockMode) -> Result<(), SlmError> {
+    HELD_STORE_LOCKS
+        .try_with(|cell| {
+            let mut held = cell
+                .try_borrow_mut()
+                .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?;
+            held.push(HeldLock { lock_id, mode });
+            Ok(())
+        })
+        .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?
+}
+
+fn pop_held_lock(lock_id: usize, mode: LockMode) {
+    let _ = HELD_STORE_LOCKS.try_with(|cell| {
+        if let Ok(mut held) = cell.try_borrow_mut()
+            && let Some(pos) = held
+                .iter()
+                .rposition(|entry| entry.lock_id == lock_id && entry.mode == mode)
+        {
+            held.remove(pos);
+        }
+    });
+}
+
+fn sleep_poll_step(ctl: &Control<'_>) {
+    let wait = ctl
+        .deadline
+        .remaining()
+        .map_or(LOCK_POLL_INTERVAL, |rem| rem.min(LOCK_POLL_INTERVAL));
+    if !wait.is_zero() {
+        std::thread::sleep(wait);
+    }
+}
+
+enum StoreReadGuard<'a> {
+    Owned {
+        guard: Option<RwLockReadGuard<'a, ()>>,
+        lock_id: usize,
+    },
+    Nested,
+}
+
+impl Drop for StoreReadGuard<'_> {
+    fn drop(&mut self) {
+        if let Self::Owned { guard, lock_id } = self {
+            drop(guard.take());
+            pop_held_lock(*lock_id, LockMode::Read);
+        }
+    }
+}
+
+struct StoreWriteGuard<'a> {
+    guard: Option<RwLockWriteGuard<'a, ()>>,
+    lock_id: usize,
+    _marker: PhantomData<&'a ()>,
+}
+
+impl Drop for StoreWriteGuard<'_> {
+    fn drop(&mut self) {
+        drop(self.guard.take());
+        pop_held_lock(self.lock_id, LockMode::Write);
+    }
+}
+
+fn acquire_read_lock<'a>(
+    lock: &'a Arc<RwLock<()>>,
+    ctl: &mut Control<'_>,
+) -> Result<StoreReadGuard<'a>, SlmError> {
+    let lock_id = Arc::as_ptr(lock) as usize;
+    if read_lock_reentrancy(lock_id)? == ReadAccess::AlreadyHeld {
+        ctl.check()?;
+        return Ok(StoreReadGuard::Nested);
+    }
+
+    loop {
+        ctl.check()?;
+        match lock.try_read() {
+            Ok(guard) => {
+                push_held_lock(lock_id, LockMode::Read)?;
+                return Ok(StoreReadGuard::Owned {
+                    guard: Some(guard),
+                    lock_id,
+                });
+            }
+            Err(TryLockError::Poisoned(_)) => {
+                return Err(SlmError::Engine(EngineErrorCode::LockPoisoned));
+            }
+            Err(TryLockError::WouldBlock) => {
+                ctl.check()?;
+                sleep_poll_step(ctl);
+            }
+        }
+    }
+}
+
+fn acquire_write_lock<'a>(
+    lock: &'a Arc<RwLock<()>>,
+    ctl: Option<&mut Control<'_>>,
+) -> Result<StoreWriteGuard<'a>, SlmError> {
+    let lock_id = Arc::as_ptr(lock) as usize;
+    ensure_write_not_reentrant(lock_id)?;
+
+    let Some(ctl) = ctl else {
+        let guard = lock
+            .write()
+            .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?;
+        push_held_lock(lock_id, LockMode::Write)?;
+        return Ok(StoreWriteGuard {
+            guard: Some(guard),
+            lock_id,
+            _marker: PhantomData,
+        });
+    };
+
+    loop {
+        ctl.check()?;
+        match lock.try_write() {
+            Ok(guard) => {
+                push_held_lock(lock_id, LockMode::Write)?;
+                return Ok(StoreWriteGuard {
+                    guard: Some(guard),
+                    lock_id,
+                    _marker: PhantomData,
+                });
+            }
+            Err(TryLockError::Poisoned(_)) => {
+                return Err(SlmError::Engine(EngineErrorCode::LockPoisoned));
+            }
+            Err(TryLockError::WouldBlock) => {
+                ctl.check()?;
+                sleep_poll_step(ctl);
+            }
+        }
+    }
 }
 
 fn lexically_normalize(path: &Path) -> Result<PathBuf, SlmError> {
@@ -110,23 +343,36 @@ pub(crate) fn lock_for_dir(dir: &Path) -> Result<(PathBuf, Arc<RwLock<()>>), Slm
         .lock()
         .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?;
     map.retain(|_, weak| weak.strong_count() > 0);
-    if let Some(existing) = map.get(&key).and_then(std::sync::Weak::upgrade) {
-        return Ok((key, existing));
+    for (existing_key, weak) in map.iter() {
+        if weak.strong_count() == 0 {
+            continue;
+        }
+        if paths_equal(existing_key, &key) {
+            if let Some(existing) = weak.upgrade() {
+                return Ok((existing_key.clone(), existing));
+            }
+        } else if paths_overlap(existing_key, &key) {
+            return Err(SlmError::Unsupported(
+                "Model store root overlaps with an active model store".to_owned(),
+            ));
+        }
     }
     let created = Arc::new(RwLock::new(()));
     map.insert(key.clone(), Arc::downgrade(&created));
     Ok((key, created))
 }
 
-pub(crate) fn with_dir_read_lock<T, F>(dir: &Path, f: F) -> Result<T, SlmError>
+pub(crate) fn with_dir_read_lock<T, F>(
+    dir: &Path,
+    ctl: &mut Control<'_>,
+    f: F,
+) -> Result<T, SlmError>
 where
-    F: FnOnce() -> Result<T, SlmError>,
+    F: FnOnce(&mut Control<'_>) -> Result<T, SlmError>,
 {
     let (_key, lock) = lock_for_dir(dir)?;
-    let _guard = lock
-        .read()
-        .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?;
-    f()
+    let _guard = acquire_read_lock(&lock, ctl)?;
+    f(ctl)
 }
 
 struct TempFilesGuard {
@@ -213,10 +459,7 @@ impl ModelStore {
         manifest: &ModelManifest,
         ctl: &mut Control<'_>,
     ) -> Result<VerifiedModel, SlmError> {
-        let _read_guard = self
-            .lock
-            .read()
-            .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?;
+        let _read_guard = acquire_read_lock(&self.lock, ctl)?;
         manifest.verify_unlocked(&self.root, ctl)
     }
 
@@ -235,10 +478,7 @@ impl ModelStore {
     where
         F: FnMut(&VerifiedModel, &mut Control<'_>) -> Result<E, SlmError>,
     {
-        let _read_guard = self
-            .lock
-            .read()
-            .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?;
+        let _read_guard = acquire_read_lock(&self.lock, ctl)?;
         let verified = manifest.verify_unlocked(&self.root, ctl)?;
         slot.load_unlocked(verified, ctl, factory)
     }
@@ -260,10 +500,7 @@ impl ModelStore {
                 "VerifiedModel belongs to a different model store directory".to_owned(),
             ));
         }
-        let _read_guard = self
-            .lock
-            .read()
-            .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?;
+        let _read_guard = acquire_read_lock(&self.lock, ctl)?;
         slot.load_unlocked(model, ctl, factory)
     }
 
@@ -302,10 +539,7 @@ impl ModelStore {
     /// Elimina del directorio del almacén los archivos declarados en `manifest` bajo bloqueo de escritura.
     pub fn remove_package(&self, manifest: &ModelManifest) -> Result<(), SlmError> {
         manifest.validate()?;
-        let _write_guard = self
-            .lock
-            .write()
-            .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?;
+        let _write_guard = acquire_write_lock(&self.lock, None)?;
 
         let specs = package_specs(&manifest.package);
         for spec in specs {
@@ -330,10 +564,7 @@ impl ModelStore {
         let specs = package_specs(&manifest.package);
         let ordered_pairs = match_specs_and_inputs(&specs, inputs)?;
 
-        let _write_guard = self
-            .lock
-            .write()
-            .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?;
+        let _write_guard = acquire_write_lock(&self.lock, Some(ctl))?;
 
         ensure_root_dir_no_symlink(&self.root)?;
 
@@ -624,11 +855,15 @@ fn write_and_hash_payload(
 mod tests {
     use super::*;
     use crate::{
-        control::{CancelToken, Deadline},
+        control::{CancelToken, Deadline, Progress},
         engine::GenerateRequest,
         manifest::ModelRole,
     };
-    use std::{sync::mpsc, thread, time::Duration};
+    use std::{
+        sync::mpsc,
+        thread,
+        time::{Duration, Instant},
+    };
 
     static TEMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
@@ -799,6 +1034,7 @@ mod tests {
         let events = Arc::new(Mutex::new(Vec::<&'static str>::new()));
         let install_done = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let (started_tx, started_rx) = mpsc::channel();
+        let (contended_tx, contended_rx) = mpsc::channel();
         let (proceed_tx, proceed_rx) = mpsc::channel();
 
         let events_load = Arc::clone(&events);
@@ -824,8 +1060,27 @@ mod tests {
         let events_install = Arc::clone(&events);
         let done_flag = Arc::clone(&install_done);
         let manifest_install = manifest_v2.clone();
+        let contended_tx = Mutex::new(Some(contended_tx));
+        let install_checks = Arc::new(AtomicU64::new(0));
         let install_handle = thread::spawn(move || {
-            let mut install_ctl = default_ctl();
+            let start = Instant::now();
+            let checks = Arc::clone(&install_checks);
+            let deadline = Deadline::with_clock(
+                start,
+                Duration::from_secs(10),
+                Arc::new(move || {
+                    let n = checks.fetch_add(1, Ordering::SeqCst);
+                    // Check 0: entrada de install_internal; Check 1: previo al primer try_write;
+                    // Check 2: tras el primer WouldBlock dentro del bucle de espera.
+                    if n == 2
+                        && let Some(tx) = contended_tx.lock().unwrap().take()
+                    {
+                        tx.send(()).unwrap();
+                    }
+                    start
+                }),
+            );
+            let mut install_ctl = Control::without_progress(CancelToken::new(), deadline);
             store_b
                 .install_bytes(
                     &manifest_install,
@@ -837,8 +1092,8 @@ mod tests {
             done_flag.store(true, Ordering::SeqCst);
         });
 
-        // Mientras `factory` mantiene el bloqueo de lectura, la instalación concurrente espera.
-        thread::sleep(Duration::from_millis(80));
+        // Esperamos de forma determinista a que el escritor haya chocado con el bloqueo de lectura.
+        contended_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         assert!(
             !install_done.load(Ordering::SeqCst),
             "concurrent install must wait for in-flight load to release read lock"
@@ -862,5 +1117,366 @@ mod tests {
             })
         );
         assert!(verify_store.verify(&manifest_v2, &mut ctl).is_ok());
+    }
+
+    #[test]
+    fn overlapping_parent_and_child_roots_are_rejected_and_released_on_drop() {
+        let dir = TempDir::new("overlap_roots");
+        let child_dir = dir.0.join("v5");
+        let nested_child_dir = child_dir.join("sub");
+
+        let parent_store = ModelStore::new(&dir.0).unwrap();
+        let payload = b"parent-v5-weights";
+        let manifest_in_child = single_manifest("granite-v5", "v5/base.gguf", payload);
+        let mut ctl = default_ctl();
+        parent_store
+            .install_bytes(&manifest_in_child, &[("v5/base.gguf", payload)], &mut ctl)
+            .unwrap();
+
+        let (started_tx, started_rx) = mpsc::channel();
+        let (proceed_tx, proceed_rx) = mpsc::channel();
+        let manifest_load = manifest_in_child.clone();
+        let load_handle = thread::spawn(move || {
+            let mut slot: ModelSlot<StubEngine> = ModelSlot::new();
+            let mut load_ctl = default_ctl();
+            parent_store
+                .verify_and_load(&manifest_load, &mut slot, &mut load_ctl, |m, _| {
+                    started_tx.send(()).unwrap();
+                    proceed_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+                    Ok(StubEngine(m.model_id().to_owned()))
+                })
+                .unwrap();
+        });
+
+        started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(matches!(
+            ModelStore::new(&child_dir),
+            Err(SlmError::Unsupported(_))
+        ));
+        assert!(matches!(
+            ModelStore::new(&nested_child_dir),
+            Err(SlmError::Unsupported(_))
+        ));
+
+        proceed_tx.send(()).unwrap();
+        load_handle.join().unwrap();
+
+        // Al soltar `parent_store` (al finalizar el hilo), la raíz queda liberada y el hijo abre.
+        let child_store = ModelStore::new(&child_dir).unwrap();
+        let child_manifest = single_manifest("granite-child", "base.gguf", payload);
+        let (child_started_tx, child_started_rx) = mpsc::channel();
+        let (child_proceed_tx, child_proceed_rx) = mpsc::channel();
+        let child_load_handle = thread::spawn(move || {
+            let mut slot: ModelSlot<StubEngine> = ModelSlot::new();
+            let mut load_ctl = default_ctl();
+            child_store
+                .verify_and_load(&child_manifest, &mut slot, &mut load_ctl, |m, _| {
+                    child_started_tx.send(()).unwrap();
+                    child_proceed_rx
+                        .recv_timeout(Duration::from_secs(5))
+                        .unwrap();
+                    Ok(StubEngine(m.model_id().to_owned()))
+                })
+                .unwrap();
+        });
+
+        child_started_rx
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        assert!(matches!(
+            ModelStore::new(&dir.0),
+            Err(SlmError::Unsupported(_))
+        ));
+        child_proceed_tx.send(()).unwrap();
+        child_load_handle.join().unwrap();
+
+        // Al soltar también el hijo, vuelve a permitirse la raíz padre.
+        let _reopened_parent = ModelStore::new(&dir.0).unwrap();
+
+        // Directorios hermanos (incluso con prefijo léxico común) no se solapan.
+        let siblings = TempDir::new("siblings");
+        let _sib_a = ModelStore::new(siblings.0.join("models")).unwrap();
+        let _sib_b = ModelStore::new(siblings.0.join("models_v5")).unwrap();
+    }
+
+    #[test]
+    fn install_with_deadline_times_out_while_load_holds_read_lock() {
+        let dir = TempDir::new("lock_timeout");
+        let payload_v1 = b"model-v1-bytes";
+        let payload_v2 = b"model-v2-bytes";
+        let manifest_v1 = single_manifest("granite-v1", "model.gguf", payload_v1);
+        let manifest_v2 = single_manifest("granite-v2", "model.gguf", payload_v2);
+
+        let store_a = ModelStore::new(&dir.0).unwrap();
+        let store_b = ModelStore::new(&dir.0).unwrap();
+        let mut ctl = default_ctl();
+        store_a
+            .install_bytes(&manifest_v1, &[("model.gguf", payload_v1)], &mut ctl)
+            .unwrap();
+
+        let (started_tx, started_rx) = mpsc::channel();
+        let (proceed_tx, proceed_rx) = mpsc::channel();
+        let manifest_load = manifest_v1.clone();
+        let load_handle = thread::spawn(move || {
+            let mut slot: ModelSlot<StubEngine> = ModelSlot::new();
+            let mut load_ctl = default_ctl();
+            store_a
+                .verify_and_load(&manifest_load, &mut slot, &mut load_ctl, |m, _| {
+                    started_tx.send(()).unwrap();
+                    proceed_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+                    Ok(StubEngine(m.model_id().to_owned()))
+                })
+                .unwrap();
+        });
+
+        started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+
+        let mut timeout_ctl = Control::without_progress(
+            CancelToken::new(),
+            Deadline::after(Duration::from_millis(25)),
+        );
+        let res = store_b.install_bytes(
+            &manifest_v2,
+            &[("model.gguf", payload_v2)],
+            &mut timeout_ctl,
+        );
+        assert_eq!(res, Err(SlmError::Timeout));
+
+        proceed_tx.send(()).unwrap();
+        load_handle.join().unwrap();
+
+        assert_eq!(fs::read(dir.0.join("model.gguf")).unwrap(), payload_v1);
+    }
+
+    #[test]
+    fn install_and_verify_waiting_on_lock_respect_cancel_and_timeout() {
+        let dir = TempDir::new("lock_cancel_and_read_timeout");
+        let payload_v1 = b"model-v1-bytes";
+        let payload_v2 = b"model-v2-bytes";
+        let manifest_v1 = single_manifest("granite-v1", "model.gguf", payload_v1);
+        let manifest_v2 = single_manifest("granite-v2", "model.gguf", payload_v2);
+
+        let store_a = ModelStore::new(&dir.0).unwrap();
+        let store_b = ModelStore::new(&dir.0).unwrap();
+        let mut ctl = default_ctl();
+        store_a
+            .install_bytes(&manifest_v1, &[("model.gguf", payload_v1)], &mut ctl)
+            .unwrap();
+
+        // 1. Escritor cancelado mientras un lector mantiene el bloqueo de lectura.
+        let (started_tx, started_rx) = mpsc::channel();
+        let (proceed_tx, proceed_rx) = mpsc::channel();
+        let store_reader = store_a.clone();
+        let manifest_load = manifest_v1.clone();
+        let load_handle = thread::spawn(move || {
+            let mut slot: ModelSlot<StubEngine> = ModelSlot::new();
+            let mut load_ctl = default_ctl();
+            store_reader
+                .verify_and_load(&manifest_load, &mut slot, &mut load_ctl, |m, _| {
+                    started_tx.send(()).unwrap();
+                    proceed_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+                    Ok(StubEngine(m.model_id().to_owned()))
+                })
+                .unwrap();
+        });
+
+        started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+
+        let cancel = CancelToken::new();
+        let cancel_on_wait = cancel.clone();
+        let checks = Arc::new(AtomicU64::new(0));
+        let checks_clock = Arc::clone(&checks);
+        let start = Instant::now();
+        let deadline = Deadline::with_clock(
+            start,
+            Duration::from_secs(5),
+            Arc::new(move || {
+                if checks_clock.fetch_add(1, Ordering::SeqCst) == 2 {
+                    cancel_on_wait.cancel();
+                }
+                start
+            }),
+        );
+        let mut cancel_ctl = Control::without_progress(cancel, deadline);
+        let install_res =
+            store_b.install_bytes(&manifest_v2, &[("model.gguf", payload_v2)], &mut cancel_ctl);
+        assert_eq!(install_res, Err(SlmError::Cancelled));
+
+        proceed_tx.send(()).unwrap();
+        load_handle.join().unwrap();
+
+        // 2. Lector con plazo mientras un escritor mantiene el bloqueo de escritura.
+        let (write_started_tx, write_started_rx) = mpsc::channel();
+        let (write_proceed_tx, write_proceed_rx) = mpsc::channel();
+        let write_started_tx = Mutex::new(Some(write_started_tx));
+        let write_proceed_rx = Mutex::new(Some(write_proceed_rx));
+        let writer_checks = Arc::new(AtomicU64::new(0));
+        let writer_checks_clock = Arc::clone(&writer_checks);
+        let writer_start = Instant::now();
+        let writer_deadline = Deadline::with_clock(
+            writer_start,
+            Duration::from_secs(10),
+            Arc::new(move || {
+                // Check 0: entrada; Check 1: adquisición del write lock; Check 2: ya dentro con lock tomado.
+                if writer_checks_clock.fetch_add(1, Ordering::SeqCst) == 2 {
+                    if let Some(tx) = write_started_tx.lock().unwrap().take() {
+                        tx.send(()).unwrap();
+                    }
+                    if let Some(rx) = write_proceed_rx.lock().unwrap().take() {
+                        rx.recv_timeout(Duration::from_secs(5)).unwrap();
+                    }
+                }
+                writer_start
+            }),
+        );
+        let manifest_writer = manifest_v2.clone();
+        let write_handle = thread::spawn(move || {
+            let mut writer_ctl = Control::without_progress(CancelToken::new(), writer_deadline);
+            store_a
+                .install_bytes(
+                    &manifest_writer,
+                    &[("model.gguf", payload_v2)],
+                    &mut writer_ctl,
+                )
+                .unwrap();
+        });
+
+        write_started_rx
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+
+        let mut verify_timeout_ctl = Control::without_progress(
+            CancelToken::new(),
+            Deadline::after(Duration::from_millis(25)),
+        );
+        assert_eq!(
+            store_b.verify(&manifest_v1, &mut verify_timeout_ctl),
+            Err(SlmError::Timeout)
+        );
+
+        let read_cancel = CancelToken::new();
+        let read_cancel_cb = read_cancel.clone();
+        let read_checks = Arc::new(AtomicU64::new(0));
+        let read_checks_clock = Arc::clone(&read_checks);
+        let read_start = Instant::now();
+        let read_deadline = Deadline::with_clock(
+            read_start,
+            Duration::from_secs(5),
+            Arc::new(move || {
+                if read_checks_clock.fetch_add(1, Ordering::SeqCst) == 1 {
+                    read_cancel_cb.cancel();
+                }
+                read_start
+            }),
+        );
+        let mut verify_cancel_ctl = Control::without_progress(read_cancel, read_deadline);
+        assert_eq!(
+            store_b.verify(&manifest_v1, &mut verify_cancel_ctl),
+            Err(SlmError::Cancelled)
+        );
+
+        write_proceed_tx.send(()).unwrap();
+        write_handle.join().unwrap();
+    }
+
+    #[test]
+    fn reentrant_write_from_factory_or_loading_callback_fails_without_deadlock() {
+        let dir = TempDir::new("reentrant_lock");
+        let other_dir = TempDir::new("reentrant_other");
+        let payload = b"model-bytes-reentrant";
+        let manifest = single_manifest("granite", "model.gguf", payload);
+        let other_payload = b"other-store-bytes";
+        let other_manifest = single_manifest("other", "other.gguf", other_payload);
+
+        let store = ModelStore::new(&dir.0).unwrap();
+        let other_store = ModelStore::new(&other_dir.0).unwrap();
+        let mut ctl = default_ctl();
+        store
+            .install_bytes(&manifest, &[("model.gguf", payload)], &mut ctl)
+            .unwrap();
+
+        // 1. Reentrada desde `factory` de `verify_and_load`: remove_package e install_bytes fallan sin bloquear.
+        let mut slot: ModelSlot<StubEngine> = ModelSlot::new();
+        let mut factory_ctl = default_ctl();
+        store
+            .verify_and_load(&manifest, &mut slot, &mut factory_ctl, |m, _| {
+                assert_eq!(
+                    store.remove_package(&manifest),
+                    Err(SlmError::Engine(EngineErrorCode::LockReentrant))
+                );
+                let mut inner_ctl = default_ctl();
+                assert_eq!(
+                    store.install_bytes(&manifest, &[("model.gguf", payload)], &mut inner_ctl),
+                    Err(SlmError::Engine(EngineErrorCode::LockReentrant))
+                );
+                // Otro almacén independiente sí puede escribirse desde la fábrica.
+                other_store
+                    .install_bytes(
+                        &other_manifest,
+                        &[("other.gguf", other_payload)],
+                        &mut inner_ctl,
+                    )
+                    .unwrap();
+                Ok(StubEngine(m.model_id().to_owned()))
+            })
+            .unwrap();
+
+        // 2. Reentrada desde el callback `Progress::Loading` de `verify_and_load`.
+        let loading_seen = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let loading_seen_cb = Arc::clone(&loading_seen);
+        let store_for_cb = store.clone();
+        let manifest_for_cb = manifest.clone();
+        let mut loading_ctl = Control::new(
+            CancelToken::new(),
+            Deadline::after(Duration::from_secs(5)),
+            move |progress| {
+                if progress == Progress::Loading {
+                    loading_seen_cb.store(true, Ordering::SeqCst);
+                    assert_eq!(
+                        store_for_cb.remove_package(&manifest_for_cb),
+                        Err(SlmError::Engine(EngineErrorCode::LockReentrant))
+                    );
+                }
+            },
+        );
+        store
+            .verify_and_load(&manifest, &mut slot, &mut loading_ctl, |m, _| {
+                Ok(StubEngine(m.model_id().to_owned()))
+            })
+            .unwrap();
+        assert!(loading_seen.load(Ordering::SeqCst));
+
+        // 3. Reentrada desde `ModelSlot::load` (callback `Loading` y `factory`).
+        let verified = store.verify(&manifest, &mut ctl).unwrap();
+        let slot_cb_seen = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let slot_cb_seen_inner = Arc::clone(&slot_cb_seen);
+        let store_for_slot_cb = store.clone();
+        let manifest_for_slot_cb = manifest.clone();
+        let mut slot_ctl = Control::new(
+            CancelToken::new(),
+            Deadline::after(Duration::from_secs(5)),
+            move |progress| {
+                if progress == Progress::Loading {
+                    slot_cb_seen_inner.store(true, Ordering::SeqCst);
+                    assert_eq!(
+                        store_for_slot_cb.remove_package(&manifest_for_slot_cb),
+                        Err(SlmError::Engine(EngineErrorCode::LockReentrant))
+                    );
+                }
+            },
+        );
+        slot.load(verified, &mut slot_ctl, |m, _| {
+            assert_eq!(
+                store.remove_package(&manifest),
+                Err(SlmError::Engine(EngineErrorCode::LockReentrant))
+            );
+            Ok(StubEngine(m.model_id().to_owned()))
+        })
+        .unwrap();
+        assert!(slot_cb_seen.load(Ordering::SeqCst));
+
+        // 4. Al soltar el bloqueo tras la carga, `remove_package` vuelve a funcionar normalmente.
+        store.remove_package(&manifest).unwrap();
+        assert!(!dir.0.join("model.gguf").exists());
     }
 }

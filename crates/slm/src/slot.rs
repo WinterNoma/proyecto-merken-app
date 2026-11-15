@@ -56,7 +56,7 @@ impl<E: Engine> ModelSlot<E> {
         F: FnMut(&VerifiedModel, &mut Control<'_>) -> Result<E, SlmError>,
     {
         let dir = model.dir().to_path_buf();
-        crate::store::with_dir_read_lock(&dir, || {
+        crate::store::with_dir_read_lock(&dir, ctl, |ctl| {
             self.load_unlocked(model, ctl, factory).map(|_| ())
         })?;
         self.loaded

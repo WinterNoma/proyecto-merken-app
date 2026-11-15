@@ -46,6 +46,8 @@ pub enum EngineErrorCode {
     EmptyResponse,
     /// Error de sincronización interna al adquirir el bloqueo del almacén de modelos.
     LockPoisoned,
+    /// Adquisición reentrante incompatible del bloqueo del almacén desde el mismo hilo.
+    LockReentrant,
     /// Fallo interno no clasificado del motor.
     Internal,
 }
@@ -58,6 +60,7 @@ impl EngineErrorCode {
             Self::GenerationFailed => "generation_failed",
             Self::EmptyResponse => "empty_response",
             Self::LockPoisoned => "lock_poisoned",
+            Self::LockReentrant => "lock_reentrant",
             Self::Internal => "internal",
         }
     }
