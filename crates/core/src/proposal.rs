@@ -19,7 +19,10 @@ use crate::{
     ErrorCode, ValidationError,
     catalog::{BodyZone, Indicator, SleepQuality},
     interpret::{
-        mentions_indicator, quote_number, quote_sleep_quality, quote_unit_compatible, quote_zone,
+        BoundedOccurrence, Token, check_numeric_unit_around_occurrence,
+        find_token_bounded_occurrences_with_tokens, has_token_bounded_occurrence, interpret,
+        is_single_clause_quote, mentions_indicator, occurrence_is_negated_in_input, quote_number,
+        quote_sleep_quality, quote_unit_compatible, quote_zone, tokenize,
     },
     measurement::Measurement,
     validate_text,
@@ -135,7 +138,7 @@ fn valid_numeric_value(key: &str, val: &Value) -> Option<f64> {
     }
     let ok = match key {
         "bpm" | "systolic" | "diastolic" | "celsius" | "mg_dl" => x > 0.0,
-        "hours" => x > 0.0 && x <= 24.0,
+        "hours" => (0.0..=24.0).contains(&x),
         "percentage" => x > 0.0 && x <= 100.0,
         "usv_h" | "km" | "kcal" => x >= 0.0,
         "score" => (0.0..=10.0).contains(&x) && x.fract() == 0.0,
@@ -144,10 +147,43 @@ fn valid_numeric_value(key: &str, val: &Value) -> Option<f64> {
     ok.then_some(x)
 }
 
+fn is_numeric_field_key(key: &str) -> bool {
+    matches!(
+        key,
+        "bpm"
+            | "systolic"
+            | "diastolic"
+            | "celsius"
+            | "mg_dl"
+            | "hours"
+            | "percentage"
+            | "usv_h"
+            | "km"
+            | "kcal"
+            | "score"
+    )
+}
+
+fn json_values_compatible(key: &str, proposed: &Value, l1: &Value) -> bool {
+    if is_numeric_field_key(key)
+        && let (Some(a), Some(b)) = (valid_numeric_value(key, proposed), l1.as_f64())
+    {
+        return (a - b).abs() <= QUOTE_TOLERANCE;
+    }
+    if let (Some(a), Some(b)) = (proposed.as_str(), l1.as_str()) {
+        return a.eq_ignore_ascii_case(b);
+    }
+    proposed == l1
+}
+
+#[allow(clippy::too_many_arguments)]
 fn check_present_field(
     at: Option<usize>,
     input: &str,
+    input_tokens: &[Token],
     rec: &ProposedRecord,
+    valid_rec_occs: &[BoundedOccurrence],
+    l1_same_indicator: &[&ProposedRecord],
     f: &ProposedField,
     val: &Value,
     out: &mut Vec<ProposalIssue>,
@@ -162,16 +198,45 @@ fn check_present_field(
         return;
     }
 
-    let valid_quote = f
-        .quote
-        .as_deref()
-        .filter(|fq| quoted(input, fq) && quoted(&rec.quote, fq));
+    let allow_bp_slash = rec.indicator == Indicator::BloodPressure
+        && matches!(f.key.as_str(), "systolic" | "diastolic");
+    let valid_quote = f.quote.as_deref().filter(|fq| {
+        quoted(input, fq)
+            && quoted(&rec.quote, fq)
+            && has_token_bounded_occurrence(&rec.quote, fq, allow_bp_slash)
+    });
     if valid_quote.is_none() {
         out.push(issue(
             at,
             &f.key,
             ErrorCode::InvalidValue,
-            "Every value needs a quote taken from the record quote and input text",
+            "Every value needs a quote taken on token boundaries from the record quote and input text",
+        ));
+    }
+
+    if f.key != "description"
+        && !l1_same_indicator.is_empty()
+        && let Some(l1_vals) = Some(
+            l1_same_indicator
+                .iter()
+                .filter_map(|lr| {
+                    lr.fields
+                        .iter()
+                        .find(|lf| lf.key == f.key)
+                        .and_then(|lf| lf.value.as_ref())
+                })
+                .collect::<Vec<_>>(),
+        )
+        .filter(|vals| !vals.is_empty())
+        && !l1_vals
+            .iter()
+            .any(|l1_v| json_values_compatible(&f.key, val, l1_v))
+    {
+        out.push(issue(
+            at,
+            &f.key,
+            ErrorCode::InvalidValue,
+            "Field value conflicts with deterministic interpretation",
         ));
     }
 
@@ -188,8 +253,31 @@ fn check_present_field(
                 return;
             };
             if let Some(fq) = valid_quote {
+                let fq_occs = find_token_bounded_occurrences_with_tokens(
+                    input,
+                    input_tokens,
+                    fq,
+                    allow_bp_slash,
+                );
+                let in_valid_rec_occ = |occ: &BoundedOccurrence| {
+                    valid_rec_occs.is_empty()
+                        || valid_rec_occs
+                            .iter()
+                            .any(|ro| occ.first_tok >= ro.first_tok && occ.last_tok <= ro.last_tok)
+                };
+                let matching_occ_and_unit = fq_occs.iter().any(|fq_occ| {
+                    in_valid_rec_occ(fq_occ)
+                        && check_numeric_unit_around_occurrence(
+                            input,
+                            input_tokens,
+                            rec.indicator,
+                            fq,
+                            fq_occ.last_tok,
+                        )
+                });
                 let backed = quote_number(fq).is_some_and(|q| (q - num).abs() <= QUOTE_TOLERANCE)
-                    && quote_unit_compatible(rec.indicator, fq);
+                    && quote_unit_compatible(rec.indicator, fq)
+                    && matching_occ_and_unit;
                 if !backed {
                     out.push(issue(
                         at,
@@ -326,14 +414,50 @@ impl Proposal {
                 ));
             }
         }
+        let input_tokens = tokenize(input);
         for (i, rec) in self.records.iter().enumerate() {
             let at = Some(i);
-            if !quoted(input, &rec.quote) {
+            let rec_occs =
+                find_token_bounded_occurrences_with_tokens(input, &input_tokens, &rec.quote, false);
+            let valid_rec_occs: Vec<BoundedOccurrence> = rec_occs
+                .iter()
+                .copied()
+                .filter(|occ| {
+                    !occurrence_is_negated_in_input(input, &input_tokens, occ, rec.indicator)
+                })
+                .collect();
+            let l1 = interpret(&rec.quote);
+            let l1_same_indicator: Vec<&ProposedRecord> = l1
+                .records
+                .iter()
+                .filter(|r| r.indicator == rec.indicator)
+                .collect();
+            let l1_negated_rec = l1
+                .negated
+                .iter()
+                .any(|nq| mentions_indicator(rec.indicator, nq))
+                || (!l1.negated.is_empty() && l1_same_indicator.is_empty());
+
+            if !quoted(input, &rec.quote) || rec_occs.is_empty() {
                 out.push(issue(
                     at,
                     "quote",
                     ErrorCode::InvalidValue,
-                    "Quote is not part of the input text",
+                    "Quote is not a token-bounded part of the input text",
+                ));
+            } else if valid_rec_occs.is_empty() || l1_negated_rec {
+                out.push(issue(
+                    at,
+                    "quote",
+                    ErrorCode::InvalidValue,
+                    "Record quote is negated in the input text",
+                ));
+            } else if !is_single_clause_quote(&rec.quote) {
+                out.push(issue(
+                    at,
+                    "quote",
+                    ErrorCode::InvalidValue,
+                    "Record quote must cover a single clause",
                 ));
             } else if !mentions_indicator(rec.indicator, &rec.quote) {
                 out.push(issue(
@@ -344,7 +468,7 @@ impl Proposal {
                 ));
             }
             if let TimeHint::Ambiguous { quote } = &rec.time
-                && !quoted(input, quote)
+                && (!quoted(input, quote) || !has_token_bounded_occurrence(input, quote, false))
             {
                 out.push(issue(
                     at,
@@ -370,7 +494,17 @@ impl Proposal {
                 }
                 seen.push(&f.key);
                 if is_allowed && let Some(val) = &f.value {
-                    check_present_field(at, input, rec, f, val, &mut out);
+                    check_present_field(
+                        at,
+                        input,
+                        &input_tokens,
+                        rec,
+                        &valid_rec_occs,
+                        &l1_same_indicator,
+                        f,
+                        val,
+                        &mut out,
+                    );
                 }
             }
             if rec.fields.iter().all(|f| f.value.is_some())
@@ -576,7 +710,7 @@ mod tests {
         let issues_999 = p_999.check("I slept 6 hours");
         assert!(issues_999.iter().any(|i| i.error.field == "hours"));
 
-        // hours: 0 con quality: None (hours debe ser > 0)
+        // hours: 0 es válido según units::Hours (0.0..=24.0)
         let p_zero: Proposal = serde_json::from_value(json!({
             "schema_version": 1,
             "interpreter": "slm",
@@ -596,12 +730,7 @@ mod tests {
             "uninterpreted": []
         }))
         .unwrap();
-        assert!(
-            p_zero
-                .check("dormí 0 horas")
-                .iter()
-                .any(|i| i.error.field == "hours")
-        );
+        assert!(p_zero.check("dormí 0 horas").is_empty());
     }
 
     #[test]
@@ -693,6 +822,238 @@ mod tests {
             !p_cross_unit
                 .check("pulso 72, temperatura 36.8 °C")
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn adversarial_check_token_boundaries_reject_substrings() {
+        // 172 -> 72 en rec.quote o en field.quote
+        let p_sub_rec = pulse("72", json!(72), Some("72"));
+        assert!(
+            p_sub_rec
+                .check("pulso 172")
+                .iter()
+                .any(|i| i.error.field == "quote")
+        );
+
+        let p_sub_field = pulse("pulso 172", json!(72), Some("72"));
+        assert!(
+            p_sub_field
+                .check("pulso 172")
+                .iter()
+                .any(|i| i.error.field == "bpm")
+        );
+
+        // "6" dentro de "6/7" no vale para symptom.score ni heart_rate
+        let p_slash: Proposal = serde_json::from_value(json!({
+            "schema_version": 1,
+            "interpreter": "slm",
+            "interpreter_version": "v1",
+            "records": [{
+                "indicator": "symptom",
+                "fields": [
+                    {"key": "body_zone", "value": "head", "quote": "cabeza"},
+                    {"key": "score", "value": 6, "quote": "6"},
+                    {"key": "description", "value": "dolor de cabeza 6/7", "quote": "dolor de cabeza 6/7"}
+                ],
+                "time": {"kind": "unspecified"},
+                "quote": "dolor de cabeza 6/7"
+            }],
+            "negated": [],
+            "uninterpreted": []
+        }))
+        .unwrap();
+        assert!(
+            p_slash
+                .check("dolor de cabeza 6/7")
+                .iter()
+                .any(|i| i.error.field == "score")
+        );
+
+        // Pero presión arterial "120/80" con citas "120" y "80" sigue siendo válida
+        let p_bp: Proposal = serde_json::from_value(json!({
+            "schema_version": 1,
+            "interpreter": "slm",
+            "interpreter_version": "v1",
+            "records": [{
+                "indicator": "blood_pressure",
+                "fields": [
+                    {"key": "systolic", "value": 120, "quote": "120"},
+                    {"key": "diastolic", "value": 80, "quote": "80"}
+                ],
+                "time": {"kind": "unspecified"},
+                "quote": "presión 120/80"
+            }],
+            "negated": [],
+            "uninterpreted": []
+        }))
+        .unwrap();
+        assert!(p_bp.check("presión 120/80").is_empty());
+    }
+
+    #[test]
+    fn adversarial_check_single_clause_scope_blocks_cross_clause_borrowing() {
+        let p_cross = pulse("dormí 6 horas, pulso 72", json!(6), Some("6"));
+        let issues = p_cross.check("dormí 6 horas, pulso 72");
+        assert!(issues.iter().any(|i| i.error.field == "quote"));
+
+        let p_semi = pulse("dormí 6 horas; pulso", json!(6), Some("6"));
+        assert!(
+            p_semi
+                .check("dormí 6 horas; pulso")
+                .iter()
+                .any(|i| i.error.field == "quote")
+        );
+
+        let p_pero = pulse("dormí 6 horas pero pulso", json!(6), Some("6"));
+        assert!(
+            p_pero
+                .check("dormí 6 horas pero pulso")
+                .iter()
+                .any(|i| i.error.field == "quote")
+        );
+
+        let p_y_luego = pulse("dormí 6 horas y luego pulso", json!(6), Some("6"));
+        assert!(
+            p_y_luego
+                .check("dormí 6 horas y luego pulso")
+                .iter()
+                .any(|i| i.error.field == "quote")
+        );
+    }
+
+    #[test]
+    fn adversarial_check_rejects_incompatible_and_unknown_units_around_occurrence() {
+        // "98.6 F" con rec.quote = "temperatura 98.6" y fq = "98.6"
+        let p_temp_f: Proposal = serde_json::from_value(json!({
+            "schema_version": 1,
+            "interpreter": "slm",
+            "interpreter_version": "v1",
+            "records": [{
+                "indicator": "body_temperature",
+                "fields": [
+                    {"key": "celsius", "value": 98.6, "quote": "98.6"}
+                ],
+                "time": {"kind": "unspecified"},
+                "quote": "temperatura 98.6"
+            }],
+            "negated": [],
+            "uninterpreted": []
+        }))
+        .unwrap();
+        assert!(
+            p_temp_f
+                .check("temperatura 98.6 F")
+                .iter()
+                .any(|i| i.error.field == "celsius")
+        );
+        assert!(
+            p_temp_f
+                .check("temperatura 98.6 degF")
+                .iter()
+                .any(|i| i.error.field == "celsius")
+        );
+        assert!(
+            p_temp_f
+                .check("temperatura 98.6 ℉")
+                .iter()
+                .any(|i| i.error.field == "celsius")
+        );
+        assert!(
+            p_temp_f
+                .check("temperatura 98.6x")
+                .iter()
+                .any(|i| i.error.field == "celsius")
+        );
+
+        // /min u otra unidad desconocida tras el número
+        let p_pulse_slash = pulse("pulso 72", json!(72), Some("72"));
+        assert!(
+            p_pulse_slash
+                .check("pulso 72/min")
+                .iter()
+                .any(|i| i.error.field == "bpm")
+        );
+    }
+
+    #[test]
+    fn adversarial_check_rejects_negated_mentions_and_layer1_conflicts() {
+        // "no medí pulso 72" con negated = []
+        let p_neg_es = pulse("pulso 72", json!(72), Some("72"));
+        assert!(
+            p_neg_es
+                .check("no medí pulso 72")
+                .iter()
+                .any(|i| i.error.field == "quote")
+        );
+
+        // "I can't measure pulse 72" con negated = []
+        let p_neg_en = pulse("pulse 72", json!(72), Some("72"));
+        assert!(
+            p_neg_en
+                .check("I can't measure pulse 72")
+                .iter()
+                .any(|i| i.error.field == "quote")
+        );
+
+        // "No headache; chapter 6."
+        let p_no_head: Proposal = serde_json::from_value(json!({
+            "schema_version": 1,
+            "interpreter": "slm",
+            "interpreter_version": "v1",
+            "records": [{
+                "indicator": "symptom",
+                "fields": [
+                    {"key": "body_zone", "value": "head", "quote": "headache"},
+                    {"key": "score", "value": 6, "quote": "6"},
+                    {"key": "description", "value": "headache", "quote": "headache"}
+                ],
+                "time": {"kind": "unspecified"},
+                "quote": "headache"
+            }],
+            "negated": [],
+            "uninterpreted": []
+        }))
+        .unwrap();
+        let issues_head = p_no_head.check("No headache; chapter 6.");
+        assert!(issues_head.iter().any(|i| i.error.field == "quote"));
+        assert!(issues_head.iter().any(|i| i.error.field == "score"));
+
+        // Contraste con capa 1: mismo indicador con valor distinto ("tras 6 ejercicios pulso 72" -> bpm=6)
+        let p_conflict = pulse("tras 6 ejercicios pulso 72", json!(6), Some("6"));
+        let issues_conflict = p_conflict.check("tras 6 ejercicios pulso 72");
+        assert!(issues_conflict.iter().any(|i| i.error.field == "bpm"));
+        assert!(
+            issues_conflict
+                .iter()
+                .all(|i| !i.error.message.contains("ejercicios") && !i.error.message.contains("72"))
+        );
+
+        // Contraste con capa 1 en Sleep: "no dormí bien" con quality="good"
+        let p_sleep_bad: Proposal = serde_json::from_value(json!({
+            "schema_version": 1,
+            "interpreter": "slm",
+            "interpreter_version": "v1",
+            "records": [{
+                "indicator": "sleep",
+                "fields": [
+                    {"key": "hours", "value": null, "quote": null},
+                    {"key": "quality", "value": "good", "quote": "bien"},
+                    {"key": "window_start", "value": null, "quote": null},
+                    {"key": "window_end", "value": null, "quote": null}
+                ],
+                "time": {"kind": "unspecified"},
+                "quote": "no dormí bien"
+            }],
+            "negated": [],
+            "uninterpreted": []
+        }))
+        .unwrap();
+        assert!(
+            p_sleep_bad
+                .check("no dormí bien")
+                .iter()
+                .any(|i| i.error.field == "quality")
         );
     }
 }
