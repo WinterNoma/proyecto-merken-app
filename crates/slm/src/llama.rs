@@ -225,6 +225,9 @@ impl LlamaEngine {
     /// Verifica que una gramática GBNF compila sin errores contra el vocabulario
     /// del modelo cargado.
     pub fn validate_grammar(&mut self, grammar: &str) -> Result<(), SlmError> {
+        if !crate::explain::selection::is_known_grammar(grammar) {
+            return Err(SlmError::Engine(EngineErrorCode::InvalidGrammar));
+        }
         crate::gbnf::validate(grammar)
             .map_err(|()| SlmError::Engine(EngineErrorCode::InvalidGrammar))?;
         let inner = self
@@ -389,6 +392,9 @@ fn build_context_params(config: LlamaEngineConfig) -> Result<LlamaContextParams,
 fn build_sampler(model: &LlamaModel, req: &GenerateRequest) -> Result<LlamaSampler, SlmError> {
     let mut chain = Vec::new();
     if let Some(ref grammar) = req.grammar {
+        if !crate::explain::selection::is_known_grammar(grammar) {
+            return Err(SlmError::Engine(EngineErrorCode::InvalidGrammar));
+        }
         crate::gbnf::validate(grammar)
             .map_err(|()| SlmError::Engine(EngineErrorCode::InvalidGrammar))?;
         let g = LlamaSampler::grammar(model, grammar, "root")

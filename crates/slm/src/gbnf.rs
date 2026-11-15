@@ -293,8 +293,19 @@ mod tests {
     #[test]
     fn production_grammars() {
         assert!(validate(crate::PROPOSAL_GBNF).is_ok());
-        for ids in [&[][..], &["one", "two"][..], &["a\"b", "a\\b", "a/b"][..]] {
+        for ids in [
+            &[][..],
+            &["one", "two"][..],
+            &["ficha.glucose/high-1", "a_b", "A-9.z/x"][..],
+        ] {
             assert!(validate(&crate::build_selection_grammar(ids)).is_ok());
+        }
+        // IDs fuera del juego de caracteres permitido: no hay gramática, y la
+        // cadena vacía no supera la prevalidación.
+        for ids in [&["a\"b"][..], &["a\\b"][..], &["a b"][..]] {
+            let grammar = crate::build_selection_grammar(ids);
+            assert!(grammar.is_empty());
+            assert!(validate(&grammar).is_err());
         }
     }
     #[test]

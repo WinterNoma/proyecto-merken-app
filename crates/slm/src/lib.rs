@@ -34,10 +34,10 @@ pub use engine::{
 pub use error::{EngineErrorCode, OutputIssue, SlmError};
 pub use explain::{
     AI_SUGGESTION_LABEL, AiNote, Explainer, Explanation, FactId, FactLine, Ficha, FichaId,
-    MAX_ID_LEN, MAX_SELECTED_STATEMENTS, MAX_SELECTION_OUTPUT_BYTES, MAX_STATEMENT_CHARS,
-    OfferedStatement, PlainEnglishPromptFormat, PromptFormat, RenderedStatement, SlmExplainer,
-    Statement, StatementId, build_selection_grammar, offered_statements, render_facts,
-    validate_selection,
+    MAX_ID_LEN, MAX_SELECTED_STATEMENTS, MAX_SELECTION_IDS, MAX_SELECTION_OUTPUT_BYTES,
+    MAX_STATEMENT_CHARS, OfferedStatement, PlainEnglishPromptFormat, PromptFormat,
+    RenderedStatement, SlmExplainer, Statement, StatementId, build_selection_grammar,
+    offered_statements, render_facts, validate_selection,
 };
 pub use interpreter::{
     Interpreter, MAX_FIELDS_PER_RECORD, MAX_INTERPRETER_OUTPUT_BYTES, MAX_PROPOSAL_RECORDS,

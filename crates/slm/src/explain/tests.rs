@@ -527,14 +527,8 @@ mod inner {
         ));
         assert!(!grammar_accepts(&grammar, "You have a clot."));
 
-        // Escapado seguro de caracteres especiales en `build_selection_grammar`
-        let escaped_grammar = build_selection_grammar(&[r#"a"b\c"#]);
-        let extracted = extract_gbnf_id_literals(&escaped_grammar).unwrap();
-        assert_eq!(extracted, vec![r#"a"b\c"#.to_owned()]);
-        assert!(grammar_accepts(
-            &escaped_grammar,
-            r#"{"select":["a\"b\\c"]}"#
-        ));
+        // IDs fuera del conjunto permitido se rechazan.
+        assert!(build_selection_grammar(&[r#"a"b\c"#]).is_empty());
 
         // `SlmExplainer` envía la gramática generada por petición excluyendo otros estados
         let stable = sample_eval(Status::Stable, Escalation::Continue, SourceKind::Published);

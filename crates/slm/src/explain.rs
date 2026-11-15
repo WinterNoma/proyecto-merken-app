@@ -12,9 +12,9 @@ pub use prompt::{PlainEnglishPromptFormat, PromptFormat};
 pub use selection::{
     AI_SUGGESTION_LABEL, AiNote, ERR_DUPLICATE_SELECTION, ERR_EXTRA_FIELDS, ERR_INVALID_JSON,
     ERR_INVALID_SCHEMA, ERR_OUTPUT_TOO_LARGE, ERR_TOO_MANY_SELECTIONS, ERR_UNKNOWN_SELECTION,
-    Ficha, FichaId, MAX_ID_LEN, MAX_SELECTED_STATEMENTS, MAX_SELECTION_OUTPUT_BYTES,
-    MAX_STATEMENT_CHARS, OfferedStatement, RenderedStatement, Statement, StatementId,
-    build_selection_grammar, offered_statements, validate_selection,
+    Ficha, FichaId, MAX_ID_LEN, MAX_SELECTED_STATEMENTS, MAX_SELECTION_IDS,
+    MAX_SELECTION_OUTPUT_BYTES, MAX_STATEMENT_CHARS, OfferedStatement, RenderedStatement,
+    Statement, StatementId, build_selection_grammar, offered_statements, validate_selection,
 };
 
 use crate::{
