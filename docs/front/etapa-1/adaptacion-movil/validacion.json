@@ -1,0 +1,2093 @@
+{
+  "profiles": [
+    {
+      "profile": "Samsung representative",
+      "bodyAspect": "0 0 180 432.1084",
+      "cards": [
+        {
+          "h": 84.78125,
+          "id": "vital-heart",
+          "overflow": false
+        },
+        {
+          "h": 88.671875,
+          "id": "vital-pressure",
+          "overflow": false
+        },
+        {
+          "h": 84.78125,
+          "id": "vital-oxygen",
+          "overflow": false
+        },
+        {
+          "h": 95.578125,
+          "id": "vital-mood",
+          "overflow": false
+        },
+        {
+          "h": 84.78125,
+          "id": "vital-temperature",
+          "overflow": false
+        },
+        {
+          "h": 88.671875,
+          "id": "vital-glucose",
+          "overflow": false
+        },
+        {
+          "h": 84.78125,
+          "id": "vital-sleep",
+          "overflow": false
+        },
+        {
+          "h": 95.578125,
+          "id": "vital-nutrition",
+          "overflow": false
+        }
+      ],
+      "page": [
+        360,
+        800
+      ],
+      "parts": {
+        "#body-map": {
+          "bottom": 518,
+          "height": 302.8125,
+          "width": 111.59375,
+          "x": 124.203125,
+          "y": 215.1875
+        },
+        ".app-header": {
+          "bottom": 106,
+          "height": 54,
+          "width": 336,
+          "x": 12,
+          "y": 52
+        },
+        ".body-center": {
+          "bottom": 584,
+          "height": 368.8125,
+          "width": 111.59375,
+          "x": 124.203125,
+          "y": 215.1875
+        },
+        ".body-stage": {
+          "bottom": 591,
+          "height": 382.8125,
+          "width": 336,
+          "x": 12,
+          "y": 208.1875
+        },
+        ".context-grid": {
+          "bottom": 684,
+          "height": 64,
+          "width": 336,
+          "x": 12,
+          "y": 620
+        },
+        ".overall-box": {
+          "bottom": 200.1875,
+          "height": 55,
+          "width": 336,
+          "x": 12,
+          "y": 145.1875
+        },
+        ".overview-heading": {
+          "bottom": 137.1875,
+          "height": 31.1875,
+          "width": 336,
+          "x": 12,
+          "y": 106
+        },
+        ".preview-banner": {
+          "bottom": 52,
+          "height": 46,
+          "width": 336,
+          "x": 12,
+          "y": 6
+        },
+        ".screen-pagination": {
+          "bottom": 794,
+          "height": 44,
+          "width": 336,
+          "x": 12,
+          "y": 750
+        },
+        ".source-line": {
+          "bottom": 612,
+          "height": 13,
+          "width": 336,
+          "x": 12,
+          "y": 599
+        },
+        ".voice-entry": {
+          "bottom": 748,
+          "height": 56,
+          "width": 336,
+          "x": 12,
+          "y": 692
+        }
+      },
+      "readings": [
+        {
+          "font": "22px",
+          "text": "72"
+        },
+        {
+          "font": "16px",
+          "text": "118 / 76"
+        },
+        {
+          "font": "22px",
+          "text": "98"
+        },
+        {
+          "font": "22px",
+          "text": "Calm"
+        },
+        {
+          "font": "22px",
+          "text": "36.7"
+        },
+        {
+          "font": "22px",
+          "text": "95"
+        },
+        {
+          "font": "22px",
+          "text": "7.5"
+        },
+        {
+          "font": "22px",
+          "text": "2,100"
+        }
+      ],
+      "viewport": [
+        360,
+        800
+      ],
+      "controls": [
+        {
+          "bottom": 98,
+          "clipped": false,
+          "height": 44,
+          "id": "Merken home",
+          "width": 97.140625
+        },
+        {
+          "bottom": 98,
+          "clipped": false,
+          "height": 44,
+          "id": "crew-open",
+          "width": 106.78125
+        },
+        {
+          "bottom": 98,
+          "clipped": false,
+          "height": 44,
+          "id": "help-open",
+          "width": 83.078125
+        },
+        {
+          "bottom": 299.96875,
+          "clipped": false,
+          "height": 84.78125,
+          "id": "vital-heart",
+          "width": 100.203125
+        },
+        {
+          "bottom": 393.640625,
+          "clipped": false,
+          "height": 88.671875,
+          "id": "vital-pressure",
+          "width": 100.203125
+        },
+        {
+          "bottom": 483.421875,
+          "clipped": false,
+          "height": 84.78125,
+          "id": "vital-oxygen",
+          "width": 100.203125
+        },
+        {
+          "bottom": 584,
+          "clipped": false,
+          "height": 95.578125,
+          "id": "vital-mood",
+          "width": 100.203125
+        },
+        {
+          "bottom": 584,
+          "clipped": false,
+          "height": 44,
+          "id": "zones-open",
+          "width": 111.59375
+        },
+        {
+          "bottom": 299.96875,
+          "clipped": false,
+          "height": 84.78125,
+          "id": "vital-temperature",
+          "width": 100.203125
+        },
+        {
+          "bottom": 393.640625,
+          "clipped": false,
+          "height": 88.671875,
+          "id": "vital-glucose",
+          "width": 100.203125
+        },
+        {
+          "bottom": 483.421875,
+          "clipped": false,
+          "height": 84.78125,
+          "id": "vital-sleep",
+          "width": 100.203125
+        },
+        {
+          "bottom": 584,
+          "clipped": false,
+          "height": 95.578125,
+          "id": "vital-nutrition",
+          "width": 100.203125
+        },
+        {
+          "bottom": 680,
+          "clipped": false,
+          "height": 56,
+          "id": "vital-radiation",
+          "width": 109.328125
+        },
+        {
+          "bottom": 680,
+          "clipped": false,
+          "height": 56,
+          "id": "vital-distance",
+          "width": 109.328125
+        },
+        {
+          "bottom": 680,
+          "clipped": false,
+          "height": 56,
+          "id": "sync-open",
+          "width": 109.34375
+        },
+        {
+          "bottom": 748,
+          "clipped": false,
+          "height": 56,
+          "id": "talk-hold",
+          "width": 259.265625
+        },
+        {
+          "bottom": 748,
+          "clipped": false,
+          "height": 56,
+          "id": "manual-open",
+          "width": 68.734375
+        },
+        {
+          "bottom": 794,
+          "clipped": false,
+          "height": 44,
+          "id": "Health overview",
+          "width": 44
+        },
+        {
+          "bottom": 794,
+          "clipped": false,
+          "height": 44,
+          "id": "History / On-device record",
+          "width": 44
+        }
+      ]
+    },
+    {
+      "profile": "Pixel representative",
+      "bodyAspect": "0 0 180 432.1084",
+      "cards": [
+        {
+          "h": 115.84375,
+          "id": "vital-heart",
+          "overflow": false
+        },
+        {
+          "h": 121.234375,
+          "id": "vital-pressure",
+          "overflow": false
+        },
+        {
+          "h": 115.859375,
+          "id": "vital-oxygen",
+          "overflow": false
+        },
+        {
+          "h": 115.875,
+          "id": "vital-mood",
+          "overflow": false
+        },
+        {
+          "h": 115.84375,
+          "id": "vital-temperature",
+          "overflow": false
+        },
+        {
+          "h": 121.234375,
+          "id": "vital-glucose",
+          "overflow": false
+        },
+        {
+          "h": 115.859375,
+          "id": "vital-sleep",
+          "overflow": false
+        },
+        {
+          "h": 115.875,
+          "id": "vital-nutrition",
+          "overflow": false
+        }
+      ],
+      "page": [
+        412,
+        915
+      ],
+      "parts": {
+        "#body-map": {
+          "bottom": 633,
+          "height": 417.8125,
+          "width": 127.71875,
+          "x": 142.140625,
+          "y": 215.1875
+        },
+        ".app-header": {
+          "bottom": 106,
+          "height": 54,
+          "width": 388,
+          "x": 12,
+          "y": 52
+        },
+        ".body-center": {
+          "bottom": 699,
+          "height": 483.8125,
+          "width": 127.71875,
+          "x": 142.140625,
+          "y": 215.1875
+        },
+        ".body-stage": {
+          "bottom": 706,
+          "height": 497.8125,
+          "width": 388,
+          "x": 12,
+          "y": 208.1875
+        },
+        ".context-grid": {
+          "bottom": 799,
+          "height": 64,
+          "width": 388,
+          "x": 12,
+          "y": 735
+        },
+        ".overall-box": {
+          "bottom": 200.1875,
+          "height": 55,
+          "width": 388,
+          "x": 12,
+          "y": 145.1875
+        },
+        ".overview-heading": {
+          "bottom": 137.1875,
+          "height": 31.1875,
+          "width": 388,
+          "x": 12,
+          "y": 106
+        },
+        ".preview-banner": {
+          "bottom": 52,
+          "height": 46,
+          "width": 388,
+          "x": 12,
+          "y": 6
+        },
+        ".screen-pagination": {
+          "bottom": 909,
+          "height": 44,
+          "width": 388,
+          "x": 12,
+          "y": 865
+        },
+        ".source-line": {
+          "bottom": 727,
+          "height": 13,
+          "width": 388,
+          "x": 12,
+          "y": 714
+        },
+        ".voice-entry": {
+          "bottom": 863,
+          "height": 56,
+          "width": 388,
+          "x": 12,
+          "y": 807
+        }
+      },
+      "readings": [
+        {
+          "font": "23.896px",
+          "text": "72"
+        },
+        {
+          "font": "17.304px",
+          "text": "118 / 76"
+        },
+        {
+          "font": "23.896px",
+          "text": "98"
+        },
+        {
+          "font": "23.896px",
+          "text": "Calm"
+        },
+        {
+          "font": "23.896px",
+          "text": "36.7"
+        },
+        {
+          "font": "23.896px",
+          "text": "95"
+        },
+        {
+          "font": "23.896px",
+          "text": "7.5"
+        },
+        {
+          "font": "23.896px",
+          "text": "2,100"
+        }
+      ],
+      "viewport": [
+        412,
+        915
+      ],
+      "controls": [
+        {
+          "bottom": 98,
+          "clipped": false,
+          "height": 44,
+          "id": "Merken home",
+          "width": 97.140625
+        },
+        {
+          "bottom": 98,
+          "clipped": false,
+          "height": 44,
+          "id": "crew-open",
+          "width": 106.78125
+        },
+        {
+          "bottom": 98,
+          "clipped": false,
+          "height": 44,
+          "id": "help-open",
+          "width": 83.078125
+        },
+        {
+          "bottom": 331.03125,
+          "clipped": false,
+          "height": 115.84375,
+          "id": "vital-heart",
+          "width": 118.140625
+        },
+        {
+          "bottom": 457.265625,
+          "clipped": false,
+          "height": 121.234375,
+          "id": "vital-pressure",
+          "width": 118.140625
+        },
+        {
+          "bottom": 578.125,
+          "clipped": false,
+          "height": 115.859375,
+          "id": "vital-oxygen",
+          "width": 118.140625
+        },
+        {
+          "bottom": 699,
+          "clipped": false,
+          "height": 115.875,
+          "id": "vital-mood",
+          "width": 118.140625
+        },
+        {
+          "bottom": 699,
+          "clipped": false,
+          "height": 44,
+          "id": "zones-open",
+          "width": 127.71875
+        },
+        {
+          "bottom": 331.03125,
+          "clipped": false,
+          "height": 115.84375,
+          "id": "vital-temperature",
+          "width": 118.140625
+        },
+        {
+          "bottom": 457.265625,
+          "clipped": false,
+          "height": 121.234375,
+          "id": "vital-glucose",
+          "width": 118.140625
+        },
+        {
+          "bottom": 578.125,
+          "clipped": false,
+          "height": 115.859375,
+          "id": "vital-sleep",
+          "width": 118.140625
+        },
+        {
+          "bottom": 699,
+          "clipped": false,
+          "height": 115.875,
+          "id": "vital-nutrition",
+          "width": 118.140625
+        },
+        {
+          "bottom": 795,
+          "clipped": false,
+          "height": 56,
+          "id": "vital-radiation",
+          "width": 126.65625
+        },
+        {
+          "bottom": 795,
+          "clipped": false,
+          "height": 56,
+          "id": "vital-distance",
+          "width": 126.671875
+        },
+        {
+          "bottom": 795,
+          "clipped": false,
+          "height": 56,
+          "id": "sync-open",
+          "width": 126.65625
+        },
+        {
+          "bottom": 863,
+          "clipped": false,
+          "height": 56,
+          "id": "talk-hold",
+          "width": 311.265625
+        },
+        {
+          "bottom": 863,
+          "clipped": false,
+          "height": 56,
+          "id": "manual-open",
+          "width": 68.734375
+        },
+        {
+          "bottom": 909,
+          "clipped": false,
+          "height": 44,
+          "id": "Health overview",
+          "width": 44
+        },
+        {
+          "bottom": 909,
+          "clipped": false,
+          "height": 44,
+          "id": "History / On-device record",
+          "width": 44
+        }
+      ]
+    },
+    {
+      "profile": "iPhone Pro Max representative",
+      "bodyAspect": "0 0 180 432.1084",
+      "cards": [
+        {
+          "h": 121.4375,
+          "id": "vital-heart",
+          "overflow": false
+        },
+        {
+          "h": 121.453125,
+          "id": "vital-pressure",
+          "overflow": false
+        },
+        {
+          "h": 121.453125,
+          "id": "vital-oxygen",
+          "overflow": false
+        },
+        {
+          "h": 121.46875,
+          "id": "vital-mood",
+          "overflow": false
+        },
+        {
+          "h": 121.4375,
+          "id": "vital-temperature",
+          "overflow": false
+        },
+        {
+          "h": 121.453125,
+          "id": "vital-glucose",
+          "overflow": false
+        },
+        {
+          "h": 121.453125,
+          "id": "vital-sleep",
+          "overflow": false
+        },
+        {
+          "h": 121.46875,
+          "id": "vital-nutrition",
+          "overflow": false
+        }
+      ],
+      "page": [
+        430,
+        932
+      ],
+      "parts": {
+        "#body-map": {
+          "bottom": 650,
+          "height": 434.8125,
+          "width": 133.296875,
+          "x": 148.34375,
+          "y": 215.1875
+        },
+        ".app-header": {
+          "bottom": 106,
+          "height": 54,
+          "width": 406,
+          "x": 12,
+          "y": 52
+        },
+        ".body-center": {
+          "bottom": 716,
+          "height": 500.8125,
+          "width": 133.296875,
+          "x": 148.34375,
+          "y": 215.1875
+        },
+        ".body-stage": {
+          "bottom": 723,
+          "height": 514.8125,
+          "width": 406,
+          "x": 12,
+          "y": 208.1875
+        },
+        ".context-grid": {
+          "bottom": 816,
+          "height": 64,
+          "width": 406,
+          "x": 12,
+          "y": 752
+        },
+        ".overall-box": {
+          "bottom": 200.1875,
+          "height": 55,
+          "width": 406,
+          "x": 12,
+          "y": 145.1875
+        },
+        ".overview-heading": {
+          "bottom": 137.1875,
+          "height": 31.1875,
+          "width": 406,
+          "x": 12,
+          "y": 106
+        },
+        ".preview-banner": {
+          "bottom": 52,
+          "height": 46,
+          "width": 406,
+          "x": 12,
+          "y": 6
+        },
+        ".screen-pagination": {
+          "bottom": 926,
+          "height": 44,
+          "width": 406,
+          "x": 12,
+          "y": 882
+        },
+        ".source-line": {
+          "bottom": 744,
+          "height": 13,
+          "width": 406,
+          "x": 12,
+          "y": 731
+        },
+        ".voice-entry": {
+          "bottom": 880,
+          "height": 56,
+          "width": 406,
+          "x": 12,
+          "y": 824
+        }
+      },
+      "readings": [
+        {
+          "font": "24.94px",
+          "text": "72"
+        },
+        {
+          "font": "18px",
+          "text": "118 / 76"
+        },
+        {
+          "font": "24.94px",
+          "text": "98"
+        },
+        {
+          "font": "24.94px",
+          "text": "Calm"
+        },
+        {
+          "font": "24.94px",
+          "text": "36.7"
+        },
+        {
+          "font": "24.94px",
+          "text": "95"
+        },
+        {
+          "font": "24.94px",
+          "text": "7.5"
+        },
+        {
+          "font": "24.94px",
+          "text": "2,100"
+        }
+      ],
+      "viewport": [
+        430,
+        932
+      ],
+      "controls": [
+        {
+          "bottom": 98,
+          "clipped": false,
+          "height": 44,
+          "id": "Merken home",
+          "width": 97.140625
+        },
+        {
+          "bottom": 98,
+          "clipped": false,
+          "height": 44,
+          "id": "crew-open",
+          "width": 106.78125
+        },
+        {
+          "bottom": 98,
+          "clipped": false,
+          "height": 44,
+          "id": "help-open",
+          "width": 83.078125
+        },
+        {
+          "bottom": 336.625,
+          "clipped": false,
+          "height": 121.4375,
+          "id": "vital-heart",
+          "width": 124.34375
+        },
+        {
+          "bottom": 463.078125,
+          "clipped": false,
+          "height": 121.453125,
+          "id": "vital-pressure",
+          "width": 124.34375
+        },
+        {
+          "bottom": 589.53125,
+          "clipped": false,
+          "height": 121.453125,
+          "id": "vital-oxygen",
+          "width": 124.34375
+        },
+        {
+          "bottom": 716,
+          "clipped": false,
+          "height": 121.46875,
+          "id": "vital-mood",
+          "width": 124.34375
+        },
+        {
+          "bottom": 716,
+          "clipped": false,
+          "height": 44,
+          "id": "zones-open",
+          "width": 133.296875
+        },
+        {
+          "bottom": 336.625,
+          "clipped": false,
+          "height": 121.4375,
+          "id": "vital-temperature",
+          "width": 124.359375
+        },
+        {
+          "bottom": 463.078125,
+          "clipped": false,
+          "height": 121.453125,
+          "id": "vital-glucose",
+          "width": 124.359375
+        },
+        {
+          "bottom": 589.53125,
+          "clipped": false,
+          "height": 121.453125,
+          "id": "vital-sleep",
+          "width": 124.359375
+        },
+        {
+          "bottom": 716,
+          "clipped": false,
+          "height": 121.46875,
+          "id": "vital-nutrition",
+          "width": 124.359375
+        },
+        {
+          "bottom": 812,
+          "clipped": false,
+          "height": 56,
+          "id": "vital-radiation",
+          "width": 132.65625
+        },
+        {
+          "bottom": 812,
+          "clipped": false,
+          "height": 56,
+          "id": "vital-distance",
+          "width": 132.671875
+        },
+        {
+          "bottom": 812,
+          "clipped": false,
+          "height": 56,
+          "id": "sync-open",
+          "width": 132.671875
+        },
+        {
+          "bottom": 880,
+          "clipped": false,
+          "height": 56,
+          "id": "talk-hold",
+          "width": 329.265625
+        },
+        {
+          "bottom": 880,
+          "clipped": false,
+          "height": 56,
+          "id": "manual-open",
+          "width": 68.734375
+        },
+        {
+          "bottom": 926,
+          "clipped": false,
+          "height": 44,
+          "id": "Health overview",
+          "width": 44
+        },
+        {
+          "bottom": 926,
+          "clipped": false,
+          "height": 44,
+          "id": "History / On-device record",
+          "width": 44
+        }
+      ]
+    }
+  ],
+  "checks": {
+    "zoneCount": 14,
+    "backSelection": "Back · No linked card",
+    "moodDetail": "DEMO crew · A. MorganCalm Self-reported · Not evaluatedSelf-reportedFixed synthetic sample. Not a live measurement.Navigation zone: Head. This link does not indicate a symptom.On-device evaluationLocal service unavailable. Open the Merken app to view recorded history.",
+    "manualVisible": null,
+    "historyVisible": null,
+    "chest": "Chest · 2 linked readings",
+    "chestStyle": {
+      "outline": "none",
+      "pressed": "true",
+      "stroke": "none"
+    },
+    "androidInsets": {
+      "bodyAspect": "0 0 180 432.1084",
+      "cards": [
+        {
+          "h": 87.28125,
+          "id": "vital-heart",
+          "overflow": false
+        },
+        {
+          "h": 91.171875,
+          "id": "vital-pressure",
+          "overflow": false
+        },
+        {
+          "h": 87.28125,
+          "id": "vital-oxygen",
+          "overflow": false
+        },
+        {
+          "h": 98.078125,
+          "id": "vital-mood",
+          "overflow": false
+        },
+        {
+          "h": 87.28125,
+          "id": "vital-temperature",
+          "overflow": false
+        },
+        {
+          "h": 91.171875,
+          "id": "vital-glucose",
+          "overflow": false
+        },
+        {
+          "h": 87.28125,
+          "id": "vital-sleep",
+          "overflow": false
+        },
+        {
+          "h": 98.078125,
+          "id": "vital-nutrition",
+          "overflow": false
+        }
+      ],
+      "page": [
+        360,
+        800
+      ],
+      "parts": {
+        "#body-map": {
+          "bottom": 486,
+          "height": 298.8125,
+          "width": 111.59375,
+          "x": 124.203125,
+          "y": 187.1875
+        },
+        ".app-header": {
+          "bottom": 78,
+          "height": 54,
+          "width": 336,
+          "x": 12,
+          "y": 24
+        },
+        ".body-center": {
+          "bottom": 566,
+          "height": 378.8125,
+          "width": 111.59375,
+          "x": 124.203125,
+          "y": 187.1875
+        },
+        ".body-stage": {
+          "bottom": 573,
+          "height": 392.8125,
+          "width": 336,
+          "x": 12,
+          "y": 180.1875
+        },
+        ".context-grid": {
+          "bottom": 666,
+          "height": 64,
+          "width": 336,
+          "x": 12,
+          "y": 602
+        },
+        ".overall-box": {
+          "bottom": 172.1875,
+          "height": 55,
+          "width": 336,
+          "x": 12,
+          "y": 117.1875
+        },
+        ".overview-heading": {
+          "bottom": 109.1875,
+          "height": 31.1875,
+          "width": 336,
+          "x": 12,
+          "y": 78
+        },
+        ".preview-banner": {
+          "bottom": 0,
+          "height": 0,
+          "width": 0,
+          "x": 0,
+          "y": 0
+        },
+        ".screen-pagination": {
+          "bottom": 776,
+          "height": 44,
+          "width": 336,
+          "x": 12,
+          "y": 732
+        },
+        ".source-line": {
+          "bottom": 594,
+          "height": 13,
+          "width": 336,
+          "x": 12,
+          "y": 581
+        },
+        ".voice-entry": {
+          "bottom": 730,
+          "height": 56,
+          "width": 336,
+          "x": 12,
+          "y": 674
+        }
+      },
+      "readings": [
+        {
+          "font": "22px",
+          "text": "72"
+        },
+        {
+          "font": "16px",
+          "text": "118 / 76"
+        },
+        {
+          "font": "22px",
+          "text": "98"
+        },
+        {
+          "font": "22px",
+          "text": "Calm"
+        },
+        {
+          "font": "22px",
+          "text": "36.7"
+        },
+        {
+          "font": "22px",
+          "text": "95"
+        },
+        {
+          "font": "22px",
+          "text": "7.5"
+        },
+        {
+          "font": "22px",
+          "text": "2,100"
+        }
+      ],
+      "viewport": [
+        360,
+        800
+      ]
+    },
+    "iphoneInsets": {
+      "bodyAspect": "0 0 180 432.1084",
+      "cards": [
+        {
+          "h": 112.6875,
+          "id": "vital-heart",
+          "overflow": false
+        },
+        {
+          "h": 112.703125,
+          "id": "vital-pressure",
+          "overflow": false
+        },
+        {
+          "h": 112.703125,
+          "id": "vital-oxygen",
+          "overflow": false
+        },
+        {
+          "h": 112.71875,
+          "id": "vital-mood",
+          "overflow": false
+        },
+        {
+          "h": 112.6875,
+          "id": "vital-temperature",
+          "overflow": false
+        },
+        {
+          "h": 112.703125,
+          "id": "vital-glucose",
+          "overflow": false
+        },
+        {
+          "h": 112.703125,
+          "id": "vital-sleep",
+          "overflow": false
+        },
+        {
+          "h": 112.71875,
+          "id": "vital-nutrition",
+          "overflow": false
+        }
+      ],
+      "page": [
+        430,
+        932
+      ],
+      "parts": {
+        "#body-map": {
+          "bottom": 622,
+          "height": 399.8125,
+          "width": 133.296875,
+          "x": 148.34375,
+          "y": 222.1875
+        },
+        ".app-header": {
+          "bottom": 113,
+          "height": 54,
+          "width": 406,
+          "x": 12,
+          "y": 59
+        },
+        ".body-center": {
+          "bottom": 688,
+          "height": 465.8125,
+          "width": 133.296875,
+          "x": 148.34375,
+          "y": 222.1875
+        },
+        ".body-stage": {
+          "bottom": 695,
+          "height": 479.8125,
+          "width": 406,
+          "x": 12,
+          "y": 215.1875
+        },
+        ".context-grid": {
+          "bottom": 788,
+          "height": 64,
+          "width": 406,
+          "x": 12,
+          "y": 724
+        },
+        ".overall-box": {
+          "bottom": 207.1875,
+          "height": 55,
+          "width": 406,
+          "x": 12,
+          "y": 152.1875
+        },
+        ".overview-heading": {
+          "bottom": 144.1875,
+          "height": 31.1875,
+          "width": 406,
+          "x": 12,
+          "y": 113
+        },
+        ".preview-banner": {
+          "bottom": 0,
+          "height": 0,
+          "width": 0,
+          "x": 0,
+          "y": 0
+        },
+        ".screen-pagination": {
+          "bottom": 898,
+          "height": 44,
+          "width": 406,
+          "x": 12,
+          "y": 854
+        },
+        ".source-line": {
+          "bottom": 716,
+          "height": 13,
+          "width": 406,
+          "x": 12,
+          "y": 703
+        },
+        ".voice-entry": {
+          "bottom": 852,
+          "height": 56,
+          "width": 406,
+          "x": 12,
+          "y": 796
+        }
+      },
+      "readings": [
+        {
+          "font": "24.94px",
+          "text": "72"
+        },
+        {
+          "font": "18px",
+          "text": "118 / 76"
+        },
+        {
+          "font": "24.94px",
+          "text": "98"
+        },
+        {
+          "font": "24.94px",
+          "text": "Calm"
+        },
+        {
+          "font": "24.94px",
+          "text": "36.7"
+        },
+        {
+          "font": "24.94px",
+          "text": "95"
+        },
+        {
+          "font": "24.94px",
+          "text": "7.5"
+        },
+        {
+          "font": "24.94px",
+          "text": "2,100"
+        }
+      ],
+      "viewport": [
+        430,
+        932
+      ]
+    },
+    "largeText": {
+      "bodyAspect": "0 0 180 432.1084",
+      "cards": [
+        {
+          "h": 160,
+          "id": "vital-heart",
+          "overflow": false
+        },
+        {
+          "h": 160,
+          "id": "vital-pressure",
+          "overflow": false
+        },
+        {
+          "h": 160,
+          "id": "vital-oxygen",
+          "overflow": false
+        },
+        {
+          "h": 160,
+          "id": "vital-mood",
+          "overflow": false
+        },
+        {
+          "h": 160,
+          "id": "vital-temperature",
+          "overflow": false
+        },
+        {
+          "h": 160,
+          "id": "vital-glucose",
+          "overflow": false
+        },
+        {
+          "h": 160,
+          "id": "vital-sleep",
+          "overflow": false
+        },
+        {
+          "h": 160,
+          "id": "vital-nutrition",
+          "overflow": false
+        }
+      ],
+      "page": [
+        345,
+        1881
+      ],
+      "parts": {
+        "#body-map": {
+          "bottom": 658.390625,
+          "height": 288,
+          "width": 120,
+          "x": 112.5,
+          "y": 370.390625
+        },
+        ".app-header": {
+          "bottom": 130,
+          "height": 124,
+          "width": 321,
+          "x": 12,
+          "y": 6
+        },
+        ".body-center": {
+          "bottom": 738.390625,
+          "height": 368,
+          "width": 307,
+          "x": 19,
+          "y": 370.390625
+        },
+        ".body-stage": {
+          "bottom": 1405.390625,
+          "height": 1042,
+          "width": 321,
+          "x": 12,
+          "y": 363.390625
+        },
+        ".context-grid": {
+          "bottom": 1694.578125,
+          "height": 221.1875,
+          "width": 321,
+          "x": 12,
+          "y": 1473.390625
+        },
+        ".overall-box": {
+          "bottom": 355.390625,
+          "height": 155,
+          "width": 321,
+          "x": 12,
+          "y": 200.390625
+        },
+        ".overview-heading": {
+          "bottom": 192.390625,
+          "height": 62.390625,
+          "width": 321,
+          "x": 12,
+          "y": 130
+        },
+        ".preview-banner": {
+          "bottom": 0,
+          "height": 0,
+          "width": 0,
+          "x": 0,
+          "y": 0
+        },
+        ".screen-pagination": {
+          "bottom": 1875.359375,
+          "height": 44,
+          "width": 321,
+          "x": 12,
+          "y": 1831.359375
+        },
+        ".source-line": {
+          "bottom": 1465.390625,
+          "height": 52,
+          "width": 321,
+          "x": 12,
+          "y": 1413.390625
+        },
+        ".voice-entry": {
+          "bottom": 1829.359375,
+          "height": 126.78125,
+          "width": 321,
+          "x": 12,
+          "y": 1702.578125
+        }
+      },
+      "readings": [
+        {
+          "font": "44px",
+          "text": "72"
+        },
+        {
+          "font": "32px",
+          "text": "118 / 76"
+        },
+        {
+          "font": "44px",
+          "text": "98"
+        },
+        {
+          "font": "44px",
+          "text": "Calm"
+        },
+        {
+          "font": "44px",
+          "text": "36.7"
+        },
+        {
+          "font": "44px",
+          "text": "95"
+        },
+        {
+          "font": "44px",
+          "text": "7.5"
+        },
+        {
+          "font": "44px",
+          "text": "2,100"
+        }
+      ],
+      "viewport": [
+        360,
+        800
+      ],
+      "clipping": []
+    },
+    "pixelInsets": {
+      "bodyAspect": "0 0 180 432.1084",
+      "cards": [
+        {
+          "h": 118.34375,
+          "id": "vital-heart",
+          "overflow": false
+        },
+        {
+          "h": 123.734375,
+          "id": "vital-pressure",
+          "overflow": false
+        },
+        {
+          "h": 118.359375,
+          "id": "vital-oxygen",
+          "overflow": false
+        },
+        {
+          "h": 118.375,
+          "id": "vital-mood",
+          "overflow": false
+        },
+        {
+          "h": 118.34375,
+          "id": "vital-temperature",
+          "overflow": false
+        },
+        {
+          "h": 123.734375,
+          "id": "vital-glucose",
+          "overflow": false
+        },
+        {
+          "h": 118.359375,
+          "id": "vital-sleep",
+          "overflow": false
+        },
+        {
+          "h": 118.375,
+          "id": "vital-nutrition",
+          "overflow": false
+        }
+      ],
+      "page": [
+        412,
+        915
+      ],
+      "parts": {
+        "#body-map": {
+          "bottom": 615,
+          "height": 427.8125,
+          "width": 127.71875,
+          "x": 142.140625,
+          "y": 187.1875
+        },
+        ".app-header": {
+          "bottom": 78,
+          "height": 54,
+          "width": 388,
+          "x": 12,
+          "y": 24
+        },
+        ".body-center": {
+          "bottom": 681,
+          "height": 493.8125,
+          "width": 127.71875,
+          "x": 142.140625,
+          "y": 187.1875
+        },
+        ".body-stage": {
+          "bottom": 688,
+          "height": 507.8125,
+          "width": 388,
+          "x": 12,
+          "y": 180.1875
+        },
+        ".context-grid": {
+          "bottom": 781,
+          "height": 64,
+          "width": 388,
+          "x": 12,
+          "y": 717
+        },
+        ".overall-box": {
+          "bottom": 172.1875,
+          "height": 55,
+          "width": 388,
+          "x": 12,
+          "y": 117.1875
+        },
+        ".overview-heading": {
+          "bottom": 109.1875,
+          "height": 31.1875,
+          "width": 388,
+          "x": 12,
+          "y": 78
+        },
+        ".preview-banner": {
+          "bottom": 0,
+          "height": 0,
+          "width": 0,
+          "x": 0,
+          "y": 0
+        },
+        ".screen-pagination": {
+          "bottom": 891,
+          "height": 44,
+          "width": 388,
+          "x": 12,
+          "y": 847
+        },
+        ".source-line": {
+          "bottom": 709,
+          "height": 13,
+          "width": 388,
+          "x": 12,
+          "y": 696
+        },
+        ".voice-entry": {
+          "bottom": 845,
+          "height": 56,
+          "width": 388,
+          "x": 12,
+          "y": 789
+        }
+      },
+      "readings": [
+        {
+          "font": "23.896px",
+          "text": "72"
+        },
+        {
+          "font": "17.304px",
+          "text": "118 / 76"
+        },
+        {
+          "font": "23.896px",
+          "text": "98"
+        },
+        {
+          "font": "23.896px",
+          "text": "Calm"
+        },
+        {
+          "font": "23.896px",
+          "text": "36.7"
+        },
+        {
+          "font": "23.896px",
+          "text": "95"
+        },
+        {
+          "font": "23.896px",
+          "text": "7.5"
+        },
+        {
+          "font": "23.896px",
+          "text": "2,100"
+        }
+      ],
+      "viewport": [
+        412,
+        915
+      ]
+    },
+    "smallScreen": {
+      "bodyAspect": "0 0 180 432.1084",
+      "cards": [
+        {
+          "h": 80,
+          "id": "vital-heart",
+          "overflow": false
+        },
+        {
+          "h": 80,
+          "id": "vital-pressure",
+          "overflow": false
+        },
+        {
+          "h": 80,
+          "id": "vital-oxygen",
+          "overflow": false
+        },
+        {
+          "h": 80,
+          "id": "vital-mood",
+          "overflow": false
+        },
+        {
+          "h": 80,
+          "id": "vital-temperature",
+          "overflow": false
+        },
+        {
+          "h": 80,
+          "id": "vital-glucose",
+          "overflow": false
+        },
+        {
+          "h": 80,
+          "id": "vital-sleep",
+          "overflow": false
+        },
+        {
+          "h": 80,
+          "id": "vital-nutrition",
+          "overflow": false
+        }
+      ],
+      "page": [
+        305,
+        1360
+      ],
+      "parts": {
+        "#body-map": {
+          "bottom": 574.1875,
+          "height": 288,
+          "width": 120,
+          "x": 92.5,
+          "y": 286.1875
+        },
+        ".app-header": {
+          "bottom": 158,
+          "height": 106,
+          "width": 281,
+          "x": 12,
+          "y": 52
+        },
+        ".body-center": {
+          "bottom": 640.1875,
+          "height": 354,
+          "width": 267,
+          "x": 19,
+          "y": 286.1875
+        },
+        ".body-stage": {
+          "bottom": 987.1875,
+          "height": 708,
+          "width": 281,
+          "x": 12,
+          "y": 279.1875
+        },
+        ".context-grid": {
+          "bottom": 1192.1875,
+          "height": 176,
+          "width": 281,
+          "x": 12,
+          "y": 1016.1875
+        },
+        ".overall-box": {
+          "bottom": 271.1875,
+          "height": 74,
+          "width": 281,
+          "x": 12,
+          "y": 197.1875
+        },
+        ".overview-heading": {
+          "bottom": 189.1875,
+          "height": 31.1875,
+          "width": 281,
+          "x": 12,
+          "y": 158
+        },
+        ".preview-banner": {
+          "bottom": 52,
+          "height": 46,
+          "width": 281,
+          "x": 12,
+          "y": 6
+        },
+        ".screen-pagination": {
+          "bottom": 1354.1875,
+          "height": 44,
+          "width": 281,
+          "x": 12,
+          "y": 1310.1875
+        },
+        ".source-line": {
+          "bottom": 1008.1875,
+          "height": 13,
+          "width": 281,
+          "x": 12,
+          "y": 995.1875
+        },
+        ".voice-entry": {
+          "bottom": 1308.1875,
+          "height": 108,
+          "width": 281,
+          "x": 12,
+          "y": 1200.1875
+        }
+      },
+      "readings": [
+        {
+          "font": "22px",
+          "text": "72"
+        },
+        {
+          "font": "16px",
+          "text": "118 / 76"
+        },
+        {
+          "font": "22px",
+          "text": "98"
+        },
+        {
+          "font": "22px",
+          "text": "Calm"
+        },
+        {
+          "font": "22px",
+          "text": "36.7"
+        },
+        {
+          "font": "22px",
+          "text": "95"
+        },
+        {
+          "font": "22px",
+          "text": "7.5"
+        },
+        {
+          "font": "22px",
+          "text": "2,100"
+        }
+      ],
+      "viewport": [
+        320,
+        568
+      ],
+      "clipping": []
+    },
+    "longAlarm": {
+      "bodyAspect": "0 0 180 432.1084",
+      "cards": [
+        {
+          "h": 92.5,
+          "id": "vital-heart",
+          "overflow": false
+        },
+        {
+          "h": 86.09375,
+          "id": "vital-pressure",
+          "overflow": false
+        },
+        {
+          "h": 82.203125,
+          "id": "vital-oxygen",
+          "overflow": false
+        },
+        {
+          "h": 93.015625,
+          "id": "vital-mood",
+          "overflow": false
+        },
+        {
+          "h": 92.5,
+          "id": "vital-temperature",
+          "overflow": false
+        },
+        {
+          "h": 86.09375,
+          "id": "vital-glucose",
+          "overflow": false
+        },
+        {
+          "h": 82.203125,
+          "id": "vital-sleep",
+          "overflow": false
+        },
+        {
+          "h": 93.015625,
+          "id": "vital-nutrition",
+          "overflow": false
+        }
+      ],
+      "page": [
+        360,
+        800
+      ],
+      "parts": {
+        "#body-map": {
+          "bottom": 518,
+          "height": 302.8125,
+          "width": 111.59375,
+          "x": 124.203125,
+          "y": 215.1875
+        },
+        ".app-header": {
+          "bottom": 106,
+          "height": 54,
+          "width": 336,
+          "x": 12,
+          "y": 52
+        },
+        ".body-center": {
+          "bottom": 584,
+          "height": 368.8125,
+          "width": 111.59375,
+          "x": 124.203125,
+          "y": 215.1875
+        },
+        ".body-stage": {
+          "bottom": 591,
+          "height": 382.8125,
+          "width": 336,
+          "x": 12,
+          "y": 208.1875
+        },
+        ".context-grid": {
+          "bottom": 684,
+          "height": 64,
+          "width": 336,
+          "x": 12,
+          "y": 620
+        },
+        ".overall-box": {
+          "bottom": 200.1875,
+          "height": 55,
+          "width": 336,
+          "x": 12,
+          "y": 145.1875
+        },
+        ".overview-heading": {
+          "bottom": 137.1875,
+          "height": 31.1875,
+          "width": 336,
+          "x": 12,
+          "y": 106
+        },
+        ".preview-banner": {
+          "bottom": 52,
+          "height": 46,
+          "width": 336,
+          "x": 12,
+          "y": 6
+        },
+        ".screen-pagination": {
+          "bottom": 794,
+          "height": 44,
+          "width": 336,
+          "x": 12,
+          "y": 750
+        },
+        ".source-line": {
+          "bottom": 612,
+          "height": 13,
+          "width": 336,
+          "x": 12,
+          "y": 599
+        },
+        ".voice-entry": {
+          "bottom": 748,
+          "height": 56,
+          "width": 336,
+          "x": 12,
+          "y": 692
+        }
+      },
+      "readings": [
+        {
+          "font": "22px",
+          "text": "72"
+        },
+        {
+          "font": "16px",
+          "text": "118 / 76"
+        },
+        {
+          "font": "22px",
+          "text": "98"
+        },
+        {
+          "font": "22px",
+          "text": "Calm"
+        },
+        {
+          "font": "22px",
+          "text": "36.7"
+        },
+        {
+          "font": "22px",
+          "text": "95"
+        },
+        {
+          "font": "22px",
+          "text": "7.5"
+        },
+        {
+          "font": "22px",
+          "text": "2,100"
+        }
+      ],
+      "viewport": [
+        360,
+        800
+      ],
+      "message": "Notify flight surgeons"
+    },
+    "crewSwitch": {
+      "name": "J. Rivera",
+      "pulse": "78",
+      "compactMoodLabels": 1,
+      "metrics": {
+        "bodyAspect": "0 0 180 432.1084",
+        "cards": [
+          {
+            "h": 84.78125,
+            "id": "vital-heart",
+            "overflow": false
+          },
+          {
+            "h": 88.671875,
+            "id": "vital-pressure",
+            "overflow": false
+          },
+          {
+            "h": 84.78125,
+            "id": "vital-oxygen",
+            "overflow": false
+          },
+          {
+            "h": 95.578125,
+            "id": "vital-mood",
+            "overflow": false
+          },
+          {
+            "h": 84.78125,
+            "id": "vital-temperature",
+            "overflow": false
+          },
+          {
+            "h": 88.671875,
+            "id": "vital-glucose",
+            "overflow": false
+          },
+          {
+            "h": 84.78125,
+            "id": "vital-sleep",
+            "overflow": false
+          },
+          {
+            "h": 95.578125,
+            "id": "vital-nutrition",
+            "overflow": false
+          }
+        ],
+        "page": [
+          360,
+          800
+        ],
+        "parts": {
+          "#body-map": {
+            "bottom": 518,
+            "height": 302.8125,
+            "width": 111.59375,
+            "x": 124.203125,
+            "y": 215.1875
+          },
+          ".app-header": {
+            "bottom": 106,
+            "height": 54,
+            "width": 336,
+            "x": 12,
+            "y": 52
+          },
+          ".body-center": {
+            "bottom": 584,
+            "height": 368.8125,
+            "width": 111.59375,
+            "x": 124.203125,
+            "y": 215.1875
+          },
+          ".body-stage": {
+            "bottom": 591,
+            "height": 382.8125,
+            "width": 336,
+            "x": 12,
+            "y": 208.1875
+          },
+          ".context-grid": {
+            "bottom": 684,
+            "height": 64,
+            "width": 336,
+            "x": 12,
+            "y": 620
+          },
+          ".overall-box": {
+            "bottom": 200.1875,
+            "height": 55,
+            "width": 336,
+            "x": 12,
+            "y": 145.1875
+          },
+          ".overview-heading": {
+            "bottom": 137.1875,
+            "height": 31.1875,
+            "width": 336,
+            "x": 12,
+            "y": 106
+          },
+          ".preview-banner": {
+            "bottom": 52,
+            "height": 46,
+            "width": 336,
+            "x": 12,
+            "y": 6
+          },
+          ".screen-pagination": {
+            "bottom": 794,
+            "height": 44,
+            "width": 336,
+            "x": 12,
+            "y": 750
+          },
+          ".source-line": {
+            "bottom": 612,
+            "height": 13,
+            "width": 336,
+            "x": 12,
+            "y": 599
+          },
+          ".voice-entry": {
+            "bottom": 748,
+            "height": 56,
+            "width": 336,
+            "x": 12,
+            "y": 692
+          }
+        },
+        "readings": [
+          {
+            "font": "22px",
+            "text": "78"
+          },
+          {
+            "font": "16px",
+            "text": "122 / 80"
+          },
+          {
+            "font": "22px",
+            "text": "97"
+          },
+          {
+            "font": "22px",
+            "text": "Good"
+          },
+          {
+            "font": "22px",
+            "text": "36.6"
+          },
+          {
+            "font": "22px",
+            "text": "102"
+          },
+          {
+            "font": "22px",
+            "text": "8"
+          },
+          {
+            "font": "22px",
+            "text": "2,250"
+          }
+        ],
+        "viewport": [
+          360,
+          800
+        ]
+      }
+    }
+  }
+}

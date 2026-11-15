@@ -1,9 +1,14 @@
 //! Persistencia local y cola de sincronización.
 pub mod api;
 pub mod records;
+pub mod telemetry;
 
 pub use merken_seed::Scenario;
 pub use records::PulledChange;
+pub use telemetry::{
+    ListTelemetryInput, RecordTelemetryInput, RecordTelemetryResult, TelemetryItem,
+    TelemetryReadingInput, VerifyTelemetryResult,
+};
 
 use api::ProfileResponse;
 use merken_core::{ValidationError, time::Timestamp};
@@ -66,17 +71,19 @@ impl Store {
     pub fn open(path: &Path) -> Result<Self, StoreError> {
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
+        conn.pragma_update(None, "recursive_triggers", "ON")?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         Self::initialize(conn)
     }
     pub fn open_in_memory() -> Result<Self, StoreError> {
         let conn = Connection::open_in_memory()?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
+        conn.pragma_update(None, "recursive_triggers", "ON")?;
         Self::initialize(conn)
     }
     fn initialize(mut conn: Connection) -> Result<Self, StoreError> {
         let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if version > 3 {
+        if version > 5 {
             return Err(StoreError {
                 code: "invalid_schema".into(),
                 field: None,
@@ -117,6 +124,182 @@ PRAGMA user_version=1;")?;
                  WHERE state = 'pending' AND entity IN ('record', 'evaluation')
                    AND json_extract(payload_json, '$.indicator') = 'headache';
                  PRAGMA user_version=3;",
+            )?;
+            tx.commit()?;
+        }
+        if version <= 3 {
+            // v4: telemetría local append-only (no entra en outbox ni se limpia con DEMO).
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE IF NOT EXISTS telemetry_readings (
+                     reading_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     astronaut_key TEXT NOT NULL,
+                     astronaut_name TEXT NOT NULL,
+                     indicator TEXT NOT NULL,
+                     value_json TEXT NOT NULL,
+                     unit TEXT NOT NULL,
+                     observed_at INTEGER NOT NULL,
+                     batch_id TEXT NOT NULL,
+                     source TEXT NOT NULL,
+                     app_version TEXT NOT NULL,
+                     prev_hash TEXT NOT NULL,
+                     row_hash TEXT NOT NULL
+                 );
+                 CREATE INDEX IF NOT EXISTS telemetry_readings_series
+                     ON telemetry_readings(astronaut_key, indicator, observed_at);
+                 CREATE INDEX IF NOT EXISTS telemetry_readings_astronaut_time
+                     ON telemetry_readings(astronaut_key, observed_at, reading_id);
+                 CREATE INDEX IF NOT EXISTS telemetry_readings_chain
+                     ON telemetry_readings(astronaut_key, indicator, reading_id);
+                 CREATE INDEX IF NOT EXISTS telemetry_readings_astronaut_reading
+                     ON telemetry_readings(astronaut_key, reading_id);
+                 CREATE TRIGGER IF NOT EXISTS telemetry_readings_no_replace
+                     BEFORE INSERT ON telemetry_readings
+                     WHEN NEW.reading_id IS NOT NULL
+                      AND EXISTS (SELECT 1 FROM telemetry_readings WHERE reading_id = NEW.reading_id)
+                     BEGIN
+                         SELECT RAISE(ABORT, 'telemetry_readings is append-only');
+                     END;
+                 CREATE TRIGGER IF NOT EXISTS telemetry_readings_no_update
+                     BEFORE UPDATE ON telemetry_readings
+                     BEGIN
+                         SELECT RAISE(ABORT, 'telemetry_readings is append-only');
+                     END;
+                 CREATE TRIGGER IF NOT EXISTS telemetry_readings_no_delete
+                     BEFORE DELETE ON telemetry_readings
+                     BEGIN
+                         SELECT RAISE(ABORT, 'telemetry_readings is append-only');
+                     END;
+                 CREATE TABLE IF NOT EXISTS telemetry_heads (
+                     astronaut_key TEXT NOT NULL,
+                     indicator TEXT NOT NULL,
+                     last_reading_id INTEGER NOT NULL,
+                     last_hash TEXT NOT NULL,
+                     count INTEGER NOT NULL,
+                     PRIMARY KEY(astronaut_key, indicator)
+                 );
+                 CREATE TRIGGER IF NOT EXISTS telemetry_heads_no_delete
+                     BEFORE DELETE ON telemetry_heads
+                     BEGIN
+                         SELECT RAISE(ABORT, 'telemetry_heads cannot be deleted');
+                     END;
+                 CREATE TRIGGER IF NOT EXISTS telemetry_heads_forward_only
+                     BEFORE UPDATE ON telemetry_heads
+                     WHEN NEW.count <= OLD.count
+                       OR NEW.last_reading_id <= OLD.last_reading_id
+                       OR NEW.astronaut_key != OLD.astronaut_key
+                       OR NEW.indicator != OLD.indicator
+                     BEGIN
+                         SELECT RAISE(ABORT, 'telemetry_heads can only advance forward');
+                     END;
+                 PRAGMA user_version=4;",
+            )?;
+            tx.commit()?;
+        }
+        if version <= 4 {
+            // v5 (ronda 3, N2/N4): asegura esquema completo en bases v4 antiguas,
+            // rellena `telemetry_heads` sin reescribir hashes ni JSON y bloquea
+            // sustituciones (`REPLACE`) en `telemetry_heads` aunque `recursive_triggers=0`.
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE IF NOT EXISTS telemetry_readings (
+                     reading_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     astronaut_key TEXT NOT NULL,
+                     astronaut_name TEXT NOT NULL,
+                     indicator TEXT NOT NULL,
+                     value_json TEXT NOT NULL,
+                     unit TEXT NOT NULL,
+                     observed_at INTEGER NOT NULL,
+                     batch_id TEXT NOT NULL,
+                     source TEXT NOT NULL,
+                     app_version TEXT NOT NULL,
+                     prev_hash TEXT NOT NULL,
+                     row_hash TEXT NOT NULL
+                 );
+                 CREATE INDEX IF NOT EXISTS telemetry_readings_series
+                     ON telemetry_readings(astronaut_key, indicator, observed_at);
+                 CREATE INDEX IF NOT EXISTS telemetry_readings_astronaut_time
+                     ON telemetry_readings(astronaut_key, observed_at, reading_id);
+                 CREATE INDEX IF NOT EXISTS telemetry_readings_chain
+                     ON telemetry_readings(astronaut_key, indicator, reading_id);
+                 CREATE INDEX IF NOT EXISTS telemetry_readings_astronaut_reading
+                     ON telemetry_readings(astronaut_key, reading_id);
+                 CREATE TRIGGER IF NOT EXISTS telemetry_readings_no_replace
+                     BEFORE INSERT ON telemetry_readings
+                     WHEN NEW.reading_id IS NOT NULL
+                      AND EXISTS (SELECT 1 FROM telemetry_readings WHERE reading_id = NEW.reading_id)
+                     BEGIN
+                         SELECT RAISE(ABORT, 'telemetry_readings is append-only');
+                     END;
+                 CREATE TRIGGER IF NOT EXISTS telemetry_readings_no_update
+                     BEFORE UPDATE ON telemetry_readings
+                     BEGIN
+                         SELECT RAISE(ABORT, 'telemetry_readings is append-only');
+                     END;
+                 CREATE TRIGGER IF NOT EXISTS telemetry_readings_no_delete
+                     BEFORE DELETE ON telemetry_readings
+                     BEGIN
+                         SELECT RAISE(ABORT, 'telemetry_readings is append-only');
+                     END;
+                 CREATE TABLE IF NOT EXISTS telemetry_heads (
+                     astronaut_key TEXT NOT NULL,
+                     indicator TEXT NOT NULL,
+                     last_reading_id INTEGER NOT NULL,
+                     last_hash TEXT NOT NULL,
+                     count INTEGER NOT NULL,
+                     PRIMARY KEY(astronaut_key, indicator)
+                 );
+                 CREATE TRIGGER IF NOT EXISTS telemetry_heads_no_delete
+                     BEFORE DELETE ON telemetry_heads
+                     BEGIN
+                         SELECT RAISE(ABORT, 'telemetry_heads cannot be deleted');
+                     END;
+                 CREATE TRIGGER IF NOT EXISTS telemetry_heads_forward_only
+                     BEFORE UPDATE ON telemetry_heads
+                     WHEN NEW.count <= OLD.count
+                       OR NEW.last_reading_id <= OLD.last_reading_id
+                       OR NEW.astronaut_key != OLD.astronaut_key
+                       OR NEW.indicator != OLD.indicator
+                     BEGIN
+                         SELECT RAISE(ABORT, 'telemetry_heads can only advance forward');
+                     END;
+                 INSERT OR IGNORE INTO telemetry_heads (
+                     astronaut_key, indicator, last_reading_id, last_hash, count
+                 )
+                 SELECT
+                     agg.astronaut_key,
+                     agg.indicator,
+                     agg.last_reading_id,
+                     last_row.row_hash,
+                     agg.row_count
+                 FROM (
+                     SELECT
+                         astronaut_key,
+                         indicator,
+                         MAX(reading_id) AS last_reading_id,
+                         COUNT(*) AS row_count
+                     FROM telemetry_readings
+                     GROUP BY astronaut_key, indicator
+                 ) agg
+                 JOIN telemetry_readings last_row
+                   ON last_row.reading_id = agg.last_reading_id
+                 WHERE NOT EXISTS (
+                     SELECT 1
+                     FROM telemetry_heads h
+                     WHERE h.astronaut_key = agg.astronaut_key
+                       AND h.indicator = agg.indicator
+                 );
+                 CREATE TRIGGER IF NOT EXISTS telemetry_heads_no_replace
+                     BEFORE INSERT ON telemetry_heads
+                     WHEN EXISTS (
+                         SELECT 1 FROM telemetry_heads
+                         WHERE astronaut_key = NEW.astronaut_key
+                           AND indicator = NEW.indicator
+                     )
+                     BEGIN
+                         SELECT RAISE(ABORT, 'telemetry_heads cannot be replaced');
+                     END;
+                 PRAGMA user_version=5;",
             )?;
             tx.commit()?;
         }

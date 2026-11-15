@@ -1,0 +1,74 @@
+name: Android APK
+
+on:
+  pull_request:
+    branches: [desarrollo]
+  push:
+    branches: [desarrollo]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CI: 'true'
+      CARGO_TERM_COLOR: always
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx3g
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android SDK and pinned NDK
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+      - name: Prepare Rust Android target
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - name: Install locked JavaScript dependencies
+        run: npm ci
+      - name: Test Rust domain and adapters with synthetic fixtures
+        run: cargo test --locked --workspace --exclude merken
+      - name: Initialize Android project
+        run: npm run tauri -- android init --ci --skip-targets-install
+      - name: Build installable ARM64 debug APK
+        run: npm run tauri -- android build --ci --debug --apk --target aarch64
+      - name: Verify APK signature and export
+        run: |
+          mkdir -p artifacts
+          mapfile -t apks < <(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk')
+          test "${#apks[@]}" -eq 1
+          cp "${apks[0]}" artifacts/merken-arm64-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose artifacts/merken-arm64-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging artifacts/merken-arm64-debug.apk > artifacts/apk-info.txt
+          (cd artifacts && sha256sum merken-arm64-debug.apk > SHA256SUMS.txt)
+          printf '%s\n' "$GITHUB_SHA" > artifacts/source-revision.txt
+          echo 'Debug APK for Android ARM64. GGUF/voice models are provisioned separately. No device validation has been performed.' > artifacts/README.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: merken-android-arm64-debug-${{ github.run_number }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14
