@@ -29,5 +29,7 @@ pub use explain::{
     validate_explanation,
 };
 pub use interpreter::{Interpreter, PROPOSAL_GBNF, SlmInterpreter};
-pub use manifest::{ModelFile, ModelManifest, ModelRole, VerifiedFile, VerifiedModel};
+pub use manifest::{
+    ModelFile, ModelManifest, ModelPackage, ModelRole, VerifiedFile, VerifiedModel,
+};
 pub use slot::ModelSlot;

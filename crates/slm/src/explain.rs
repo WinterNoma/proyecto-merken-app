@@ -40,7 +40,7 @@ pub trait Explainer {
         &mut self,
         eval: &Evaluation,
         docs: &[Document],
-        ctl: &Control<'_>,
+        ctl: &mut Control<'_>,
     ) -> Result<Explanation, SlmError>;
 }
 
@@ -115,13 +115,13 @@ impl<E: Engine> Explainer for SlmExplainer<E> {
         &mut self,
         eval: &Evaluation,
         docs: &[Document],
-        ctl: &Control<'_>,
+        ctl: &mut Control<'_>,
     ) -> Result<Explanation, SlmError> {
         ctl.check()?;
         let req = self.build_request(eval, docs);
         let raw = self.engine.generate(&req, ctl)?;
         ctl.check()?;
-        ctl.report(Progress::Validating);
+        ctl.report_and_check(Progress::Validating)?;
 
         let text = raw.trim().to_owned();
         let issues = validate_explanation(&text, eval, docs);
@@ -139,7 +139,8 @@ impl<E: Engine> Explainer for SlmExplainer<E> {
                 acc
             });
 
-        ctl.report(Progress::Done);
+        ctl.check()?;
+        ctl.report_and_check(Progress::Done)?;
         Ok(Explanation {
             text,
             label: AI_SUGGESTION_LABEL.to_owned(),
@@ -264,7 +265,7 @@ pub fn validate_explanation(text: &str, eval: &Evaluation, docs: &[Document]) ->
     if trimmed.chars().count() > MAX_EXPLANATION_CHARS {
         issues.push(OutputIssue::new(
             "too_long",
-            format!("Explanation exceeds maximum length of {MAX_EXPLANATION_CHARS} characters"),
+            "Explanation exceeds maximum allowed length",
         ));
     }
 
@@ -272,7 +273,7 @@ pub fn validate_explanation(text: &str, eval: &Evaluation, docs: &[Document]) ->
     if !(1..=5).contains(&sentences) {
         issues.push(OutputIssue::new(
             "sentence_count",
-            format!("Explanation must have 1 to 5 sentences (found {sentences})"),
+            "Explanation must have 1 to 5 sentences",
         ));
     }
 
@@ -369,7 +370,7 @@ fn validate_citations(text: &str, docs: &[Document], issues: &mut Vec<OutputIssu
         } else if !docs.iter().any(|d| d.id == inner) {
             issues.push(OutputIssue::new(
                 "unknown_citation",
-                format!("Citation '[{inner}]' does not match any provided document"),
+                "Citation does not match any provided document",
             ));
         }
         rest = after_open.get(close + 1..).unwrap_or("");
@@ -487,7 +488,7 @@ fn validate_numbers_and_percentages(
         if !grounded {
             issues.push(OutputIssue::new(
                 "ungrounded_number",
-                format!("Number '{num}' does not appear in input evaluation or documents"),
+                "Output contains a number not grounded in input evaluation or documents",
             ));
         }
     }
@@ -617,13 +618,13 @@ fn validate_status_consistency(text: &str, eval: &Evaluation, issues: &mut Vec<O
             "pospuesta",
             "aplazar",
         ];
-        if let Some(found) = forbidden_for_alarm
+        if forbidden_for_alarm
             .iter()
-            .find(|p| contains_word_ci(&lower, p))
+            .any(|p| contains_word_ci(&lower, p))
         {
             issues.push(OutputIssue::new(
                 "status_contradiction",
-                format!("Alarm or urgent evaluation cannot contain '{found}'"),
+                "Alarm or urgent evaluation cannot contain calming or postponement language",
             ));
         }
         return;
@@ -645,13 +646,13 @@ fn validate_status_consistency(text: &str, eval: &Evaluation, issues: &mut Vec<O
                 "urgente",
                 "emergencia",
             ];
-            if let Some(found) = forbidden_for_stable
+            if forbidden_for_stable
                 .iter()
-                .find(|p| contains_word_ci(&lower, p))
+                .any(|p| contains_word_ci(&lower, p))
             {
                 issues.push(OutputIssue::new(
                     "status_contradiction",
-                    format!("Stable evaluation cannot mention '{found}'"),
+                    "Stable evaluation cannot contain alarm or urgent language",
                 ));
             }
         }
@@ -671,13 +672,13 @@ fn validate_status_consistency(text: &str, eval: &Evaluation, issues: &mut Vec<O
                 "urgente",
                 "emergencia",
             ];
-            if let Some(found) = forbidden_for_change
+            if forbidden_for_change
                 .iter()
-                .find(|p| contains_word_ci(&lower, p))
+                .any(|p| contains_word_ci(&lower, p))
             {
                 issues.push(OutputIssue::new(
                     "status_contradiction",
-                    format!("Change evaluation cannot claim '{found}'"),
+                    "Change evaluation cannot claim stable or alarm status",
                 ));
             }
         }
@@ -698,13 +699,13 @@ fn validate_status_consistency(text: &str, eval: &Evaluation, issues: &mut Vec<O
                 "alarma",
                 "urgente",
             ];
-            if let Some(found) = forbidden_for_not_evaluated
+            if forbidden_for_not_evaluated
                 .iter()
-                .find(|p| contains_word_ci(&lower, p))
+                .any(|p| contains_word_ci(&lower, p))
             {
                 issues.push(OutputIssue::new(
                     "status_contradiction",
-                    format!("Not-evaluated state cannot assert status '{found}'"),
+                    "Not-evaluated state cannot assert a clinical status",
                 ));
             }
         }
@@ -726,10 +727,10 @@ fn validate_forbidden_terms(text: &str, eval: &Evaluation, issues: &mut Vec<Outp
         "diagnosticar",
         "diagnosticado",
     ];
-    if let Some(term) = diagnosis_terms.iter().find(|t| contains_word_ci(&lower, t)) {
+    if diagnosis_terms.iter().any(|t| contains_word_ci(&lower, t)) {
         issues.push(OutputIssue::new(
             "forbidden_diagnosis",
-            format!("Forbidden diagnostic terminology '{term}'"),
+            "Output contains forbidden diagnostic terminology",
         ));
     }
 
@@ -768,13 +769,10 @@ fn validate_forbidden_terms(text: &str, eval: &Evaluation, issues: &mut Vec<Outp
         "receta",
         "recetar",
     ];
-    if let Some(term) = medication_terms
-        .iter()
-        .find(|t| contains_word_ci(&lower, t))
-    {
+    if medication_terms.iter().any(|t| contains_word_ci(&lower, t)) {
         issues.push(OutputIssue::new(
             "forbidden_medication",
-            format!("Forbidden medication or dosage term '{term}'"),
+            "Output contains forbidden medication or dosage terminology",
         ));
     } else if contains_mg_unit(&lower) {
         issues.push(OutputIssue::new(
@@ -799,13 +797,13 @@ fn validate_forbidden_terms(text: &str, eval: &Evaluation, issues: &mut Vec<Outp
         "limites normales",
         "dentro de lo normal",
     ];
-    if let Some(term) = normal_range_terms
+    if normal_range_terms
         .iter()
-        .find(|t| contains_word_ci(&lower, t))
+        .any(|t| contains_word_ci(&lower, t))
     {
         issues.push(OutputIssue::new(
             "forbidden_normal_range",
-            format!("Forbidden clinical normal range claim '{term}'"),
+            "Output contains forbidden clinical normal range claim",
         ));
     }
 
@@ -818,10 +816,10 @@ fn validate_forbidden_terms(text: &str, eval: &Evaluation, issues: &mut Vec<Outp
             "protocolo aprobado",
             "protocolo local aprobado",
         ];
-        if let Some(term) = approval_terms.iter().find(|t| contains_word_ci(&lower, t)) {
+        if approval_terms.iter().any(|t| contains_word_ci(&lower, t)) {
             issues.push(OutputIssue::new(
                 "unverified_protocol_approval",
-                format!("Cannot claim '{term}' when source_kind is not approved_protocol"),
+                "Cannot claim an approved protocol when source_kind is not approved_protocol",
             ));
         }
     }
@@ -1022,10 +1020,10 @@ mod tests {
         ])
         .with_model_id("space-health-v5");
         let mut explainer = SlmExplainer::with_engine(engine);
-        let ctl =
+        let mut ctl =
             Control::without_progress(CancelToken::new(), Deadline::after(Duration::from_secs(5)));
 
-        let explanation = explainer.explain(&eval, &docs(), &ctl).unwrap();
+        let explanation = explainer.explain(&eval, &docs(), &mut ctl).unwrap();
         assert_eq!(explanation.label, "AI-generated suggestion");
         assert_eq!(explanation.model_id, "space-health-v5");
         assert_eq!(explanation.cited_docs, vec!["hr-rest-1".to_owned()]);
@@ -1171,10 +1169,10 @@ mod tests {
 
         let engine = MockEngine::with_responses([spanish]);
         let mut explainer = SlmExplainer::new(engine, "v5");
-        let ctl =
+        let mut ctl =
             Control::without_progress(CancelToken::new(), Deadline::after(Duration::from_secs(5)));
         assert!(matches!(
-            explainer.explain(&eval, &docs(), &ctl),
+            explainer.explain(&eval, &docs(), &mut ctl),
             Err(SlmError::InvalidOutput(_))
         ));
         // Garantiza que MockEngine se consumió y no devolvió texto inválido al usuario.
@@ -1189,5 +1187,82 @@ mod tests {
         spo2.baseline = Some(97.0);
         let text = "Your SpO2 is 98%, close to your personal baseline of 97%.";
         assert!(validate_explanation(text, &spo2, &docs()).is_empty());
+    }
+
+    #[test]
+    fn explain_checks_cancel_and_deadline_after_progress_callbacks() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+        use std::time::Instant;
+
+        let eval = sample_eval(
+            Status::Stable,
+            Escalation::Continue,
+            SourceKind::DemoHeuristic,
+        );
+        let valid = "Your latest heart rate is 72 bpm near your baseline of 70 bpm [hr-rest-1].";
+
+        for stage in [Progress::Validating, Progress::Done] {
+            let engine = MockEngine::with_responses([valid]);
+            let mut explainer = SlmExplainer::new(engine, "space-health-v5");
+            let cancel = CancelToken::new();
+            let cancel_cb = cancel.clone();
+            let mut ctl = Control::new(
+                cancel,
+                Deadline::after(Duration::from_secs(5)),
+                move |progress| {
+                    if progress == stage {
+                        cancel_cb.cancel();
+                    }
+                },
+            );
+            assert_eq!(
+                explainer.explain(&eval, &docs(), &mut ctl),
+                Err(SlmError::Cancelled)
+            );
+        }
+
+        let start = Instant::now();
+        let expired = Arc::new(AtomicBool::new(false));
+        let expired_clock = Arc::clone(&expired);
+        let deadline = Deadline::with_clock(
+            start,
+            Duration::from_secs(5),
+            Arc::new(move || {
+                if expired_clock.load(Ordering::SeqCst) {
+                    start + Duration::from_secs(10)
+                } else {
+                    start
+                }
+            }),
+        );
+        let expired_cb = Arc::clone(&expired);
+        let mut ctl = Control::new(CancelToken::new(), deadline, move |progress| {
+            if progress == Progress::Validating {
+                expired_cb.store(true, Ordering::SeqCst);
+            }
+        });
+        let engine = MockEngine::with_responses([valid]);
+        let mut explainer = SlmExplainer::new(engine, "space-health-v5");
+        assert_eq!(
+            explainer.explain(&eval, &docs(), &mut ctl),
+            Err(SlmError::Timeout)
+        );
+    }
+
+    #[test]
+    fn explanation_errors_never_leak_sensitive_text_or_numbers() {
+        let eval = sample_eval(Status::Stable, Escalation::Continue, SourceKind::Published);
+        let sensitive =
+            "Your reading is 999 bpm [I have HIV]. Alarm diagnosis medication normal range.";
+        let issues = validate_explanation(sensitive, &eval, &docs());
+        assert!(!issues.is_empty());
+        for issue in &issues {
+            assert!(!issue.detail.contains("HIV"));
+            assert!(!issue.detail.contains("I have"));
+            assert!(!issue.detail.contains("999"));
+        }
     }
 }
