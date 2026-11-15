@@ -1,0 +1,1384 @@
+{
+  "profiles": [
+    {
+      "idle": {
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      "holding": {
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 56,
+          "x": 152,
+          "y": 670
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      "released": {
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      }
+    },
+    {
+      "idle": {
+        "button": {
+          "center": 206,
+          "h": 56,
+          "w": 244,
+          "x": 84,
+          "y": 785
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 785
+        },
+        "focus": "talk-hold",
+        "page": [
+          412,
+          915
+        ],
+        "pressed": "false",
+        "text": "Preview stopped · No audio captured",
+        "viewport": [
+          412,
+          915
+        ]
+      },
+      "holding": {
+        "button": {
+          "center": 206,
+          "h": 56,
+          "w": 56,
+          "x": 178,
+          "y": 785
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 785
+        },
+        "focus": "talk-hold",
+        "page": [
+          412,
+          915
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          412,
+          915
+        ]
+      },
+      "released": {
+        "button": {
+          "center": 206,
+          "h": 56,
+          "w": 244,
+          "x": 84,
+          "y": 785
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 785
+        },
+        "focus": "talk-hold",
+        "page": [
+          412,
+          915
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          412,
+          915
+        ]
+      }
+    },
+    {
+      "idle": {
+        "button": {
+          "center": 215,
+          "h": 56,
+          "w": 262,
+          "x": 84,
+          "y": 802
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 802
+        },
+        "focus": "talk-hold",
+        "page": [
+          430,
+          932
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          430,
+          932
+        ]
+      },
+      "holding": {
+        "button": {
+          "center": 215,
+          "h": 56,
+          "w": 56,
+          "x": 187,
+          "y": 802
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 802
+        },
+        "focus": "talk-hold",
+        "page": [
+          430,
+          932
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          430,
+          932
+        ]
+      },
+      "released": {
+        "button": {
+          "center": 215,
+          "h": 56,
+          "w": 262,
+          "x": 84,
+          "y": 802
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 802
+        },
+        "focus": "talk-hold",
+        "page": [
+          430,
+          932
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          430,
+          932
+        ]
+      }
+    }
+  ],
+  "checks": {
+    "keyboard": {
+      "released": {
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      "down": {
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 56,
+          "x": 152,
+          "y": 670
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      "escape": {
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Preview stopped · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      }
+    },
+    "manual": {
+      "dialog": true,
+      "formHidden": false,
+      "saveDisabled": true
+    },
+    "draftPreserved": "UI preview draft",
+    "manualMouse": true,
+    "pointerCancel": [
+      {
+        "dialog": false,
+        "particles": false,
+        "pressed": "false"
+      }
+    ],
+    "pointerAfterCancel": {
+      "button": {
+        "center": 180,
+        "h": 56,
+        "w": 192,
+        "x": 84,
+        "y": 670
+      },
+      "clipping": [],
+      "dialog": false,
+      "entry": {
+        "h": 78,
+        "y": 670
+      },
+      "focus": "talk-hold",
+      "page": [
+        360,
+        800
+      ],
+      "pressed": "false",
+      "text": "Preview stopped · No audio captured",
+      "viewport": [
+        360,
+        800
+      ]
+    },
+    "blur": {
+      "button": {
+        "center": 180,
+        "h": 56,
+        "w": 192,
+        "x": 84,
+        "y": 670
+      },
+      "clipping": [],
+      "dialog": false,
+      "entry": {
+        "h": 78,
+        "y": 670
+      },
+      "focus": "talk-hold",
+      "page": [
+        360,
+        800
+      ],
+      "pressed": "false",
+      "text": "Preview stopped · No audio captured",
+      "viewport": [
+        360,
+        800
+      ]
+    },
+    "reduced": {
+      "after": {
+        "canvasPixels": 288000,
+        "count": 72,
+        "energy": 0,
+        "frames": 10364,
+        "height": 800,
+        "holding": true,
+        "mode": "reduced",
+        "pulseActive": false,
+        "renderMsP50": 0.20000000298023224,
+        "renderMsP95": 0.4000000059604645,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 207,
+        "targetFps": 30,
+        "width": 360
+      },
+      "before": {
+        "canvasPixels": 288000,
+        "count": 72,
+        "energy": 0,
+        "frames": 10364,
+        "height": 800,
+        "holding": true,
+        "mode": "reduced",
+        "pulseActive": false,
+        "renderMsP50": 0.20000000298023224,
+        "renderMsP95": 0.4000000059604645,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 207,
+        "targetFps": 30,
+        "width": 360
+      },
+      "dialog": false,
+      "preference": true,
+      "ringAnimation": "none"
+    },
+    "visibility": {
+      "dialog": false,
+      "particles": false,
+      "pressed": "false"
+    },
+    "largeText": {
+      "idle": {
+        "button": {
+          "center": 172.5,
+          "h": 60,
+          "w": 321,
+          "x": 12,
+          "y": 1776.96875
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 188,
+          "y": 1776.96875
+        },
+        "focus": "talk-hold",
+        "page": [
+          345,
+          2017
+        ],
+        "pressed": "false",
+        "text": "Preview stopped · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      "holding": {
+        "button": {
+          "center": 172.5,
+          "h": 56,
+          "w": 56,
+          "x": 144.5,
+          "y": 1776.96875
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 156,
+          "y": 1776.96875
+        },
+        "focus": "talk-hold",
+        "page": [
+          345,
+          1985
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      "positions": {
+        "contentWidth": 345,
+        "status": {
+          "bottom": 1868.96875,
+          "height": 28,
+          "left": 12,
+          "right": 333,
+          "top": 1840.96875,
+          "width": 321,
+          "x": 12,
+          "y": 1840.96875
+        },
+        "type": {
+          "bottom": 1932.96875,
+          "height": 56,
+          "left": 12,
+          "right": 333,
+          "top": 1876.96875,
+          "width": 321,
+          "x": 12,
+          "y": 1876.96875
+        }
+      }
+    },
+    "cost": {
+      "after": {
+        "canvasPixels": 288000,
+        "count": 72,
+        "energy": 0,
+        "frames": 2289,
+        "height": 800,
+        "holding": false,
+        "mode": "running",
+        "pulseActive": false,
+        "renderMsP50": 0.20000000298023224,
+        "renderMsP95": 0.30000001192092896,
+        "resolution": 1,
+        "sampleCount": 120,
+        "slowIntervals": 0,
+        "targetFps": 30,
+        "width": 360
+      },
+      "drawFps": 29.952076677327433,
+      "draws": 60,
+      "durationMs": 2003.199999999255
+    },
+    "console": []
+  },
+  "capture": {
+    "frames": 30,
+    "frameRate": 6,
+    "durationMs": 4872,
+    "frameDirectory": "C:/Users/Salva/AppData/Local/Temp/merken-inline-mic-1794711654217",
+    "states": [
+      {
+        "frame": 0,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 1,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 2,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 3,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 4,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 56,
+          "x": 152,
+          "y": 670
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 5,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 56,
+          "x": 152,
+          "y": 670
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 6,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 56,
+          "x": 152,
+          "y": 670
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 7,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 56,
+          "x": 152,
+          "y": 670
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 8,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 56,
+          "x": 152,
+          "y": 670
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 9,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 56,
+          "x": 152,
+          "y": 670
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 10,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 56,
+          "x": 152,
+          "y": 670
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 11,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 56,
+          "x": 152,
+          "y": 670
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 12,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 56,
+          "x": 152,
+          "y": 670
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 13,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 56,
+          "x": 152,
+          "y": 670
+        },
+        "clipping": [
+          "talk-hold"
+        ],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "true",
+        "text": "Visual preview · No audio captured",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 14,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 15,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 16,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 17,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 18,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 19,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 20,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 21,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 22,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 23,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 24,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 25,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 26,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 27,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 28,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      },
+      {
+        "frame": 29,
+        "button": {
+          "center": 180,
+          "h": 56,
+          "w": 192,
+          "x": 84,
+          "y": 670
+        },
+        "clipping": [],
+        "dialog": false,
+        "entry": {
+          "h": 78,
+          "y": 670
+        },
+        "focus": "talk-hold",
+        "page": [
+          360,
+          800
+        ],
+        "pressed": "false",
+        "text": "Voice unavailable · Use Type",
+        "viewport": [
+          360,
+          800
+        ]
+      }
+    ]
+  }
+}

@@ -1,5 +1,7 @@
 # Etapa 2 — partículas y micrófono centrado
 
+**Actualización:** [etapa 3: micrófono integrado sin modal](../etapa-3/README.md). Este archivo conserva las medidas de la primera versión de partículas.
+
 Primera capa animada, integrada sobre la vista móvil compacta. Mantiene la estética híbrida oscura y neutral. No añade dependencias.
 
 ## Resultado
