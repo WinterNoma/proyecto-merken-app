@@ -1,5 +1,5 @@
 import type { AstronautProfile } from "../types";
-import { element, numberText, setText, utc } from "./dom";
+import { el, element, numberText, setText, utc } from "./dom";
 import { mysqlStatuses, paintBadge, type StatusCopy, type VitalKey } from "./status-copy";
 import type { FeedState } from "./telemetry";
 
@@ -56,11 +56,21 @@ export function createVitals() {
         if (status) {
           status.classList.toggle("context-label", contextual || key === "mood");
           paintBadge(status, copy);
+          // Keep the full source/status wording for assistive technology and
+          // reading details; the phone card uses the shorter evaluation label.
+          if (key === "mood" && copy.label === "Self-reported · Not evaluated") {
+            status.querySelector("span")?.classList.add("status-label-full");
+            if (!status.querySelector(".status-label-compact")) {
+              const compact = el("span", "status-label-compact", "Not evaluated");
+              compact.setAttribute("aria-hidden", "true");
+              status.append(compact);
+            }
+          }
         }
       }
     },
     feed(state: FeedState): void {
-      const label = state.loading ? "Connecting…" : state.live ? "Live · " + (state.lastSuccess ? utc(state.lastSuccess, true) : "Awaiting feed")
+      const label = state.preview ? "DEMO · Fixed sample readings" : state.loading ? "Connecting…" : state.live ? "Live · " + (state.lastSuccess ? utc(state.lastSuccess, true) : "Awaiting feed")
         : state.lastSuccess ? "Last update " + utc(state.lastSuccess, true) : "Connection unavailable";
       setText(element("#feed-status"), label);
       setText(element("#feed-time"), state.lastSuccess ? "Received " + utc(state.lastSuccess) : "No data received.");

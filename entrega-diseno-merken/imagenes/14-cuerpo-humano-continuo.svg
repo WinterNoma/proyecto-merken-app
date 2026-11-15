@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="12 0 156 470" fill="none" role="img" aria-labelledby="human-title human-description">
+  <title id="human-title">Continuous human silhouette</title>
+  <desc id="human-description">An integrated front-facing human figure, with soft neutral shading and no visible joints or separate body panels.</desc>
+  <defs>
+    <path id="human-outline" d="M90 14C77 14 70 23 70 37L70 45C66 44 66 51 70 55C72 66 77 73 80 77L80 85C76 89 68 91 60 93C48 96 43 104 41 120C39 139 34 155 32 171C30 184 29 198 26 213L22 232C21 239 18 245 20 249C21 252 24 248 26 244L25 257C24 262 25 268 27 267L30 253L29 270C30 274 32 271 33 266L35 252L34 268C35 272 37 268 38 263L40 247C42 242 41 236 39 230C42 212 47 194 49 177L57 142C60 154 61 166 61 178C60 192 54 207 55 223C55 236 58 247 60 254C58 276 60 301 62 322C63 333 62 346 62 358C61 380 64 405 66 427L65 440C63 445 58 449 59 452C61 456 72 456 77 454C82 451 82 446 81 440L82 425C81 404 83 383 85 361C86 348 85 338 85 327L87 280C88 270 89 263 90 261C91 263 92 270 93 280L95 327C95 338 94 348 95 361C97 383 99 404 98 425L99 440C98 446 98 451 103 454C108 456 119 456 121 452C122 449 117 445 115 440L114 427C116 405 119 380 118 358C118 346 117 333 118 322C120 301 122 276 120 254C122 247 125 236 125 223C126 207 120 192 119 178C119 166 120 154 123 142L131 177C133 194 138 212 141 230C139 236 138 242 140 247L142 263C143 268 145 272 146 268L145 252L147 266C148 271 150 274 151 270L150 253L153 267C155 268 156 262 155 257L154 244C156 248 159 252 160 249C162 245 159 239 158 232L154 213C151 198 150 184 148 171C146 155 141 139 139 120C137 104 132 96 120 93C112 91 104 89 100 85L100 77C103 73 108 66 110 55C114 51 114 44 110 45L110 37C110 23 103 14 90 14Z"/>
+    <clipPath id="human-body-clip"><use href="#human-outline"/></clipPath>
+    <linearGradient id="human-material" x1="28" y1="170" x2="151" y2="190" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#29323b"/><stop offset=".22" stop-color="#56626f"/>
+      <stop offset=".48" stop-color="#687480"/><stop offset=".65" stop-color="#485460"/>
+      <stop offset=".87" stop-color="#5b6773"/><stop offset="1" stop-color="#2d3742"/>
+    </linearGradient>
+    <radialGradient id="human-soft-light">
+      <stop stop-color="#c3ccd4" stop-opacity=".5"/><stop offset=".58" stop-color="#aab6c2" stop-opacity=".13"/><stop offset="1" stop-color="#9eacba" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="human-soft-shade">
+      <stop stop-color="#101820" stop-opacity=".5"/><stop offset="1" stop-color="#18222c" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="human-rim" x1="41" y1="22" x2="137" y2="450" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c9d2da" stop-opacity=".9"/><stop offset=".5" stop-color="#b4bfca" stop-opacity=".45"/><stop offset="1" stop-color="#b9c5d0" stop-opacity=".7"/>
+    </linearGradient>
+  </defs>
+  <g class="human-art" pointer-events="none" aria-hidden="true">
+    <use href="#human-outline" fill="url(#human-material)"/>
+    <g clip-path="url(#human-body-clip)">
+      <ellipse cx="82" cy="35" rx="26" ry="36" fill="url(#human-soft-light)"/>
+      <ellipse cx="99" cy="57" rx="20" ry="24" fill="url(#human-soft-shade)"/>
+      <ellipse cx="90" cy="85" rx="24" ry="18" fill="url(#human-soft-shade)"/>
+      <ellipse cx="88" cy="119" rx="47" ry="43" fill="url(#human-soft-light)"/>
+      <ellipse cx="51" cy="126" rx="15" ry="37" fill="url(#human-soft-light)"/>
+      <ellipse cx="130" cy="127" rx="15" ry="38" fill="url(#human-soft-light)"/>
+      <ellipse cx="90" cy="169" rx="37" ry="51" fill="url(#human-soft-shade)"/>
+      <ellipse cx="83" cy="194" rx="30" ry="52" fill="url(#human-soft-light)"/>
+      <ellipse cx="90" cy="252" rx="29" ry="30" fill="url(#human-soft-shade)"/>
+      <ellipse cx="67" cy="288" rx="20" ry="66" fill="url(#human-soft-light)"/>
+      <ellipse cx="108" cy="286" rx="20" ry="67" fill="url(#human-soft-light)"/>
+      <ellipse cx="74" cy="351" rx="20" ry="25" fill="url(#human-soft-shade)"/>
+      <ellipse cx="106" cy="351" rx="20" ry="25" fill="url(#human-soft-shade)"/>
+      <ellipse cx="70" cy="394" rx="15" ry="56" fill="url(#human-soft-light)"/>
+      <ellipse cx="108" cy="394" rx="15" ry="56" fill="url(#human-soft-light)"/>
+      <ellipse cx="32" cy="202" rx="12" ry="40" fill="url(#human-soft-light)"/>
+      <ellipse cx="147" cy="202" rx="12" ry="40" fill="url(#human-soft-light)"/>
+      <g stroke="#d1dae3" stroke-opacity=".17" stroke-width=".7" stroke-linecap="round">
+        <path d="M63 101Q75 97 87 105M117 101Q105 97 93 105M90 111L90 138"/>
+        <path d="M66 139Q76 145 84 141M114 139Q104 145 96 141" stroke-opacity=".1"/>
+        <path d="M75 218Q82 224 87 237M105 218Q98 224 93 237" stroke-opacity=".12"/>
+        <path d="M89 43L87 53Q90 55 92 53M84 63Q90 65 96 63" stroke-opacity=".12"/>
+      </g>
+    </g>
+    <use href="#human-outline" stroke="url(#human-rim)" stroke-width=".8" vector-effect="non-scaling-stroke"/>
+  </g>
+</svg>

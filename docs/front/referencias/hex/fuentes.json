@@ -1,0 +1,42 @@
+[
+  {
+    "file": "01-interfaz-general.png",
+    "original": "rune-mac-settings-dark.png",
+    "url": "https://raw.githubusercontent.com/anomalyco/hex/31feb6f0e8569700faea46ac54db083a535602cd/tests/golden/rune-mac-settings-dark.png"
+  },
+  {
+    "file": "02-historial.png",
+    "original": "rune-history-dark.png",
+    "url": "https://raw.githubusercontent.com/anomalyco/hex/31feb6f0e8569700faea46ac54db083a535602cd/tests/golden/rune-history-dark.png"
+  },
+  {
+    "file": "03-hud-lab.png",
+    "original": "rune-mac-hud-lab-dark.png",
+    "url": "https://raw.githubusercontent.com/anomalyco/hex/31feb6f0e8569700faea46ac54db083a535602cd/tests/golden/rune-mac-hud-lab-dark.png"
+  },
+  {
+    "file": "04-capsula-grabando.png",
+    "original": "capture-capsule-recording-dark.png",
+    "url": "https://raw.githubusercontent.com/anomalyco/hex/31feb6f0e8569700faea46ac54db083a535602cd/tests/golden/capture-capsule-recording-dark.png"
+  },
+  {
+    "file": "05-capsula-procesando.png",
+    "original": "capture-capsule-processing-dark.png",
+    "url": "https://raw.githubusercontent.com/anomalyco/hex/31feb6f0e8569700faea46ac54db083a535602cd/tests/golden/capture-capsule-processing-dark.png"
+  },
+  {
+    "file": "06-capsula-guardado.png",
+    "original": "capture-capsule-saved-dark.png",
+    "url": "https://raw.githubusercontent.com/anomalyco/hex/31feb6f0e8569700faea46ac54db083a535602cd/tests/golden/capture-capsule-saved-dark.png"
+  },
+  {
+    "file": "07-capsula-destino.png",
+    "original": "capture-capsule-list-guess-dark.png",
+    "url": "https://raw.githubusercontent.com/anomalyco/hex/31feb6f0e8569700faea46ac54db083a535602cd/tests/golden/capture-capsule-list-guess-dark.png"
+  },
+  {
+    "file": "08-capsula-grabando-claro.png",
+    "original": "capture-capsule-recording-light.png",
+    "url": "https://raw.githubusercontent.com/anomalyco/hex/31feb6f0e8569700faea46ac54db083a535602cd/tests/golden/capture-capsule-recording-light.png"
+  }
+]

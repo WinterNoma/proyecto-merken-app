@@ -1,6 +1,8 @@
 import type { AstronautProfile, BloodPressure } from "../types";
 
 export interface FeedState {
+  /** Dev-only fixed synthetic readings, never a live feed. */
+  preview?: boolean;
   crew: AstronautProfile[];
   loading: boolean;
   live: boolean;

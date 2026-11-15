@@ -2,6 +2,8 @@
 
 App móvil de monitoreo de salud para astronautas. Es nuestro proyecto para el reto de NASA Space Apps 2026 [Health Monitoring Software](https://www.spaceappschallenge.org/2026/challenges/health-monitoring-software/).
 
+**Alcance de entrega: exclusivamente app móvil.** El navegador y la ejecución de escritorio se usan para desarrollo y revisión de la interfaz; no se está preparando un producto web o de escritorio.
+
 Funciona **sin conexión** y sincroniza con Tierra cuando hay red. La lógica de salud vive en **Rust** y la interfaz es **Tauri 2** (TypeScript + Vite).
 
 ## Estructura
