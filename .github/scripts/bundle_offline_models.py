@@ -61,6 +61,7 @@ with zipfile.ZipFile(unaligned, 'a', compression=zipfile.ZIP_STORED, allowZip64=
                 digest.update(block)
                 target.write(block)
         assert received == size and digest.hexdigest() == expected, f'Model integrity check failed: {name}'
+        (models / name).unlink()  # free runner disk before zipalign copies the APK
         print(f'Embedded {name}')
 
 tools = Path(os.environ['ANDROID_HOME']) / 'build-tools/36.0.0'
