@@ -290,6 +290,9 @@ export type DemoScenario = "routine" | "persistent_change" | "alarm_event";
 
 // ---------- API de simulación (datos inventados) ----------
 
+/** Snapshot already saved on this device; reading it never contacts the backend. */
+export interface CachedCrew { received_at: string; crew: Record<string, unknown>[] }
+
 export interface SimAstronaut { astronaut_id: string; display_name: string }
 
 export interface SimImportInput {
@@ -449,6 +452,7 @@ export interface ExportJsonResult {
 }
 
 export const core = {
+  cachedCrew: () => invoke<CachedCrew | null>("recommendations_cached_crew"),
   speakText: (input: { request_id: string; text: string; voice?: string | null; speed?: number | null }) => invoke<SpeakResponse>("speak_text", { input }),
   speakCancel: (requestId: string) => invoke<boolean>("speak_cancel", { request_id: requestId }),
   voiceRelease: () => invoke<boolean>("voice_release"),

@@ -269,6 +269,8 @@ after(() => {
   }
 });
 
+// Explicit false keeps these existing queue tests on the web-feed transport.
+// The production/default Tauri replay is covered in front-graves.test.mjs.
 describe("telemetría local — parseCrew, crewToReadings y cola IPC", () => {
 
   test("Ronda 5: valores presentes inválidos se rechazan y los válidos se conservan", () => {
@@ -386,7 +388,7 @@ describe("telemetría local — parseCrew, crewToReadings y cola IPC", () => {
 
     const states = [];
     try {
-      const feed = telemetryMod.createTelemetryFeed(s => states.push(s));
+      const feed = telemetryMod.createTelemetryFeed(s => states.push(s), false);
       await flushMicrotasks();
       feed.stop();
     } finally {
@@ -435,7 +437,7 @@ describe("telemetría local — parseCrew, crewToReadings y cola IPC", () => {
 
     globalThis.fetch = async () => ({ ok: true, json: async () => bigCrew });
     const states = [];
-    const feed = telemetryMod.createTelemetryFeed(s => states.push(s));
+    const feed = telemetryMod.createTelemetryFeed(s => states.push(s), false);
     await flushMicrotasks(60);
     feed.stop();
 
@@ -473,7 +475,7 @@ describe("telemetría local — parseCrew, crewToReadings y cola IPC", () => {
     };
 
     const states = [];
-    const feed = telemetryMod.createTelemetryFeed(s => states.push(s));
+    const feed = telemetryMod.createTelemetryFeed(s => states.push(s), false);
     await flushMicrotasks();
 
     // El primer HTTP ya publicó inmediatamente aunque el primer IPC siga pendiente.
@@ -544,7 +546,7 @@ describe("telemetría local — parseCrew, crewToReadings y cola IPC", () => {
     };
 
     const states = [];
-    const feed = telemetryMod.createTelemetryFeed(s => states.push(s));
+    const feed = telemetryMod.createTelemetryFeed(s => states.push(s), false);
     await flushMicrotasks();
 
     assert.equal(ipcCalls.length, 1);
@@ -686,7 +688,7 @@ describe("telemetría local — parseCrew, crewToReadings y cola IPC", () => {
       ],
     });
     const states = [];
-    const feed = telemetryMod.createTelemetryFeed(s => states.push(s));
+    const feed = telemetryMod.createTelemetryFeed(s => states.push(s), false);
     await flushMicrotasks(60);
     feed.stop();
 
@@ -722,7 +724,7 @@ describe("telemetría local — parseCrew, crewToReadings y cola IPC", () => {
     });
 
     const states = [];
-    const feed = telemetryMod.createTelemetryFeed(s => states.push(s));
+    const feed = telemetryMod.createTelemetryFeed(s => states.push(s), false);
     await flushMicrotasks();
 
     t.mock.timers.tick(10_000);
@@ -797,7 +799,7 @@ describe("telemetría local — panel telemetry-history.ts", () => {
     crew = [];
     await handle.refresh();
     assert.equal(body.hasAttribute("aria-busy"), false);
-    assert.equal(host.querySelector(".tele-hist-status").textContent, "No readings stored yet");
+    assert.equal(host.querySelector(".tele-hist-status").textContent, "No crew list available");
 
     // La respuesta obsoleta llega después: aria-busy debe seguir retirado.
     firstList.resolve([]);
@@ -1626,4 +1628,66 @@ describe("exportación JSON", () => {
     assert.equal(path.textContent, "");
     handle.destroy();
   });
+});
+
+
+test("3: missing local/feed catalog does not claim SQLite is empty", async () => {
+  const { createHost } = createDomEnvironment();
+  const calls = [];
+  window.__TAURI_INTERNALS__ = { invoke: async cmd => {
+    calls.push(cmd);
+    if (cmd === "recommendations_cached_crew") return null;
+    if (cmd === "list_telemetry") return [];
+    if (cmd === "verify_telemetry") return { ok: true, checked: 0, series_checked: 0, checked_through_reading_id: null };
+    throw Error("Unexpected command: " + cmd);
+  } };
+  let crew = [];
+  const host = createHost();
+  const handle = historyMod.mountTelemetryHistory(host, () => crew);
+  try {
+    await handle.refresh(); await flushMicrotasks();
+    assert.ok(calls.includes("recommendations_cached_crew"));
+    assert.equal(calls.includes("list_telemetry"), false);
+    assert.equal(host.querySelector(".tele-hist-status").textContent, "No crew list available");
+    assert.doesNotMatch(host.querySelector(".tele-hist-body").textContent, /No readings stored yet/);
+    crew = [{ id: "a1", name: "Alice" }];
+    await handle.refresh();
+    assert.ok(calls.includes("list_telemetry"));
+    assert.equal(host.querySelector(".tele-hist-status").textContent, "No readings stored yet", "empty storage requires a successful query");
+  } finally { handle.destroy(); }
+});
+
+test("3: offline history merges saved snapshot IDs with the feed and queries SQLite", async () => {
+  const { createHost } = createDomEnvironment();
+  const calls = [];
+  let catalogFails = false;
+  window.__TAURI_INTERNALS__ = { invoke: async (cmd, args) => {
+    calls.push({ cmd, args });
+    if (cmd === "recommendations_cached_crew") {
+      if (catalogFails) throw Error("Snapshot unavailable");
+      return { received_at: "2026-11-15T12:00:00.000Z", crew: [{ id: "saved", astronautName: "Saved crew" }] };
+    }
+    if (cmd === "list_telemetry") return [{ reading_id: 1, astronaut_key: "saved", astronaut_name: "Saved crew",
+      indicator: "heart_rate", value: { bpm: 72 }, unit: "bpm", observed_at: "2026-11-15T12:00:00.000Z", source: "feed" }];
+    if (cmd === "verify_telemetry") return { ok: true, checked: 1, series_checked: 1, checked_through_reading_id: 1 };
+    throw Error("Unexpected command: " + cmd);
+  } };
+  let crew = [];
+  const host = createHost();
+  const handle = historyMod.mountTelemetryHistory(host, () => crew);
+  try {
+    await flushMicrotasks(40); await handle.refresh();
+    assert.ok(calls.some(call => call.cmd === "list_telemetry" && call.args.input.astronaut_key === "saved"));
+    assert.match(host.querySelector(".tele-hist-status").textContent, /1 readings loaded/);
+    const select = host.querySelector(".tele-hist-select");
+    assert.deepEqual(select.children.map(option => option.value), ["saved"]);
+    crew = [{ id: "online", name: "Online crew" }, { id: "saved", name: "Renamed crew" }];
+    await handle.refresh();
+    assert.deepEqual(select.children.map(option => option.value), ["saved", "online"]);
+    assert.equal(select.children[0].textContent, "Renamed crew");
+    crew = []; catalogFails = true;
+    await handle.refresh(); await flushMicrotasks();
+    assert.deepEqual(select.children.map(option => option.value), ["saved"]);
+    assert.match(host.querySelector(".tele-hist-status").textContent, /1 readings loaded/);
+  } finally { handle.destroy(); }
 });

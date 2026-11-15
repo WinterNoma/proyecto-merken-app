@@ -26,6 +26,7 @@ export function createDashboard(available: boolean, onZoneSelection?: (zone: Bod
   let profile: ProfileResponse | null = null;
   let online = false;
   let confirmedAlert: Evaluation | null = null;
+  let persistentAlerts: Evaluation[] = [];
   let feed: FeedState | null = null;
   let detailRevision = 0;
   const dialog = element<HTMLDialogElement>("#reading-dialog");
@@ -38,7 +39,7 @@ export function createDashboard(available: boolean, onZoneSelection?: (zone: Bod
     onZoneSelection?.(zone);
   }
   function overall(): void {
-    const copy = available ? status ? statusCopy(status.overall.status) : statusCopy(confirmedAlert?.status ?? "not_evaluated")
+    const copy = available ? confirmedAlert ? statusCopy(confirmedAlert.status) : status ? statusCopy(status.overall.status) : statusCopy("not_evaluated")
       : member ? crewStatus(member.telemetry) : { tone: "neutral" as const, label: "No data", icon: "no_data" as const };
     paintBadge(element("#overall-status"), copy);
     element("#overall-box").dataset.tone = copy.tone;
@@ -46,13 +47,13 @@ export function createDashboard(available: boolean, onZoneSelection?: (zone: Bod
     setText(element("#overall-scope"), available
       ? "On-device · " + (profile?.profile?.astronaut.display_name ?? "Profile unavailable") + (!online ? " · Local service unavailable" : "")
       : feed?.preview ? "Synthetic crew · Reading-level assessment" : "MySQL · Reading-level assessment");
-    if (available) setText(element("#feed-status"), status ? (online ? "Live · " : "Last update · ") + utc(status.evaluated_at, true) : "Awaiting local record");
+    if (available) setText(element("#feed-status"), status ? (online ? "Live · " : "Last update · ") + utc(status.evaluated_at, true) : confirmedAlert ? "Summary update pending" : "Awaiting local record");
     const extra = element("#overall-extra");
     const unknown = status?.indicators.filter(evaluation => evaluation.status === "not_evaluated" && evaluation.reason !== "not_applicable").length ?? 0;
     setText(extra, status ? [unknown ? unknown + " indicators not evaluated" : "", status.overall.worst.length ? "Review: " + status.overall.worst.map(key => key.replace(/_/g, " ")).join(", ") : ""].filter(Boolean).join(" · ") : "");
     extra.hidden = !extra.textContent;
-    element("#overview-alerts").hidden = !status?.alerts.length && !confirmedAlert;
-    setText(element("#overview-alerts"), "View persistent alerts (" + (status?.alerts.length || (confirmedAlert ? 1 : 0)) + ")");
+    element("#overview-alerts").hidden = persistentAlerts.length === 0;
+    setText(element("#overview-alerts"), "View persistent alerts (" + persistentAlerts.length + ")");
     setText(element("#overview-sync"), status ? status.sync.pending + " pending · " + status.sync.failed + " failed" : "Unavailable");
     setText(element("#body-source"), available ? "Cards: MySQL crew · Zones: on-device symptoms" + (status?.is_demo ? " · DEMO" : "") : feed?.preview ? "DEMO readings · Body navigation only · Zones not evaluated" : "Local service unavailable · Body zones not evaluated");
   }
@@ -96,6 +97,11 @@ export function createDashboard(available: boolean, onZoneSelection?: (zone: Bod
     core(value: StatusResponse | null, identity: ProfileResponse | null, live: boolean, alert?: Evaluation): void {
       if (live) confirmedAlert = null;
       if (alert) confirmedAlert = alert;
+      if (value) persistentAlerts = value.alerts;
+      else if (identity === null && (!alert || status?.is_demo)) persistentAlerts = [];
+      if (alert?.input_event_ids.length && !persistentAlerts.some(entry => entry.input_event_ids.some(id => alert.input_event_ids.includes(id)))) {
+        persistentAlerts = [...persistentAlerts, alert];
+      }
       status = value; profile = identity; online = live; map.update(value?.body_zones ?? []); overall();
     },
   };

@@ -6,7 +6,7 @@ import {
   type TelemetryValue,
 } from "../core-api";
 import type { AstronautProfile, AstronautTelemetry, BloodPressure } from "../types";
-import { invoke } from "@tauri-apps/api/core";
+import { readingDomainError } from "../vital-status";
 
 export type TelemetryPersistStatusKind = "ok" | "slow" | "error";
 
@@ -95,7 +95,7 @@ function invalid(reason: string): ReadingValidationResult {
   return { ok: false, reason };
 }
 
-/** Valida una lectura individual replicando exactamente las cotas y reglas de Rust. */
+/** Validate the IPC envelope and physical/domain limits before local persistence. */
 export function validateReading(input: TelemetryReadingInput): ReadingValidationResult {
   if (typeof input.astronaut_key !== "string") return invalid("astronaut_key: invalid");
   if (CONTROL_CHAR_RE.test(input.astronaut_key)) return invalid("astronaut_key: control characters");
@@ -132,6 +132,9 @@ export function validateReading(input: TelemetryReadingInput): ReadingValidation
     );
     if (!hasFiniteNumeric) return invalid("value: non-finite number");
   }
+
+  const domainError = readingDomainError(input.indicator, input.value);
+  if (domainError) return invalid(domainError);
 
   let serialized: string;
   try {
@@ -200,6 +203,7 @@ export function parseCrew(payload: unknown): AstronautProfile[] {
       sleep_hours: reading(row.sleep_hours), nutrition: reading(row.nutrition),
       space_radiation: reading(row.space_radiation), distance_from_earth: reading(row.distance_from_earth),
       mood: trimmedMood || null,
+      invalidIndicators: [...new Set(invalidReadings.map(entry => entry.indicator))],
     };
     if ("hrv" in row) telemetry.hrv = reading(row.hrv);
     if ("body_battery" in row) telemetry.body_battery = reading(row.body_battery);
@@ -316,7 +320,7 @@ function formatError(error: unknown): string {
   return String(error);
 }
 
-export function createTelemetryFeed(onUpdate: (state: FeedState) => void, cacheOnly = false) {
+export function createTelemetryFeed(onUpdate: (state: FeedState) => void, cacheOnly = isTauriRuntime()) {
   let state: FeedState = {
     crew: [],
     loading: true,
@@ -499,7 +503,7 @@ export function createTelemetryFeed(onUpdate: (state: FeedState) => void, cacheO
     let crewToPersist: AstronautProfile[] | null = null;
     try {
       if (cacheOnly) {
-        const cache = await invoke<{received_at: string; crew: Record<string, unknown>[]} | null>("recommendations_cached_crew");
+        const cache = await core.cachedCrew();
         if (stopped) return;
         const crew = cache ? parseCrew(backendRowsForReplay(cache.crew)) : [];
         state = {...state, crew, loading: false, live: false, cached: true, lastSuccess: cache ? new Date(cache.received_at) : null};

@@ -146,6 +146,9 @@ export interface CorePanel {
 }
 export function createCorePanel(available: boolean, onChange: (status: StatusResponse | null, profile: ProfileResponse | null, online: boolean, confirmedAlert?: Evaluation) => void): CorePanel {
   let current: StatusResponse | null = null;
+  let confirmedAlert: Evaluation | undefined;
+  let summaryPending = false;
+  let persistentAlerts: Evaluation[] = [];
   let profile: ProfileResponse | null = null;
   let pending: Promise<StatusResponse | null> | null = null;
   let stopped = false;
@@ -165,6 +168,7 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
   const knownEvents = new Map<string, EventItem>();
 
   function renderAlerts(alerts: Evaluation[], demo: boolean): void {
+    persistentAlerts = alerts;
     const liveKeys = new Set<string>();
     const newNames: string[] = [];
     for (const evaluation of alerts) {
@@ -231,6 +235,8 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
   }
   function render(status: StatusResponse): void {
     current = status;
+    confirmedAlert = undefined;
+    summaryPending = false;
     record.hidden = false;
     availability.hidden = true;
     element("#demo-badge").hidden = !status.is_demo;
@@ -276,19 +282,32 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
       });
       return status.value;
     } catch {
-      if (stopped) return null;
+      if (stopped || startedAtRevision !== revision) return null;
       availability.hidden = false;
       setText(element("#core-availability-title"), "Local service unavailable");
-      setText(element("#core-availability-copy"), current
+      setText(element("#core-availability-copy"), summaryPending
+        ? "The latest action was saved locally. The summary could not be refreshed; its confirmed evaluation is shown."
+        : current
         ? "The local service could not be reached. Showing the last confirmed record from " + utc(current.evaluated_at) + "."
         : "The local service could not be reached. This action was not confirmed.");
       element("#demo-empty").hidden = true;
       retry.hidden = false;
-      onChange(current, profile, false);
+      onChange(current, profile, false, confirmedAlert);
       return null;
     } finally {
       retry.disabled = false;
     }
+  }
+  function invalidateSummary(evaluation: Evaluation | null): void {
+    // Only a newer authoritative status may replace a confirmed pending alarm.
+    if (evaluation?.status === "alarm") confirmedAlert = evaluation;
+    current = null;
+    summaryPending = true;
+    paintBadge(element("#core-overall"), statusCopy(confirmedAlert?.status ?? "not_evaluated"));
+    setText(element("#core-escalation"), confirmedAlert ? escalationCopy(confirmedAlert.escalation) : "Summary update pending");
+    setText(element("#core-worst"), confirmedAlert ? indicatorName(confirmedAlert.indicator) : "Not evaluated");
+    setText(element("#core-sync"), "Update pending");
+    onChange(null, profile, false, confirmedAlert);
   }
   async function refresh(force = false): Promise<StatusResponse | null> {
     if (!available || stopped) return null;
@@ -355,7 +374,7 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
         element("#demo-badge").hidden = true;
         indicatorViews.forEach(view => view.node.remove()); indicatorViews.clear();
         symptomViews.forEach(view => view.node.remove()); symptomViews.clear();
-        alertViews.forEach(view => view.remove()); alertViews.clear(); alertSignatures.clear();
+        alertViews.forEach(view => view.remove()); alertViews.clear(); alertSignatures.clear(); persistentAlerts = []; confirmedAlert = undefined;
         announced.clear(); knownEvents.clear();
         setText(element("#core-profile"), "Refreshing profile…");
         paintBadge(element("#core-overall"), statusCopy("not_evaluated"));
@@ -377,7 +396,7 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
       record.hidden = false;
       setText(element("#core-evaluated"), "Latest saved evaluation shown. Summary update pending.");
       if (evaluation.status === "alarm") setText(element("#alarm-announcement"), "Alarm. " + indicatorName(evaluation.indicator) + ". Review the on-device record.");
-      onChange(current, profile, false, evaluation.status === "alarm" ? evaluation : undefined);
+      invalidateSummary(evaluation);
     },
     acceptHelp(result): void {
       revision += 1;
@@ -387,18 +406,14 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
         current = null; profile = null; record.hidden = true; element("#demo-badge").hidden = true;
         indicatorViews.forEach(view => view.node.remove()); indicatorViews.clear();
         symptomViews.forEach(view => view.node.remove()); symptomViews.clear();
-        alertViews.forEach(view => view.remove()); alertViews.clear(); alertSignatures.clear();
+        alertViews.forEach(view => view.remove()); alertViews.clear(); alertSignatures.clear(); persistentAlerts = []; confirmedAlert = undefined;
         if (result.evaluation) renderAlerts([result.evaluation], result.event.is_demo);
       } else if (result.evaluation) {
-        const alerts = [...(current?.alerts ?? [])];
+        const alerts = [...persistentAlerts];
         if (!alerts.some(alert => alert.input_event_ids.includes(result.event.event_id))) alerts.push(result.evaluation);
         renderAlerts(alerts, result.event.is_demo);
       }
-      // Preserve the confirmed alert without inventing a profile or sync queue.
-      if (result.evaluation && current) {
-        current = { ...current, overall: { status: "alarm", escalation: "urgent", worst: [...new Set([...current.overall.worst, result.evaluation.indicator])] }, alerts: [...current.alerts.filter(alert => !alert.input_event_ids.includes(result.event.event_id)), result.evaluation] };
-      }
-      onChange(current, profile, false, result.evaluation ?? undefined);
+      invalidateSummary(result.evaluation);
     },
     stop(): void { stopped = true; if (timer !== null) window.clearInterval(timer); },
   };
