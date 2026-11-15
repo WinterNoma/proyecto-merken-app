@@ -7,3 +7,7 @@
 //! - **explicar** una evaluación ya decidida por `merken-core` (RF-15).
 //!
 //! El SLM ayuda, no decide: nunca asigna estados ni recomienda tratamientos.
+
+pub mod contract;
+#[cfg(feature = "native")]
+pub mod runtime;

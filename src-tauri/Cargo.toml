@@ -24,3 +24,6 @@ merken-core.workspace = true
 merken-store.workspace = true
 merken-seed.workspace = true
 merken-sync.workspace = true
+merken-slm = { workspace = true, features = ["native"] }
+tauri-plugin-slm-assets = { path = "../plugins/slm-assets" }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

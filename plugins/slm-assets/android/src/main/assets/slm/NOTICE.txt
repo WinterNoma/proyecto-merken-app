@@ -1,0 +1,4 @@
+Qwen3-1.7B base weights: Qwen Team, Apache License 2.0. Original model: https://huggingface.co/Qwen/Qwen3-1.7B
+V7 adapter: Space Health SLM / Merken project, synthetic training only; not clinically validated.
+Inference: llama.cpp (GGML contributors, MIT) through llama-cpp-rs (utilityai contributors, MIT).
+Personal records and credentials are not included in these model assets.
