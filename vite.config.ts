@@ -28,6 +28,9 @@ function mysqlSettings(mode: string) {
     ssl: sslMode === "REQUIRED" ? { rejectUnauthorized: false } : undefined,
     // Si MySQL no responde, /api/astronauts devuelve un 500 claro en vez de quedarse colgado.
     connectTimeout: 10000,
+    // Las fechas de MySQL están en UTC: sin esto mysql2 las lee como hora local
+    // y las adelanta el desfase del equipo (p. ej. +3 h en UTC−3).
+    timezone: "Z",
     waitForConnections: true,
     connectionLimit: 4,
     queueLimit: 0,
