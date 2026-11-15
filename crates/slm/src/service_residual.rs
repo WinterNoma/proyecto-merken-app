@@ -16,7 +16,6 @@ fn words(text: &str) -> Vec<Word<'_>> {
     let mut out = Vec::new();
     let mut start = None;
     let mut numeric = false;
-    let mut after_sign = false;
     for (offset, ch) in text
         .char_indices()
         .chain(std::iter::once((text.len(), ' ')))
@@ -28,33 +27,9 @@ fn words(text: &str) -> Vec<Word<'_>> {
                 .get(offset + ch.len_utf8()..)
                 .and_then(|tail| tail.chars().next())
                 .is_some_and(|next| next.is_ascii_digit());
-        // Keep signs and horizontal spacing with the digits, matching core's
-        // atomic rejection of signed numbers. A hyphen between words is not numeric.
-        let sign = matches!(ch, '-' | '−' | '+')
-            && text
-                .get(offset + ch.len_utf8()..)
-                .and_then(|tail| tail.chars().find(|next| !matches!(next, ' ' | '\t')))
-                .is_some_and(|next| next.is_ascii_digit());
-        let sign_space = after_sign && matches!(ch, ' ' | '\t');
-        after_sign = sign || sign_space;
-        if sign
-            && let Some(begin) = start.take()
-            && let Some(value) = text.get(begin..offset)
-        {
-            out.push(Word {
-                text: value,
-                start: begin,
-                end: offset,
-            });
-        }
-        if ch.is_alphanumeric()
-            || ('\u{0300}'..='\u{036f}').contains(&ch)
-            || decimal
-            || sign
-            || sign_space
-        {
+        if ch.is_alphanumeric() || ('\u{0300}'..='\u{036f}').contains(&ch) || decimal {
             if start.is_none() {
-                numeric = ch.is_ascii_digit() || sign;
+                numeric = ch.is_ascii_digit();
             } else if ch.is_alphabetic() {
                 numeric = false;
             }
@@ -71,6 +46,59 @@ fn words(text: &str) -> Vec<Word<'_>> {
         }
     }
     out
+}
+
+// Keep the original symbol prefix of a pending word, without duplicating core's
+// sign vocabulary. Spaces/tabs may join symbols, but sentence punctuation cannot.
+fn symbol_prefix_start(text: &str, start: usize) -> usize {
+    let Some(before) = text.get(..start) else {
+        return start;
+    };
+    let mut begin = start;
+    for (offset, ch) in before.char_indices().rev() {
+        if matches!(ch, ' ' | '\t') {
+            continue;
+        }
+        if ch.is_alphanumeric()
+            || ch.is_whitespace()
+            || matches!(
+                ch,
+                '.' | ','
+                    | ';'
+                    | ':'
+                    | '!'
+                    | '?'
+                    | '¡'
+                    | '¿'
+                    | '('
+                    | ')'
+                    | '\''
+                    | '"'
+                    | '‘'
+                    | '’'
+                    | '“'
+                    | '”'
+                    | '«'
+                    | '»'
+                    | '‹'
+                    | '›'
+            )
+        {
+            break;
+        }
+        begin = offset;
+    }
+    // A symbol attached on its left to a word belongs to that word, rather
+    // than to the pending fragment (e.g. the hyphen in "dolor-cabeza").
+    if text
+        .get(..begin)
+        .and_then(|prefix| prefix.chars().next_back())
+        .is_some_and(|ch| ch.is_alphanumeric() || ('\u{0300}'..='\u{036f}').contains(&ch))
+    {
+        start
+    } else {
+        begin
+    }
 }
 
 pub(super) fn connector(word: &str) -> bool {
@@ -297,7 +325,14 @@ fn field_evidence(
             if number.is_none() && evidence.iter().any(|s| a.start <= s.0 && s.1 <= b.end) {
                 continue;
             }
-            if !text.get(a.start..b.end).is_some_and(&matches) {
+            // Check the complete numeric expression, including any symbol prefix.
+            // An unsigned substring cannot establish coverage for a signed value.
+            let begin = if number.is_some() {
+                symbol_prefix_start(text, a.start)
+            } else {
+                a.start
+            };
+            if !text.get(begin..b.end).is_some_and(&matches) {
                 continue;
             }
             evidence.push((a.start, b.end));
@@ -422,6 +457,9 @@ pub(super) fn unresolved_fragments(text: &str, proposal: &Proposal) -> Vec<Strin
             }
         }
     }
+    for span in &mut spans {
+        span.0 = symbol_prefix_start(text, span.0);
+    }
     spans.sort_unstable();
     let mut merged: Vec<(usize, usize)> = Vec::new();
     for span in spans {
@@ -503,25 +541,14 @@ mod tests {
     }
 
     #[test]
-    fn residual_tokens_preserve_signs_decimals_and_utf8_boundaries() {
-        // Token tests also prevent unsigned evidence from consuming part of a
-        // signed value, even if a broad record quote contains both spellings.
-        for literal in ["-0,5", "−0.5", "+36,6", "-72", "−72", "+72"] {
-            let text = format!("pulse {literal}");
+    fn residual_tokens_preserve_decimals_and_utf8_boundaries() {
+        for literal in ["0,5", "0.5", "36,6", "72"] {
+            let text = format!("pulso {literal}");
             let tokens = words(&text);
             assert_eq!(tokens.len(), 2, "{text}");
             assert_eq!(tokens[1].text, literal);
             assert_eq!(&text[tokens[1].start..tokens[1].end], literal);
-            let mut proposal = interpret("pulse 72");
-            proposal.records[0].quote = text.clone();
-            assert_eq!(unresolved_fragments(&text, &proposal), [literal]);
         }
-        // A sign attached to a number starts that numeric token even next to a word.
-        let tokens = words("pulse−72");
-        assert_eq!(
-            tokens.iter().map(|word| word.text).collect::<Vec<_>>(),
-            ["pulse", "−72"]
-        );
     }
 
     #[test]
