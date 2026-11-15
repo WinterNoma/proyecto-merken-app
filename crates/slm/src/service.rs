@@ -1286,10 +1286,16 @@ mod tests {
         ("pulse -72", &["-72"]),
         ("pulse −72", &["−72"]),
         ("pulse +72", &["+72"]),
+        ("pulse – 72", &["– 72"]),
+        ("pulse —72", &["—72"]),
+        ("pulso + setenta", &["+ setenta"]),
+        ("pulso ± 72", &["± 72"]),
         ("temperatura −0.5", &["−0.5"]),
         ("temperatura +36,6", &["+36,6"]),
         ("temperatura 36,6", &[]),
         ("temperatura 36.6", &[]),
+        ("dolor - cabeza", &[]),
+        ("120/80", &[]),
         ("blood glucose 95", &[]),
         ("estado de ánimo 6", &[]),
         ("BLOOD   GLUCOSE 95", &[]),
@@ -1366,6 +1372,9 @@ mod tests {
             ("pulse -72", "bpm", None, None),
             ("pulse −72", "bpm", None, None),
             ("pulse +72", "bpm", None, None),
+            ("pulse – 72", "bpm", None, None),
+            ("pulse —72", "bpm", None, None),
+            ("pulso + setenta", "bpm", None, None),
             ("temperatura −0.5", "celsius", None, None),
             ("temperatura +36,6", "celsius", None, None),
             ("temperatura 36,6", "celsius", Some(36.6), Some("36,6")),
@@ -1390,6 +1399,74 @@ mod tests {
             assert_eq!(field.quote.as_deref(), quote, "{text}");
             assert!(proposal.negated.is_empty(), "{text}: {proposal:?}");
             assert!(proposal.uninterpreted.is_empty(), "{text}: {proposal:?}");
+        }
+    }
+
+    #[test]
+    fn pending_fragments_keep_general_symbol_prefixes() {
+        // Clear value evidence to test the fragment rule independently of which
+        // symbols core currently recognizes, with digits, number words and prose.
+        for prefix in ["-", "−", "–", "—", "+", "±", "~", "@", "→", "- ±~"] {
+            for gap in ["", " ", "\t", " \t "] {
+                for word in ["72", "setenta", "agotado"] {
+                    let pending = format!("{prefix}{gap}{word}");
+                    let text = format!("pulso {pending}");
+                    let mut proposal = interpret("pulso 72");
+                    proposal.records[0].quote = text.clone();
+                    proposal.records[0].fields.clear();
+                    assert_eq!(unresolved_fragments(&text, &proposal), [pending], "{text}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn symbol_prefixes_stop_at_sentence_boundaries_and_attached_words() {
+        for boundary in [
+            ".", ",", ";", ":", "!", "?", "¡", "¿", "\"", "'", "(", ")", "‘", "’", "“", "”", "«",
+            "»", "‹", "›", "\n", "\r", "\u{00a0}",
+        ] {
+            let text = format!("pulso ~{boundary}\t± 72");
+            let mut proposal = interpret("pulso 72");
+            proposal.records[0].quote = text.clone();
+            proposal.records[0].fields.clear();
+            assert_eq!(unresolved_fragments(&text, &proposal), ["± 72"], "{text}");
+        }
+        for text in ["dolor-cabeza", "dolor- cabeza", "dolor±~\tcabeza"] {
+            let mut proposal = interpret("dolor de cabeza");
+            proposal.records[0].quote = text.into();
+            proposal.records[0].fields.clear();
+            // "cabeza" is a symptom mention (zone), so it may be covered; what matters
+            // is that a symbol attached to a covered word never starts a pending fragment.
+            let pending = unresolved_fragments(text, &proposal);
+            assert!(
+                pending
+                    .iter()
+                    .all(|f| f.starts_with(|c: char| c.is_alphanumeric())),
+                "{text}: {pending:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn unsigned_numeric_evidence_cannot_consume_a_symbol_prefixed_value() {
+        for literal in [
+            "-72",
+            "− 72",
+            "– 72",
+            "—72",
+            "+\t72",
+            "± 72",
+            "~ 72",
+            "+ seventy two",
+        ] {
+            let text = format!("pulse {literal}");
+            let mut proposal = interpret("pulse 72");
+            proposal.records[0].quote = text.clone();
+            // Exercise both the original narrow citation and a broad citation.
+            assert_eq!(unresolved_fragments(&text, &proposal), [literal], "{text}");
+            proposal.records[0].fields[0].quote = Some(text.clone());
+            assert_eq!(unresolved_fragments(&text, &proposal), [literal], "{text}");
         }
     }
 
