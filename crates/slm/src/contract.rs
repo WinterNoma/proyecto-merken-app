@@ -76,10 +76,10 @@ pub fn normalize(input: &Input) -> Result<Value, String> {
         {
             return Err("Invalid metric, unit or value".into());
         }
-        if let Some(t) = &r.measured_at {
-            if !t.ends_with('Z') || merken_core::time::Timestamp::parse_rfc3339(t).is_err() {
-                return Err("Invalid measurement timestamp".into());
-            }
+        if let Some(t) = &r.measured_at
+            && (!t.ends_with('Z') || merken_core::time::Timestamp::parse_rfc3339(t).is_err())
+        {
+            return Err("Invalid measurement timestamp".into());
         }
     }
     let a = &input.assessment;
