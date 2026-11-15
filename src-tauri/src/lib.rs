@@ -706,6 +706,8 @@ pub fn run() {
             voice::speak_text,
             voice::speak_cancel,
             voice::voice_release,
+            voice::transcribe_audio,
+            voice::stt_release,
             interpret_text,
             explain_indicator,
             slm_status,

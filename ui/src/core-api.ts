@@ -88,6 +88,8 @@ export type ErrorCode =
   | "text_invalid"
   | "text_unsupported"
   | "synthesis_failed"
+  | "audio_invalid"
+  | "transcription_failed"
   | "busy"
   | "model_unavailable"
   | "cancelled"
@@ -423,6 +425,8 @@ export interface SlmStatus { interpreter: SlmModelStatus; explainer: SlmModelSta
 export interface SpeakResponse { request_id: string; chunks: number; duration_ms: number }
 /** Each event contains one complete PCM16 mono WAV file in base64. */
 export interface VoiceChunkEvent { request_id: string; index: number; wav_base64: string }
+export type DictationLanguage = "es" | "en" | "auto";
+export interface TranscribeResponse { request_id: string; text: string; duration_ms: number }
 
 export interface ExportJsonInput {
   include_telemetry?: boolean;
@@ -477,4 +481,444 @@ export const core = {
   /** Verifica la integridad de la cadena de hashes de telemetría local. */
   verifyTelemetry: (input: VerifyTelemetryInput = {}) =>
     invoke<VerifyTelemetryResult>("verify_telemetry", { input }),
+  /** Transcribe audio PCM float32 little-endian en base64 sin conexión. */
+  transcribeAudio: (input: {
+    request_id: string;
+    pcm_f32le_base64: string;
+    sample_rate: number;
+    language?: DictationLanguage | null;
+  }) => invoke<TranscribeResponse>("transcribe_audio", { input }),
+  /** Libera el modelo STT cargado en memoria. */
+  sttRelease: () => invoke<boolean>("stt_release"),
 };
+
+// ---------- Dictado por voz (solo voz -> texto; no interpreta ni guarda) ----------
+
+const DICTATION_TARGET_SAMPLE_RATE = 16000;
+const DICTATION_MAX_SECONDS = 30;
+const DICTATION_MAX_TARGET_SAMPLES = DICTATION_TARGET_SAMPLE_RATE * DICTATION_MAX_SECONDS;
+
+const DICTATION_WORKLET_SOURCE = `
+class MerkenDictationProcessor extends AudioWorkletProcessor {
+  process(inputs) {
+    const input = inputs[0];
+    if (input && input.length > 0 && input[0] && input[0].length > 0) {
+      const frameCount = input[0].length;
+      const channelCount = input.length;
+      const mono = new Float32Array(frameCount);
+      if (channelCount === 1) {
+        mono.set(input[0]);
+      } else {
+        for (let i = 0; i < frameCount; i++) {
+          let sum = 0;
+          for (let ch = 0; ch < channelCount; ch++) {
+            sum += input[ch][i] || 0;
+          }
+          mono[i] = sum / channelCount;
+        }
+      }
+      this.port.postMessage(mono, [mono.buffer]);
+    }
+    return true;
+  }
+}
+registerProcessor("merken-dictation-processor", MerkenDictationProcessor);
+`;
+
+export interface DictationAudio {
+  samples: Float32Array;
+  sampleRate: number;
+}
+
+export interface DictationRecording {
+  /** Resolves once the microphone is active; rejects if permission or audio setup fails. */
+  ready: Promise<void>;
+  /**
+   * Resolves once the 30-second audio capture limit is reached and capture stops automatically;
+   * never rejects. Accumulated audio remains available until `stop()` or `cancel()`.
+   */
+  limitReached: Promise<void>;
+  /** Stops capture, releases audio resources, and returns mono 16 kHz Float32 samples (max 30 s). */
+  stop(): Promise<DictationAudio>;
+  /** Aborts capture and immediately releases all microphone and Web Audio resources. */
+  cancel(): void;
+}
+
+function concatFloat32Chunks(chunks: Float32Array[], totalLength: number): Float32Array {
+  const merged = new Float32Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return merged;
+}
+
+function clampAudioSample(value: number): number {
+  if (value > 1) return 1;
+  if (value < -1) return -1;
+  return value;
+}
+
+function resampleTo16k(mono: Float32Array, sourceRate: number): Float32Array {
+  if (mono.length === 0 || sourceRate <= 0) {
+    return new Float32Array(0);
+  }
+  if (sourceRate === DICTATION_TARGET_SAMPLE_RATE) {
+    const capped = mono.length > DICTATION_MAX_TARGET_SAMPLES
+      ? mono.subarray(0, DICTATION_MAX_TARGET_SAMPLES)
+      : mono;
+    for (let i = 0; i < capped.length; i++) {
+      capped[i] = clampAudioSample(capped[i]);
+    }
+    return capped;
+  }
+  const ratio = sourceRate / DICTATION_TARGET_SAMPLE_RATE;
+  const outLen = Math.min(DICTATION_MAX_TARGET_SAMPLES, Math.floor(mono.length / ratio));
+  const out = new Float32Array(outLen);
+  if (sourceRate > DICTATION_TARGET_SAMPLE_RATE) {
+    for (let i = 0; i < outLen; i++) {
+      const winStart = i * ratio;
+      const winEnd = (i + 1) * ratio;
+      const firstIdx = Math.floor(winStart);
+      const lastIdx = Math.min(mono.length - 1, Math.floor(winEnd));
+      let weightedSum = 0;
+      let totalWeight = 0;
+      for (let j = firstIdx; j <= lastIdx; j++) {
+        const overlapStart = Math.max(winStart, j);
+        const overlapEnd = Math.min(winEnd, j + 1);
+        const weight = overlapEnd - overlapStart;
+        if (weight > 0) {
+          weightedSum += mono[j] * weight;
+          totalWeight += weight;
+        }
+      }
+      out[i] = clampAudioSample(totalWeight > 0 ? weightedSum / totalWeight : 0);
+    }
+    return out;
+  }
+  for (let i = 0; i < outLen; i++) {
+    const pos = i * ratio;
+    const idx = Math.floor(pos);
+    const frac = pos - idx;
+    const s0 = mono[idx] ?? 0;
+    const s1 = mono[Math.min(idx + 1, mono.length - 1)] ?? s0;
+    out[i] = clampAudioSample(s0 + (s1 - s0) * frac);
+  }
+  return out;
+}
+
+function encodeFloat32LeBase64(samples: Float32Array): string {
+  const bytes = new Uint8Array(samples.byteLength);
+  const view = new DataView(bytes.buffer);
+  for (let i = 0; i < samples.length; i++) {
+    view.setFloat32(i * 4, samples[i], true);
+  }
+  const CHUNK_SIZE = 0x8000;
+  const parts: string[] = [];
+  for (let offset = 0; offset < bytes.length; offset += CHUNK_SIZE) {
+    const chunk = bytes.subarray(offset, offset + CHUNK_SIZE);
+    parts.push(String.fromCharCode(...chunk));
+  }
+  return btoa(parts.join(""));
+}
+
+function makeDictationRequestId(): string {
+  const ts = Date.now().toString(36);
+  const bytes = new Uint8Array(6);
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  const rand = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `dict_${ts}_${rand}`.slice(0, 64);
+}
+
+/**
+ * Starts an offline microphone recording session for voice dictation.
+ *
+ * Uses `AudioWorkletNode` when available (with a `ScriptProcessorNode` fallback),
+ * mixes input to mono, resamples to 16 kHz, caps accumulation at 30 seconds,
+ * and always releases microphone tracks and Web Audio resources on `stop()`, `cancel()`,
+ * or automatically when the 30-second limit is reached.
+ *
+ * `ready` resolves once microphone capture is active and rejects if permission or audio setup fails;
+ * `limitReached` resolves when the 30-second limit is reached (stopping microphone tracks, the audio
+ * processor, and the `AudioContext`, while preserving accumulated samples for `stop()`) and never rejects;
+ * `stop()` also rejects if capture failed to initialize or was cancelled.
+ */
+export function recordDictation(): DictationRecording {
+  const chunks: Float32Array[] = [];
+  let accumulatedSamples = 0;
+  let sourceRate = DICTATION_TARGET_SAMPLE_RATE;
+  let maxInputSamples = DICTATION_MAX_TARGET_SAMPLES;
+  let stopped = false;
+  let cancelled = false;
+  let limitReachedResolved = false;
+  let stopResult: Promise<DictationAudio> | null = null;
+
+  let stream: MediaStream | null = null;
+  let ctx: AudioContext | null = null;
+  let sourceNode: MediaStreamAudioSourceNode | null = null;
+  let workletNode: AudioWorkletNode | null = null;
+  let scriptNode: ScriptProcessorNode | null = null;
+  let silentGain: GainNode | null = null;
+  let blobUrl: string | null = null;
+  const cancelRef: { reject: ((err: Error) => void) | null } = { reject: null };
+  let resolveLimitReached: (() => void) | null = null;
+  const limitReached = new Promise<void>((resolve) => {
+    resolveLimitReached = resolve;
+  });
+
+  const clearBuffer = () => {
+    chunks.length = 0;
+    accumulatedSamples = 0;
+  };
+
+  const cleanup = () => {
+    if (workletNode) {
+      workletNode.port.onmessage = null;
+      try { workletNode.disconnect(); } catch { /* ignore */ }
+      workletNode = null;
+    }
+    if (scriptNode) {
+      scriptNode.onaudioprocess = null;
+      try { scriptNode.disconnect(); } catch { /* ignore */ }
+      scriptNode = null;
+    }
+    if (sourceNode) {
+      try { sourceNode.disconnect(); } catch { /* ignore */ }
+      sourceNode = null;
+    }
+    if (silentGain) {
+      try { silentGain.disconnect(); } catch { /* ignore */ }
+      silentGain = null;
+    }
+    if (stream) {
+      for (const track of stream.getTracks()) {
+        track.stop();
+      }
+      stream = null;
+    }
+    if (blobUrl) {
+      URL.revokeObjectURL(blobUrl);
+      blobUrl = null;
+    }
+    if (ctx && ctx.state !== "closed") {
+      void ctx.close().catch(() => {});
+    }
+    ctx = null;
+  };
+
+  const pushMonoBlock = (block: Float32Array) => {
+    if (stopped || cancelled || accumulatedSamples >= maxInputSamples || block.length === 0) {
+      return;
+    }
+    const remaining = maxInputSamples - accumulatedSamples;
+    const slice = block.length > remaining ? block.subarray(0, remaining) : block;
+    chunks.push(slice);
+    accumulatedSamples += slice.length;
+    if (accumulatedSamples >= maxInputSamples && !limitReachedResolved) {
+      limitReachedResolved = true;
+      cleanup();
+      resolveLimitReached?.();
+    }
+  };
+
+  const startPromise = (async () => {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Microphone capture is unavailable in this environment");
+    }
+    const globalAudio = globalThis as typeof globalThis & {
+      AudioContext?: typeof AudioContext;
+      webkitAudioContext?: typeof AudioContext;
+    };
+    const AudioCtx = globalAudio.AudioContext ?? globalAudio.webkitAudioContext;
+    if (!AudioCtx) {
+      throw new Error("Web Audio is unavailable in this environment");
+    }
+
+    const media = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
+    });
+    if (cancelled) {
+      for (const track of media.getTracks()) {
+        track.stop();
+      }
+      throw new Error("Dictation recording was cancelled");
+    }
+    stream = media;
+
+    ctx = new AudioCtx();
+    sourceRate = ctx.sampleRate || DICTATION_TARGET_SAMPLE_RATE;
+    maxInputSamples = Math.ceil(DICTATION_MAX_SECONDS * sourceRate);
+
+    sourceNode = ctx.createMediaStreamSource(media);
+    silentGain = ctx.createGain();
+    silentGain.gain.value = 0;
+
+    let attachedWorklet = false;
+    if (
+      typeof AudioWorkletNode !== "undefined" &&
+      Boolean(ctx.audioWorklet) &&
+      typeof Blob !== "undefined" &&
+      typeof URL !== "undefined"
+    ) {
+      try {
+        const blob = new Blob([DICTATION_WORKLET_SOURCE], { type: "application/javascript" });
+        blobUrl = URL.createObjectURL(blob);
+        await ctx.audioWorklet.addModule(blobUrl);
+        if (cancelled) {
+          cleanup();
+          throw new Error("Dictation recording was cancelled");
+        }
+        workletNode = new AudioWorkletNode(ctx, "merken-dictation-processor", {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          channelCount: 1,
+        });
+        workletNode.port.onmessage = (event: MessageEvent) => {
+          if (event.data instanceof Float32Array) {
+            pushMonoBlock(event.data);
+          }
+        };
+        sourceNode.connect(workletNode);
+        workletNode.connect(silentGain);
+        silentGain.connect(ctx.destination);
+        attachedWorklet = true;
+      } catch (err) {
+        if (cancelled) {
+          cleanup();
+          throw err;
+        }
+        if (blobUrl) {
+          URL.revokeObjectURL(blobUrl);
+          blobUrl = null;
+        }
+        if (workletNode) {
+          workletNode.port.onmessage = null;
+          try { workletNode.disconnect(); } catch { /* ignore */ }
+          workletNode = null;
+        }
+      }
+    }
+
+    if (!attachedWorklet) {
+      if (typeof ctx.createScriptProcessor !== "function") {
+        cleanup();
+        throw new Error("Audio processor is unavailable in this environment");
+      }
+      const channels = Math.max(1, sourceNode.channelCount || 1);
+      scriptNode = ctx.createScriptProcessor(4096, channels, 1);
+      scriptNode.onaudioprocess = (event: AudioProcessingEvent) => {
+        const inputBuffer = event.inputBuffer;
+        const frames = inputBuffer.length;
+        const numChannels = inputBuffer.numberOfChannels;
+        if (frames === 0 || numChannels === 0) return;
+        const mono = new Float32Array(frames);
+        if (numChannels === 1) {
+          mono.set(inputBuffer.getChannelData(0));
+        } else {
+          for (let ch = 0; ch < numChannels; ch++) {
+            const data = inputBuffer.getChannelData(ch);
+            for (let i = 0; i < frames; i++) {
+              mono[i] += data[i];
+            }
+          }
+          for (let i = 0; i < frames; i++) {
+            mono[i] /= numChannels;
+          }
+        }
+        pushMonoBlock(mono);
+      };
+      sourceNode.connect(scriptNode);
+      scriptNode.connect(silentGain);
+      silentGain.connect(ctx.destination);
+    }
+
+    if (ctx.state === "suspended") {
+      await ctx.resume();
+    }
+    if (cancelled) {
+      cleanup();
+      throw new Error("Dictation recording was cancelled");
+    }
+  })().catch((err) => {
+    cleanup();
+    throw err;
+  });
+
+  const cancelPromise = new Promise<never>((_resolve, reject) => {
+    cancelRef.reject = reject;
+  });
+  const ready = Promise.race([startPromise, cancelPromise]);
+  ready.catch(() => {});
+
+  return {
+    ready,
+    limitReached,
+    stop(): Promise<DictationAudio> {
+      if (stopResult) {
+        return stopResult;
+      }
+      stopResult = (async () => {
+        await ready;
+        if (cancelled) {
+          throw new Error("Dictation recording was cancelled");
+        }
+        stopped = true;
+        cleanup();
+        let samples: Float32Array;
+        try {
+          const merged = concatFloat32Chunks(chunks, accumulatedSamples);
+          samples = resampleTo16k(merged, sourceRate);
+        } finally {
+          clearBuffer();
+        }
+        return { samples, sampleRate: DICTATION_TARGET_SAMPLE_RATE };
+      })();
+      return stopResult;
+    },
+    cancel(): void {
+      if (stopped || cancelled) {
+        return;
+      }
+      cancelled = true;
+      cleanup();
+      clearBuffer();
+      cancelRef.reject?.(new Error("Dictation recording was cancelled"));
+    },
+  };
+}
+
+/**
+ * Stops a dictation recording and transcribes the captured audio offline via `core.transcribeAudio`.
+ *
+ * There is no transcription cancellation in Rust: once dispatched, the STT reservation remains held
+ * until the native call completes, and any new transcription request receives `"busy"`.
+ *
+ * Voice-to-text only: this function NEVER interprets or saves health data.
+ * Callers must pass the resulting `text` through `core.interpretText({ ..., source: "voice" })`
+ * and require field-by-field user confirmation before calling `core.logRecord`.
+ */
+export async function dictate(
+  recording: Pick<DictationRecording, "stop">,
+  language?: DictationLanguage | null,
+): Promise<TranscribeResponse> {
+  const { samples, sampleRate } = await recording.stop();
+  const request_id = makeDictationRequestId();
+  const pcm_f32le_base64 = encodeFloat32LeBase64(samples);
+  return core.transcribeAudio({
+    request_id,
+    pcm_f32le_base64,
+    sample_rate: sampleRate,
+    language: language ?? null,
+  });
+}
