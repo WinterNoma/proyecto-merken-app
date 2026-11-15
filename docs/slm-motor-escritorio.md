@@ -39,6 +39,16 @@ Pese a la diferencia de 945 commits de llama.cpp, la salida greedy coincide byte
 
 Si hay diferencias frente a las predicciones guardadas, revisar el prompt y sus saltos de línea, el BOS y los tokens especiales, la aplicación y escala de LoRA, y la diferencia de versiones de llama.cpp. La evaluación original recorta espacios al recoger stdout; la columna exacta compara el texto devuelto íntegro, por lo que también debe inspeccionarse la coincidencia normalizada. No modificar salidas ni referencias para forzar una coincidencia.
 
+## Modelo de amenazas
+
+Los manifiestos de modelo son de confianza: viajan con la aplicación y más adelante estarán firmados. El SHA-256 vincula cada archivo con su manifiesto; por sí solo no autentica un manifiesto. Las gramáticas las genera únicamente Merken. Las comprobaciones de esta ronda son defensa en profundidad ante paquetes defectuosos o corruptos que aun así coincidan con su manifiesto.
+
+Se aceptan dos riesgos residuales: si falla una asignación durante el análisis nativo de una gramática válida, llama.cpp puede imprimir la gramática completa mediante `fprintf`; las gramáticas de Merken no contienen datos de usuario. Además, un escritor externo que ignore el bloqueo del almacén puede sustituir archivos entre la verificación y su reapertura nativa.
+
 ## Seguridad
 
-Las gramáticas se prevalidan en Rust con un subconjunto conservador antes del parser nativo. Las cabeceras GGUF se leen con límites y se comprueba que el adaptador declara LoRA y contiene pares de tensores presentes en la base. La entrada pública carga el paquete bajo el bloqueo del almacén, incluyendo esas comprobaciones.
+El motor admite únicamente `PROPOSAL_GBNF` exacta o una gramática de selección canónica reconstruida byte a byte a partir de hasta 32 IDs ASCII de 1 a 64 bytes, con caracteres `[A-Za-z0-9_./-]`. Cualquier otra se rechaza con `InvalidGrammar` antes del prevalidador GBNF conservador y del parser nativo. El constructor devuelve una cadena vacía si los IDs no cumplen esos límites; el explicador rechaza ofertas que los excedan.
+
+Antes de cargar un adaptador, la lectura acotada de cabeceras exige base `qwen3` y `qwen3.block_count`. Todos los pares LoRA deben apuntar a una de las siete matrices Qwen3 de atención o FFN de una capa existente; debe haber al menos un par. Se comprueban los tipos de metadatos consumidos por el cargador, la arquitectura coincidente, la alineación, los strings sin NUL y los tipos válidos de arrays sin anidamiento.
+
+Para cada tensor del adaptador se permiten solo F32 y F16, rango entre 1 y 256, formas compatibles con el destino base, offsets alineados y secuenciales sin solapamiento, y datos completos dentro del archivo. La suma de tamaños está limitada a 256 MiB y al tamaño del archivo. Las operaciones de tamaño y posición son comprobadas. La entrada pública mantiene el bloqueo del almacén desde la verificación hasta terminar la carga; esa exclusión cubre solo escritores que respetan el bloqueo. Estas medidas no constituyen validación clínica ni prueba de viabilidad en Android.

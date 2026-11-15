@@ -19,6 +19,18 @@ pub const AI_SUGGESTION_LABEL: &str = "AI-generated suggestion";
 
 /// Longitud máxima admitida para identificadores de ficha y frase.
 pub const MAX_ID_LEN: usize = 40;
+/// Máximo de IDs ofrecidos en una gramática de selección.
+pub const MAX_SELECTION_IDS: usize = 32;
+const MAX_SELECTION_ID_BYTES: usize = 64;
+
+fn valid_selection_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= MAX_SELECTION_ID_BYTES
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'/' | b'-'))
+}
+
 /// Longitud máxima en caracteres Unicode de una frase curada.
 pub const MAX_STATEMENT_CHARS: usize = 500;
 /// Número máximo de frases seleccionables en una nota del explicador.
@@ -380,6 +392,14 @@ pub fn offered_statements(
     for ficha in fichas {
         for stmt in ficha.statements() {
             if stmt.applies_to_status(status) {
+                if offered.len() >= MAX_SELECTION_IDS {
+                    return Err(SlmError::Unsupported(
+                        "Too many offered statements".to_owned(),
+                    ));
+                }
+                if !valid_selection_id(&format!("{}/{}", ficha.id(), stmt.id())) {
+                    return Err(SlmError::Unsupported("Invalid selection ID".to_owned()));
+                }
                 offered.push(OfferedStatement {
                     ficha_id: ficha.id().clone(),
                     statement_id: stmt.id().clone(),
@@ -438,10 +458,13 @@ fn escape_gbnf_terminal(literal: &str) -> String {
 
 /// Genera una gramática GBNF para `{"select": [...]}` restringida de 0 a 3 IDs ofrecidos.
 ///
-/// Cada identificador se escapa como literal JSON dentro de un terminal GBNF para impedir
-/// inyecciones en la gramática. Si `offered_ids` está vacío, la gramática solo admite
-/// `{"select": []}`.
+/// Devuelve una cadena vacía si hay más de 32 IDs o alguno no cumple el formato
+/// ASCII permitido de hasta 64 bytes. Sin IDs, solo admite `{"select": []}`.
 pub fn build_selection_grammar(offered_ids: &[&str]) -> String {
+    if offered_ids.len() > MAX_SELECTION_IDS || offered_ids.iter().any(|id| !valid_selection_id(id))
+    {
+        return String::new();
+    }
     let mut unique_literals = Vec::with_capacity(offered_ids.len());
     let mut seen = HashSet::with_capacity(offered_ids.len());
     for id in offered_ids {
@@ -526,4 +549,73 @@ pub fn validate_selection(
         statements: rendered,
         label: AI_SUGGESTION_LABEL.to_owned(),
     }))
+}
+
+/// Comprueba la forma canónica antes de entregar GBNF al parser nativo.
+#[cfg(any(feature = "llama", test))]
+pub(crate) fn is_known_grammar(grammar: &str) -> bool {
+    if grammar == crate::interpreter::PROPOSAL_GBNF {
+        return true;
+    }
+    if grammar == build_selection_grammar(&[]) {
+        return true;
+    }
+    let Some(line) = grammar.lines().find(|line| line.starts_with("id ::= ")) else {
+        return false;
+    };
+    let Some(alternatives) = line.strip_prefix("id ::= ") else {
+        return false;
+    };
+    let mut ids = Vec::new();
+    for alternative in alternatives.split(" | ") {
+        // Cada alternativa canónica contiene un string JSON.
+        let Some(id) = alternative
+            .strip_prefix("\"\\\"")
+            .and_then(|s| s.strip_suffix("\\\"\""))
+        else {
+            return false;
+        };
+        if !valid_selection_id(id) || ids.len() >= MAX_SELECTION_IDS {
+            return false;
+        }
+        ids.push(id);
+    }
+    grammar == build_selection_grammar(&ids)
+}
+
+#[cfg(test)]
+mod known_grammar_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_only_canonical_bounded_grammars() {
+        assert!(is_known_grammar(crate::interpreter::PROPOSAL_GBNF));
+        assert!(is_known_grammar(&build_selection_grammar(&[])));
+        let selection = build_selection_grammar(&["a/b", "X_2.-"]);
+        assert!(is_known_grammar(&selection));
+        let extra = selection.replace("ws ::=", "id-extra ::= \"extra\"\nws ::=");
+        assert!(!is_known_grammar(&extra));
+        assert!(!is_known_grammar(&selection.replacen(
+            "root ::= ",
+            "root ::=  ",
+            1
+        )));
+        let invalid = selection.replace("a/b", "a!b");
+        assert!(!is_known_grammar(&invalid));
+        assert!(build_selection_grammar(&["bad!"]).is_empty());
+        assert!(build_selection_grammar(&["x".repeat(65).as_str()]).is_empty());
+        let ids: Vec<String> = (0..=MAX_SELECTION_IDS).map(|i| format!("id{i}")).collect();
+        let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
+        assert!(build_selection_grammar(&refs).is_empty());
+        let first: Vec<&str> = refs.iter().take(MAX_SELECTION_IDS).copied().collect();
+        let mut oversized = build_selection_grammar(&first);
+        oversized = oversized.replace("\nws ::=", " | \"\\\"extra\\\"\"\nws ::=");
+        assert!(!is_known_grammar(&oversized));
+        let mut exponential = String::from("root ::= n0\n");
+        for i in 0..30 {
+            exponential.push_str(&format!("n{i} ::= n{} \"a\" | n{} \"b\"\n", i + 1, i + 1));
+        }
+        exponential.push_str("n30 ::= \"x\"\n");
+        assert!(!is_known_grammar(&exponential));
+    }
 }
