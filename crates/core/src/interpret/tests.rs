@@ -767,6 +767,84 @@ fn revision2_regressions_attribution_units_time_sleep_negation_correction() {
     assert_eq!(field_val(&p.records[0], "hours"), Some(&json!(0)));
 }
 
+#[test]
+fn revision3_n1_n2_n4_regressions_and_self_check_sweep() {
+    // N2: negación posterior del siguiente indicador no alcanza al pulso previo
+    let p = assert_valid("pulso 72 sin medir glucosa");
+    assert_eq!(p.records.len(), 1);
+    assert_eq!(p.records[0].indicator, Indicator::HeartRate);
+    assert_eq!(field_val(&p.records[0], "bpm"), Some(&json!(72)));
+    assert_eq!(p.negated, vec!["sin medir glucosa"]);
+
+    let p = assert_valid("temperatura 36.8 no tuve dolor");
+    assert_eq!(p.records.len(), 1);
+    assert_eq!(p.records[0].indicator, Indicator::BodyTemperature);
+    assert_eq!(field_val(&p.records[0], "celsius"), Some(&json!(36.8)));
+    assert_eq!(p.negated, vec!["no tuve dolor"]);
+
+    // N4: unidades separadas desconocidas o incompatibles quedan pendientes
+    for txt in [
+        "temperatura 98.6 fahrenheits",
+        "98.6 farenheit",
+        "98.6 grados f",
+        "temperatura 37 fahrenheits",
+        "temperatura 37 farenheit",
+        "temperatura 37 grados f",
+        "temperatura 37 °C/kg",
+    ] {
+        let p = assert_valid(txt);
+        assert!(
+            p.records.iter().all(|r| field_val(r, "celsius").is_none()),
+            "unexpected celsius value for {txt:?}: {p:?}"
+        );
+    }
+
+    // N4 contraste: prosa legítima posterior sigue valiendo
+    let p = assert_valid("pulso 72 ahora");
+    assert_eq!(p.records.len(), 1);
+    assert_eq!(p.records[0].indicator, Indicator::HeartRate);
+    assert_eq!(field_val(&p.records[0], "bpm"), Some(&json!(72)));
+
+    let p = assert_valid("temperatura 37 grados ahora");
+    assert_eq!(p.records.len(), 1);
+    assert_eq!(p.records[0].indicator, Indicator::BodyTemperature);
+    assert_eq!(field_val(&p.records[0], "celsius"), Some(&json!(37)));
+
+    // Barrido de frases representativas garantizando interpret(t).check(t).is_empty()
+    let sweep = [
+        "pulso 72",
+        "pulso 72 ahora",
+        "pulso 72 sin medir glucosa",
+        "pulso 72, perdón pulso 82",
+        "pulso 72, perdón, pulso 82",
+        "pulso desconocido tras 6",
+        "pulso desconocido tras 6 flexiones",
+        "trabajé 5 horas antes de dormir mal",
+        "dormí mal, 5 horas",
+        "dormí 6 o 7 horas mal",
+        "no dormí bien",
+        "dormí bien sin interrupciones",
+        "dormí bien no tuve pesadillas",
+        "presión 120/80 sin medir glucosa",
+        "presión 120 sobre 80",
+        "temperatura 37 °C/kg",
+        "temperatura 98.6 fahrenheits",
+        "98.6 farenheit",
+        "98.6 grados f",
+        "temperatura 98.6 degF",
+        "temperatura 98.6 ℉",
+        "me duele la cabeza un 6",
+        "me duele la cabeza a las 08:",
+        "I can't measure pulse 72",
+        "pulso 72 y glucosa 95 sin dolor",
+        "saturación 98% ahora",
+        "ánimo 8/10",
+    ];
+    for txt in sweep {
+        let _ = assert_valid(txt);
+    }
+}
+
 fn check_proposal_invariants(s: &str) -> Result<(), proptest::test_runner::TestCaseError> {
     let p = interpret(s);
     let issues = p.check(s);
@@ -802,6 +880,15 @@ proptest! {
         parts in prop::collection::vec(
             prop_oneof![
                 Just("pulso 72 ".to_owned()),
+                Just("pulso 72 ahora ".to_owned()),
+                Just("pulso 72 sin medir glucosa ".to_owned()),
+                Just("pulso 72, perdón pulso 82 ".to_owned()),
+                Just("temperatura 37 °C/kg ".to_owned()),
+                Just("temperatura 98.6 fahrenheits ".to_owned()),
+                Just("98.6 farenheit ".to_owned()),
+                Just("98.6 grados f ".to_owned()),
+                Just("trabajé 5 horas antes de dormir mal ".to_owned()),
+                Just("pulso desconocido tras 6 ".to_owned()),
                 Just("me duele la cabeza un 6 ".to_owned()),
                 Just("dormí cinco horas y media ".to_owned()),
                 Just("no me duele ".to_owned()),

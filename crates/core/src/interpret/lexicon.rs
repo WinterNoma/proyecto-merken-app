@@ -596,8 +596,133 @@ pub(super) fn parse_body_zone(
     None
 }
 
+fn is_incompatible_temp_scale(w: &str) -> bool {
+    w.starts_with("fahrenh")
+        || w.starts_with("farenh")
+        || matches!(
+            w,
+            "f" | "fahr"
+                | "fah"
+                | "k"
+                | "kelvin"
+                | "kelvins"
+                | "r"
+                | "rankine"
+                | "rankines"
+                | "reaumur"
+                | "reaumurs"
+        )
+}
+
+fn is_si_prefixed_unit_word(w: &str) -> bool {
+    const PREFIXES: &[&str] = &[
+        "femto", "pico", "nano", "micro", "milli", "mili", "centi", "deci", "deca", "hecto",
+        "kilo", "mega", "giga", "tera",
+    ];
+    for prefix in PREFIXES {
+        if let Some(rest) = w.strip_prefix(prefix)
+            && matches!(
+                rest,
+                "gram"
+                    | "grams"
+                    | "gramo"
+                    | "gramos"
+                    | "gramme"
+                    | "grammes"
+                    | "liter"
+                    | "liters"
+                    | "litre"
+                    | "litres"
+                    | "litro"
+                    | "litros"
+                    | "meter"
+                    | "meters"
+                    | "metre"
+                    | "metres"
+                    | "metro"
+                    | "metros"
+                    | "mol"
+                    | "mols"
+                    | "mole"
+                    | "moles"
+                    | "volt"
+                    | "volts"
+                    | "voltio"
+                    | "voltios"
+                    | "watt"
+                    | "watts"
+                    | "vatio"
+                    | "vatios"
+                    | "amp"
+                    | "amps"
+                    | "ampere"
+                    | "amperes"
+                    | "amperio"
+                    | "amperios"
+                    | "ohm"
+                    | "ohms"
+                    | "ohmio"
+                    | "ohmios"
+                    | "hertz"
+                    | "hertzios"
+                    | "hercio"
+                    | "hercios"
+                    | "pascal"
+                    | "pascals"
+                    | "pascales"
+                    | "joule"
+                    | "joules"
+                    | "julio"
+                    | "julios"
+                    | "sievert"
+                    | "sieverts"
+                    | "gray"
+                    | "grays"
+                    | "curie"
+                    | "curies"
+                    | "bar"
+                    | "bars"
+                    | "second"
+                    | "seconds"
+                    | "segundo"
+                    | "segundos"
+                    | "sec"
+                    | "secs"
+                    | "seg"
+                    | "segs"
+                    | "equivalent"
+                    | "equivalents"
+                    | "equivalente"
+                    | "equivalentes"
+                    | "osmol"
+                    | "osmols"
+                    | "osmole"
+                    | "osmoles"
+            )
+        {
+            return true;
+        }
+    }
+    false
+}
+
 /// Reconoce una unidad inmediatamente posterior a un número en `tokens[idx..end]`.
-pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<(UnitKind, usize)> {
+pub(super) fn match_unit_at(
+    orig: &str,
+    tokens: &[Token],
+    idx: usize,
+    end: usize,
+) -> Option<(UnitKind, usize)> {
+    match_unit_at_inner(orig, tokens, idx, end, true)
+}
+
+fn match_unit_at_inner(
+    orig: &str,
+    tokens: &[Token],
+    idx: usize,
+    end: usize,
+    allow_grados: bool,
+) -> Option<(UnitKind, usize)> {
     let tk = tokens.get(idx)?;
     if idx >= end {
         return None;
@@ -619,14 +744,13 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
         if idx + 1 < end
             && let Some(w) = word_at(tokens, idx + 1)
         {
-            return match w {
-                "c" | "celsius" | "centigrados" | "centigrado" => {
-                    Some((UnitKind::TemperatureCelsius, idx + 2))
-                }
-                "f" | "fahrenheit" | "farenheit" | "k" | "kelvin" | "kelvins" | "r" | "rankine"
-                | "reaumur" => Some((UnitKind::Incompatible, idx + 2)),
-                _ => Some((UnitKind::Incompatible, idx + 1)),
-            };
+            if matches!(w, "c" | "celsius" | "centigrados" | "centigrado") {
+                return Some((UnitKind::TemperatureCelsius, idx + 2));
+            }
+            if is_incompatible_temp_scale(w) {
+                return Some((UnitKind::Incompatible, idx + 2));
+            }
+            return Some((UnitKind::Incompatible, idx + 1));
         }
         return Some((UnitKind::Incompatible, idx + 1));
     }
@@ -680,39 +804,31 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
         return Some((UnitKind::BloodPressure, idx + 2));
     }
 
-    if matches!(w, "grados" | "degrees") {
+    if allow_grados && matches!(w, "grados" | "degrees" | "grado" | "degree") {
         if idx + 1 < end
             && let Some(next) = word_at(tokens, idx + 1)
         {
-            return match next {
-                "c" | "celsius" | "centigrados" | "centigrado" => {
-                    Some((UnitKind::TemperatureCelsius, idx + 2))
-                }
-                "f" | "fahrenheit" | "farenheit" | "k" | "kelvin" | "kelvins" | "r" | "rankine"
-                | "reaumur" => Some((UnitKind::Incompatible, idx + 2)),
-                _ => Some((UnitKind::TemperatureCelsius, idx + 1)),
-            };
+            if matches!(next, "c" | "celsius" | "centigrados" | "centigrado") {
+                return Some((UnitKind::TemperatureCelsius, idx + 2));
+            }
+            if is_incompatible_temp_scale(next)
+                || is_unknown_unit_after_number(orig, tokens, idx + 1, end)
+            {
+                return Some((UnitKind::Incompatible, idx + 2));
+            }
+            if let Some((UnitKind::Incompatible, u_end)) =
+                match_unit_at_inner(orig, tokens, idx + 1, end, false)
+            {
+                return Some((UnitKind::Incompatible, u_end));
+            }
         }
         return Some((UnitKind::TemperatureCelsius, idx + 1));
     }
     if matches!(w, "deg" | "degs") {
         if idx + 1 < end
             && word_at(tokens, idx + 1).is_some_and(|next| {
-                matches!(
-                    next,
-                    "f" | "fahrenheit"
-                        | "farenheit"
-                        | "k"
-                        | "kelvin"
-                        | "kelvins"
-                        | "r"
-                        | "rankine"
-                        | "reaumur"
-                        | "c"
-                        | "celsius"
-                        | "centigrados"
-                        | "centigrado"
-                )
+                matches!(next, "c" | "celsius" | "centigrados" | "centigrado")
+                    || is_incompatible_temp_scale(next)
             })
         {
             return Some((UnitKind::Incompatible, idx + 2));
@@ -722,18 +838,12 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
     if matches!(w, "celsius" | "centigrados" | "centigrado" | "c") {
         return Some((UnitKind::TemperatureCelsius, idx + 1));
     }
-    if matches!(
-        w,
-        "f" | "fahrenheit"
-            | "farenheit"
-            | "k"
-            | "kelvin"
-            | "kelvins"
-            | "degf"
-            | "degc"
-            | "degk"
-            | "degr"
-    ) {
+    if is_incompatible_temp_scale(w)
+        || matches!(
+            w,
+            "degf" | "degfs" | "degc" | "degcs" | "degk" | "degks" | "degr" | "degrs"
+        )
+    {
         return Some((UnitKind::Incompatible, idx + 1));
     }
 
@@ -761,55 +871,96 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
         return Some((UnitKind::NutritionKcal, idx + 1));
     }
 
+    if is_si_prefixed_unit_word(w) {
+        return Some((UnitKind::Incompatible, idx + 1));
+    }
+
     if matches!(
         w,
         "mmol"
+            | "mmols"
             | "mmoll"
             | "millimol"
+            | "millimole"
             | "millimoles"
             | "milimol"
             | "milimoles"
             | "umol"
+            | "umols"
             | "nmol"
+            | "nmols"
             | "pmol"
+            | "pmols"
             | "mol"
+            | "mols"
+            | "mole"
             | "moles"
             | "meq"
+            | "meqs"
             | "osm"
+            | "osms"
             | "mosm"
+            | "mosms"
             | "osmol"
+            | "osmols"
+            | "osmole"
+            | "osmoles"
             | "mosmol"
+            | "mosmols"
+            | "mosmole"
+            | "mosmoles"
             | "mg"
+            | "mgs"
             | "ug"
+            | "ugs"
             | "mcg"
+            | "mcgs"
             | "ng"
+            | "ngs"
             | "pg"
+            | "pgs"
             | "kg"
+            | "kgs"
             | "g"
             | "gr"
+            | "grs"
             | "gramo"
             | "gramos"
             | "gram"
             | "grams"
+            | "gramme"
+            | "grammes"
             | "kilogramo"
             | "kilogramos"
             | "kilogram"
             | "kilograms"
+            | "kilogramme"
+            | "kilogrammes"
             | "kilo"
             | "kilos"
             | "ml"
+            | "mls"
             | "dl"
+            | "dls"
             | "cl"
+            | "cls"
+            | "ul"
+            | "uls"
             | "fl"
             | "cc"
             | "l"
             | "lt"
+            | "lts"
             | "litros"
             | "litro"
             | "liters"
             | "liter"
+            | "litre"
+            | "litres"
             | "cm"
+            | "cms"
             | "mm"
+            | "mms"
             | "um"
             | "nm"
             | "m"
@@ -817,6 +968,8 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
             | "metros"
             | "meter"
             | "meters"
+            | "metre"
+            | "metres"
             | "milla"
             | "millas"
             | "mile"
@@ -836,6 +989,7 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
             | "yard"
             | "yards"
             | "yd"
+            | "yds"
             | "lb"
             | "lbs"
             | "libra"
@@ -847,53 +1001,133 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
             | "onzas"
             | "ounce"
             | "ounces"
+            | "stone"
+            | "stones"
+            | "ton"
+            | "tons"
+            | "tonelada"
+            | "toneladas"
+            | "galon"
+            | "galones"
+            | "gallon"
+            | "gallons"
+            | "pinta"
+            | "pintas"
+            | "pint"
+            | "pints"
+            | "quart"
+            | "quarts"
             | "cal"
+            | "cals"
             | "kpa"
             | "pa"
             | "hpa"
+            | "mpa"
+            | "gpa"
+            | "pascal"
+            | "pascals"
+            | "pascales"
             | "torr"
+            | "torrs"
             | "atm"
+            | "atms"
             | "bar"
+            | "bars"
             | "mbar"
+            | "mbars"
             | "psi"
+            | "psis"
             | "hz"
             | "khz"
             | "mhz"
             | "ghz"
             | "hertz"
+            | "hertzios"
+            | "hercio"
+            | "hercios"
             | "watt"
             | "watts"
+            | "vatio"
+            | "vatios"
             | "kw"
             | "mw"
+            | "gw"
+            | "volt"
+            | "volts"
+            | "voltio"
+            | "voltios"
+            | "amp"
+            | "amps"
+            | "ampere"
+            | "amperes"
+            | "amperio"
+            | "amperios"
+            | "ohm"
+            | "ohms"
+            | "ohmio"
+            | "ohmios"
             | "joule"
             | "joules"
             | "kj"
+            | "mj"
             | "rpm"
+            | "rpms"
             | "mph"
             | "kmh"
+            | "kph"
             | "fps"
+            | "bps"
+            | "kbps"
+            | "mbps"
+            | "gbps"
+            | "cpm"
+            | "dpm"
             | "db"
+            | "dbs"
+            | "decibel"
+            | "decibels"
+            | "decibelio"
+            | "decibelios"
             | "gy"
             | "mgy"
+            | "gray"
+            | "grays"
             | "sv"
             | "msv"
+            | "sievert"
+            | "sieverts"
             | "rem"
+            | "rems"
             | "rad"
+            | "rads"
             | "bq"
+            | "becquerel"
+            | "becquerels"
             | "ci"
             | "mci"
+            | "curie"
+            | "curies"
+            | "roentgen"
+            | "roentgens"
             | "ppm"
             | "ppb"
+            | "ppt"
             | "ui"
             | "iu"
+            | "uis"
+            | "ius"
+            | "ph"
             | "unidad"
             | "unidades"
             | "unit"
             | "units"
-            | "rankine"
-            | "reaumur"
             | "ms"
             | "msec"
+            | "msecs"
+            | "usec"
+            | "usecs"
+            | "nsec"
+            | "nsecs"
             | "milisegundo"
             | "milisegundos"
             | "millisecond"
@@ -903,6 +1137,9 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
             | "second"
             | "seconds"
             | "seg"
+            | "segs"
+            | "sec"
+            | "secs"
             | "s"
             | "dia"
             | "dias"
@@ -920,6 +1157,20 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
             | "anos"
             | "year"
             | "years"
+            | "yr"
+            | "yrs"
+            | "decada"
+            | "decadas"
+            | "decade"
+            | "decades"
+            | "siglo"
+            | "siglos"
+            | "century"
+            | "centuries"
+            | "nudo"
+            | "nudos"
+            | "knot"
+            | "knots"
             | "ejercicio"
             | "ejercicios"
             | "exercise"
@@ -978,6 +1229,8 @@ pub(super) fn match_unit_at(tokens: &[Token], idx: usize, end: usize) -> Option<
             | "drops"
             | "dosis"
             | "dose"
+            | "puff"
+            | "puffs"
             | "capitulo"
             | "chapter"
             | "pagina"
@@ -1057,6 +1310,148 @@ pub(super) fn has_post_unit_unknown_tail(tokens: &[Token], check_idx: usize, end
     }
     false
 }
+fn is_common_caps_prose_word(w: &str) -> bool {
+    matches!(
+        w,
+        "no" | "ni"
+            | "si"
+            | "ya"
+            | "en"
+            | "de"
+            | "al"
+            | "el"
+            | "la"
+            | "lo"
+            | "un"
+            | "una"
+            | "uno"
+            | "dos"
+            | "tres"
+            | "es"
+            | "fue"
+            | "era"
+            | "hay"
+            | "son"
+            | "con"
+            | "sin"
+            | "por"
+            | "mas"
+            | "hoy"
+            | "muy"
+            | "mal"
+            | "tal"
+            | "bien"
+            | "ahora"
+            | "ayer"
+            | "antes"
+            | "tras"
+            | "luego"
+            | "pero"
+            | "como"
+            | "para"
+            | "entre"
+            | "sobre"
+            | "hasta"
+            | "desde"
+            | "hacia"
+            | "todo"
+            | "nada"
+            | "algo"
+            | "poco"
+            | "casi"
+            | "solo"
+            | "del"
+            | "las"
+            | "los"
+            | "tan"
+            | "menos"
+            | "que"
+            | "aprox"
+            | "total"
+            | "media"
+            | "alto"
+            | "alta"
+            | "bajo"
+            | "baja"
+            | "at"
+            | "in"
+            | "on"
+            | "of"
+            | "to"
+            | "by"
+            | "as"
+            | "is"
+            | "am"
+            | "pm"
+            | "or"
+            | "and"
+            | "not"
+            | "for"
+            | "the"
+            | "but"
+            | "nor"
+            | "yet"
+            | "now"
+            | "today"
+            | "well"
+            | "good"
+            | "bad"
+            | "fair"
+            | "high"
+            | "low"
+            | "very"
+            | "only"
+            | "just"
+            | "about"
+            | "after"
+            | "rest"
+            | "sleep"
+            | "pulse"
+            | "temp"
+            | "mood"
+            | "pain"
+            | "fever"
+            | "mean"
+            | "avg"
+            | "was"
+            | "were"
+            | "are"
+            | "been"
+            | "have"
+            | "had"
+            | "with"
+            | "from"
+            | "into"
+            | "over"
+            | "under"
+            | "than"
+            | "then"
+            | "when"
+            | "while"
+            | "since"
+            | "until"
+            | "fine"
+            | "great"
+            | "okay"
+            | "ok"
+            | "so"
+            | "here"
+            | "there"
+            | "this"
+            | "that"
+            | "each"
+            | "more"
+            | "less"
+            | "most"
+            | "some"
+            | "any"
+            | "all"
+            | "both"
+            | "none"
+            | "vs"
+    )
+}
+
 pub(super) fn is_unknown_unit_after_number(
     orig: &str,
     tokens: &[Token],
@@ -1092,9 +1487,29 @@ pub(super) fn is_unknown_unit_after_number(
     if tk.kind == TokenKind::Word
         && !matches!(tk.norm.as_str(), "spo2")
         && let Some(raw) = orig.get(tk.start..tk.end)
-        && has_unit_mixed_case(raw)
     {
-        return true;
+        if has_unit_mixed_case(raw) {
+            return true;
+        }
+        // Abreviaturas sin vocales de 2..=5 letras ASCII (p. ej. "kph", "mgh", "ltr", "kgs"),
+        // excluyendo "vs" usado en alternativas ("72 vs 80").
+        if (2..=5).contains(&tk.norm.len())
+            && tk.norm != "vs"
+            && tk.norm.bytes().all(|b| b.is_ascii_lowercase())
+            && !tk
+                .norm
+                .bytes()
+                .any(|b| matches!(b, b'a' | b'e' | b'i' | b'o' | b'u' | b'y'))
+        {
+            return true;
+        }
+        // Siglas cortas en mayúsculas (2..=5 letras ASCII) que no sean prosa común.
+        if (2..=5).contains(&raw.len())
+            && raw.bytes().all(|b| b.is_ascii_uppercase())
+            && !is_common_caps_prose_word(tk.norm.as_str())
+        {
+            return true;
+        }
     }
 
     false
@@ -1306,7 +1721,7 @@ pub(super) fn is_negation_cue_in_words(words: &[&str]) -> bool {
         })
 }
 
-fn parse_quote_number_with_unit(quote: &str) -> Option<(f64, Option<UnitKind>)> {
+pub(super) fn parse_quote_number_with_unit(quote: &str) -> Option<(f64, Option<UnitKind>)> {
     let trimmed = quote.trim();
     if trimmed.is_empty() || trimmed.chars().count() > MAX_INPUT_CHARS {
         return None;
@@ -1383,7 +1798,7 @@ fn parse_quote_number_with_unit(quote: &str) -> Option<(f64, Option<UnitKind>)> 
     }
 
     // Unidad única al final que consume exactamente el resto de tokens
-    if let Some((unit, u_end)) = match_unit_at(&tokens, num.end_idx, len)
+    if let Some((unit, u_end)) = match_unit_at(trimmed, &tokens, num.end_idx, len)
         && u_end == len
         && !matches!(unit, UnitKind::SleepMinutes | UnitKind::Incompatible)
     {
@@ -1559,20 +1974,10 @@ pub fn mentions_indicator(indicator: Indicator, quote: &str) -> bool {
                         .get(i)
                         .is_some_and(|tk| matches!(tk.norm.as_str(), "°" | "º"))
                         && word_at(&tokens, i + 1) == Some("c"))
-                    || (matches!(word_at(&tokens, i), Some("grados" | "degrees"))
-                        && !matches!(
-                            word_at(&tokens, i + 1),
-                            Some(
-                                "f" | "fahrenheit"
-                                    | "farenheit"
-                                    | "k"
-                                    | "kelvin"
-                                    | "kelvins"
-                                    | "r"
-                                    | "rankine"
-                                    | "reaumur"
-                            )
-                        ))
+                    || (matches!(
+                        word_at(&tokens, i),
+                        Some("grados" | "degrees" | "grado" | "degree")
+                    ) && !word_at(&tokens, i + 1).is_some_and(is_incompatible_temp_scale))
             }
             Indicator::Glucose => {
                 starts_with_words(&tokens, i, &["blood", "glucose"])
@@ -1817,6 +2222,7 @@ pub(crate) fn check_numeric_unit_around_occurrence(
     input_tokens: &[Token],
     indicator: Indicator,
     fq: &str,
+    fq_first_tok: usize,
     fq_last_tok: usize,
 ) -> bool {
     let Some((_, fq_unit)) = parse_quote_number_with_unit(fq) else {
@@ -1830,9 +2236,6 @@ pub(crate) fn check_numeric_unit_around_occurrence(
 
     let mut check_idx = fq_last_tok + 1;
     let len = input_tokens.len();
-    if check_idx >= len {
-        return true;
-    }
 
     // Para presión arterial sistólica ("120" en "120/80"), la unidad sigue tras el segundo número.
     if indicator == Indicator::BloodPressure
@@ -1845,17 +2248,36 @@ pub(crate) fn check_numeric_unit_around_occurrence(
             .is_some_and(|t| t.kind == TokenKind::Number)
     {
         check_idx += 2;
-        if check_idx >= len {
-            return true;
-        }
     }
 
     if fq_unit.is_some() {
-        return !has_post_unit_unknown_tail(input_tokens, check_idx, len);
+        if has_post_unit_unknown_tail(input_tokens, check_idx, len) {
+            return false;
+        }
+        // Si la cita incluyó un prefijo de unidad multipalabra (p. ej. "98.6 grados" en "98.6 grados f"),
+        // vuelve a comprobar la unidad completa desde el final del número en la entrada.
+        let allow_fraction_10 = matches!(indicator, Indicator::Mood | Indicator::Symptom);
+        if let Some(NumberScan::Valid(num)) = scan_number(
+            input_tokens,
+            fq_first_tok,
+            fq_last_tok + 1,
+            allow_fraction_10,
+        ) && num.end_idx <= fq_last_tok
+            && let Some((unit, u_end)) = match_unit_at(input, input_tokens, num.end_idx, len)
+        {
+            return unit.matches_indicator(indicator)
+                && !has_post_unit_unknown_tail(input_tokens, u_end, len);
+        }
+        return true;
     }
 
-    if let Some((unit, _)) = match_unit_at(input_tokens, check_idx, len) {
-        return unit.matches_indicator(indicator);
+    if check_idx >= len {
+        return true;
+    }
+
+    if let Some((unit, u_end)) = match_unit_at(input, input_tokens, check_idx, len) {
+        return unit.matches_indicator(indicator)
+            && !has_post_unit_unknown_tail(input_tokens, u_end, len);
     }
 
     !is_unknown_unit_after_number(input, input_tokens, check_idx, len)
