@@ -22,12 +22,14 @@ use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{LlamaLoraAdapter, LlamaModel};
 use llama_cpp_2::sampling::LlamaSampler;
+use llama_cpp_2::token_type::LlamaTokenAttr;
 use llama_cpp_2::{LogOptions, send_logs_to_tracing};
 
 use crate::control::{Control, Progress};
 use crate::engine::{Engine, GenerateRequest};
 use crate::error::{EngineErrorCode, SlmError};
-use crate::manifest::VerifiedModel;
+use crate::manifest::{ModelManifest, VerifiedModel};
+use crate::{ModelSlot, ModelStore};
 
 /// Tamaño de contexto por defecto para el motor `llama.cpp`.
 pub const DEFAULT_CONTEXT_SIZE: u32 = 1024;
@@ -86,7 +88,7 @@ struct LoadedLora {
 }
 
 struct LlamaEngineInner {
-    // El adaptador debe liberarse antes que el modelo al que pertenece.
+    // El destructor del modelo nativo libera sus adaptadores registrados.
     lora: Option<LoadedLora>,
     model: LlamaModel,
 }
@@ -122,16 +124,21 @@ fn global_backend() -> Result<&'static LlamaBackend, SlmError> {
 }
 
 impl LlamaEngine {
-    /// Carga un modelo verificado usando la configuración por defecto.
-    pub fn from_verified(
-        verified: &VerifiedModel,
+    /// Verifica y carga el paquete manteniendo el bloqueo hasta finalizar la fábrica.
+    pub fn load_into<'a>(
+        store: &ModelStore,
+        manifest: &ModelManifest,
+        slot: &'a mut ModelSlot<Self>,
+        config: LlamaEngineConfig,
         ctl: &mut Control<'_>,
-    ) -> Result<Self, SlmError> {
-        Self::from_verified_with_config(verified, LlamaEngineConfig::default(), ctl)
+    ) -> Result<&'a mut Self, SlmError> {
+        store.verify_and_load(manifest, slot, ctl, |verified, ctl| {
+            Self::from_verified_with_config(verified, config, ctl)
+        })
     }
 
     /// Carga un modelo verificado con una configuración explícita de contexto e hilos.
-    pub fn from_verified_with_config(
+    fn from_verified_with_config(
         verified: &VerifiedModel,
         config: LlamaEngineConfig,
         ctl: &mut Control<'_>,
@@ -142,13 +149,19 @@ impl LlamaEngine {
             return Err(SlmError::Engine(EngineErrorCode::LoadFailed));
         }
 
-        let backend = global_backend()?;
+        let backend = global_backend().map_err(|_| load_error(ctl))?;
 
         let cancel = ctl.cancel.clone();
         let deadline = ctl.deadline.clone();
         let model_params = LlamaModelParams::default().with_progress_callback(move |_progress| {
             !cancel.is_cancelled() && !deadline.is_expired()
         });
+
+        if let Some(adapter) = verified.adapter_file() {
+            let result = crate::gguf::validate_adapter(verified.base_file().path(), adapter.path());
+            ctl.check()?;
+            result.map_err(|()| SlmError::Engine(EngineErrorCode::AdapterInvalid))?;
+        }
 
         let mut model =
             match LlamaModel::load_from_file(backend, verified.base_file().path(), &model_params) {
@@ -169,7 +182,7 @@ impl LlamaEngine {
                 }
                 let adapter = model
                     .lora_adapter_init(adapter_file.path())
-                    .map_err(|_| SlmError::Engine(EngineErrorCode::LoadFailed))?;
+                    .map_err(|_| load_error(ctl))?;
                 Some(LoadedLora { adapter, scale })
             }
             None => None,
@@ -177,17 +190,18 @@ impl LlamaEngine {
 
         // Validación temprana de creación de contexto y aplicación del LoRA en el contexto
         // para garantizar que nunca se opere silenciosamente sin el adaptador.
-        let ctx_params = build_context_params(config)?;
+        let ctx_params = build_context_params(config).map_err(|_| load_error(ctl))?;
         {
             let mut ctx = model
                 .new_context(backend, ctx_params)
-                .map_err(|_| SlmError::Engine(EngineErrorCode::LoadFailed))?;
+                .map_err(|_| load_error(ctl))?;
             if let Some(ref mut loaded_lora) = lora {
                 ctx.lora_adapter_set(&mut loaded_lora.adapter, loaded_lora.scale)
-                    .map_err(|_| SlmError::Engine(EngineErrorCode::LoadFailed))?;
+                    .map_err(|_| load_error(ctl))?;
             }
         }
 
+        ctl.check()?;
         Ok(Self {
             model_id: verified.model_id().to_string(),
             config,
@@ -211,9 +225,8 @@ impl LlamaEngine {
     /// Verifica que una gramática GBNF compila sin errores contra el vocabulario
     /// del modelo cargado.
     pub fn validate_grammar(&mut self, grammar: &str) -> Result<(), SlmError> {
-        if grammar.trim().is_empty() {
-            return Err(SlmError::Engine(EngineErrorCode::InvalidGrammar));
-        }
+        crate::gbnf::validate(grammar)
+            .map_err(|()| SlmError::Engine(EngineErrorCode::InvalidGrammar))?;
         let inner = self
             .inner
             .get_mut()
@@ -300,12 +313,16 @@ impl Engine for LlamaEngine {
 
             // `LlamaSampler::sample` ya invoca `llama_sampler_accept` internamente.
             let token = sampler.sample(&ctx, current_logits_idx);
-            if vocab.is_eog(token) {
+            let is_eog = vocab.is_eog(token);
+            if is_eog {
                 break;
             }
 
+            let attrs = vocab.attr(token);
+            let unexpected =
+                attrs.contains(LlamaTokenAttr::Control) || attrs.contains(LlamaTokenAttr::Unknown);
             let piece = vocab.token_to_piece(token, false, None);
-            output_bytes.extend_from_slice(&piece);
+            append_output_piece(&mut output_bytes, &piece, unexpected)?;
 
             ctl.report_and_check(Progress::Generating {
                 tokens: step + 1,
@@ -328,12 +345,31 @@ impl Engine for LlamaEngine {
         }
 
         ctl.check()?;
-        let text = match String::from_utf8(output_bytes) {
-            Ok(s) => s,
-            Err(err) => String::from_utf8_lossy(err.as_bytes()).into_owned(),
-        };
-        Ok(text)
+        decode_output(output_bytes)
     }
+}
+
+fn load_error(ctl: &Control<'_>) -> SlmError {
+    match ctl.check() {
+        Err(err) => err,
+        Ok(()) => SlmError::Engine(EngineErrorCode::LoadFailed),
+    }
+}
+
+fn append_output_piece(
+    output: &mut Vec<u8>,
+    piece: &[u8],
+    unexpected: bool,
+) -> Result<(), SlmError> {
+    if unexpected {
+        return Err(SlmError::Engine(EngineErrorCode::GenerationFailed));
+    }
+    output.extend_from_slice(piece);
+    Ok(())
+}
+
+fn decode_output(bytes: Vec<u8>) -> Result<String, SlmError> {
+    String::from_utf8(bytes).map_err(|_| SlmError::Engine(EngineErrorCode::GenerationFailed))
 }
 
 fn build_context_params(config: LlamaEngineConfig) -> Result<LlamaContextParams, SlmError> {
@@ -353,9 +389,8 @@ fn build_context_params(config: LlamaEngineConfig) -> Result<LlamaContextParams,
 fn build_sampler(model: &LlamaModel, req: &GenerateRequest) -> Result<LlamaSampler, SlmError> {
     let mut chain = Vec::new();
     if let Some(ref grammar) = req.grammar {
-        if grammar.trim().is_empty() {
-            return Err(SlmError::Engine(EngineErrorCode::InvalidGrammar));
-        }
+        crate::gbnf::validate(grammar)
+            .map_err(|()| SlmError::Engine(EngineErrorCode::InvalidGrammar))?;
         let g = LlamaSampler::grammar(model, grammar, "root")
             .map_err(|_| SlmError::Engine(EngineErrorCode::InvalidGrammar))?;
         chain.push(g);
@@ -446,6 +481,22 @@ mod tests {
     }
 
     #[test]
+    fn output_utf8_may_span_tokens_but_must_be_complete() {
+        let mut bytes = Vec::new();
+        append_output_piece(&mut bytes, &[0xe2, 0x82], false).unwrap();
+        append_output_piece(&mut bytes, &[0xac], false).unwrap();
+        assert_eq!(decode_output(bytes).unwrap(), "€");
+        assert_eq!(
+            decode_output(vec![0xe2, 0x82]),
+            Err(SlmError::Engine(EngineErrorCode::GenerationFailed))
+        );
+        assert_eq!(
+            append_output_piece(&mut Vec::new(), b"hidden", true),
+            Err(SlmError::Engine(EngineErrorCode::GenerationFailed))
+        );
+    }
+
+    #[test]
     fn format_prompt_matches_qwen3_chatml_no_think() {
         let formatted = LlamaEngine::format_prompt("SYS", "USR");
         assert_eq!(
@@ -488,9 +539,14 @@ mod tests {
         let store = ModelStore::new(&dir).expect("store");
         let cancel = CancelToken::new();
         let mut ctl = Control::new(cancel, Deadline::after(Duration::from_secs(30)), |_| {});
-        let verified = store.verify(&manifest, &mut ctl).expect("verify hashes");
-
-        let err = match LlamaEngine::from_verified(&verified, &mut ctl) {
+        let mut slot = ModelSlot::new();
+        let err = match LlamaEngine::load_into(
+            &store,
+            &manifest,
+            &mut slot,
+            LlamaEngineConfig::default(),
+            &mut ctl,
+        ) {
             Ok(_) => panic!("expected invalid gguf to fail"),
             Err(e) => e,
         };
@@ -521,19 +577,17 @@ mod tests {
 
         let store = ModelStore::new(&dir).expect("store");
         let cancel = CancelToken::new();
-        let mut verify_ctl = Control::new(
-            cancel.clone(),
-            Deadline::after(Duration::from_secs(30)),
-            |_| {},
-        );
-        let verified = store
-            .verify(&manifest, &mut verify_ctl)
-            .expect("verify hashes");
-
+        let mut slot = ModelSlot::new();
         cancel.cancel();
         let mut ctl = Control::new(cancel, Deadline::after(Duration::from_secs(30)), |_| {});
 
-        let err = match LlamaEngine::from_verified(&verified, &mut ctl) {
+        let err = match LlamaEngine::load_into(
+            &store,
+            &manifest,
+            &mut slot,
+            LlamaEngineConfig::default(),
+            &mut ctl,
+        ) {
             Ok(_) => panic!("expected cancelled error"),
             Err(e) => e,
         };
@@ -541,7 +595,13 @@ mod tests {
 
         let expired_cancel = CancelToken::new();
         let mut expired_ctl = Control::new(expired_cancel, Deadline::expired(), |_| {});
-        let err = match LlamaEngine::from_verified(&verified, &mut expired_ctl) {
+        let err = match LlamaEngine::load_into(
+            &store,
+            &manifest,
+            &mut slot,
+            LlamaEngineConfig::default(),
+            &mut expired_ctl,
+        ) {
             Ok(_) => panic!("expected timeout error"),
             Err(e) => e,
         };

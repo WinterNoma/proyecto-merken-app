@@ -2,7 +2,7 @@
 
 La feature opcional `llama` habilita `LlamaEngine` con `llama-cpp-2 = 0.1.161`; está desactivada por defecto. El crate incluye llama.cpp en el commit `d81235049384534c167caea52b85a694f6103d14` (2026-10-05). El v5 se evaluó con `9183a552e5fdcbdb5243f187f3a63204eca7dba9` (2026-11-13), 945 commits más reciente: no se debe asumir que ambos producen los mismos tokens.
 
-Use `ModelStore::verify_and_load` con `ModelSlot` y `LlamaEngine::from_verified` para mantener la exclusión desde la verificación hasta el fin de la carga. El motor carga la base y aplica el adaptador al contexto, sin fusionar pesos; rechaza errores de aplicación. Cada generación crea un contexto nuevo, usa ChatML con pensamiento desactivado, los tokens especiales del vocabulario, contexto 1024, cuatro hilos y greedy. La semilla 3407 no afecta a greedy. Se admiten gramáticas GBNF, cancelación y plazo entre tokens; una decodificación en curso no se interrumpe hasta recuperar el control.
+Use `LlamaEngine::load_into` con `ModelStore`, `ModelSlot` y `LlamaEngineConfig` para mantener la exclusión desde la verificación hasta el fin de la carga. El motor carga la base y aplica el adaptador al contexto, sin fusionar pesos; rechaza errores de aplicación. Cada generación crea un contexto nuevo, usa ChatML con pensamiento desactivado, los tokens especiales del vocabulario, contexto 1024, cuatro hilos y greedy. La semilla 3407 no afecta a greedy. Se admiten gramáticas GBNF, cancelación y plazo entre tokens; una decodificación en curso no se interrumpe hasta recuperar el control.
 
 ## Windows, sin red
 
@@ -35,6 +35,10 @@ Las variables se asignan solo a la sesión actual. No se especifica otro `target
 | Gramática `PROPOSAL_GBNF` | se inicializa con el vocabulario del v5 y genera JSON válido |
 | Gramática de selección (`build_selection_grammar`) | se inicializa y genera JSON válido |
 
-Pese a la diferencia de 945 commits de llama.cpp, la salida greedy coincide byte a byte en los 40 casos. La memoria incluye el mapeo del GGUF base (1,06 GB) y del adaptador (33 MB): es el dato a vigilar en Android (Fase 3). Clippy (con y sin `llama`) y los tests pasan. No se ha validado Android ni el comportamiento clínico.
+Pese a la diferencia de 945 commits de llama.cpp, la salida greedy coincide byte a byte en los 40 casos. Los pesos del GGUF base se mapean; el adaptador se lee y copia a buffers asignados. La medida externa no determina el desglose exacto: es un dato a vigilar en Android (Fase 3). Clippy (con y sin `llama`) y los tests pasan. No se ha validado Android ni el comportamiento clínico.
 
 Si hay diferencias frente a las predicciones guardadas, revisar el prompt y sus saltos de línea, el BOS y los tokens especiales, la aplicación y escala de LoRA, y la diferencia de versiones de llama.cpp. La evaluación original recorta espacios al recoger stdout; la columna exacta compara el texto devuelto íntegro, por lo que también debe inspeccionarse la coincidencia normalizada. No modificar salidas ni referencias para forzar una coincidencia.
+
+## Seguridad
+
+Las gramáticas se prevalidan en Rust con un subconjunto conservador antes del parser nativo. Las cabeceras GGUF se leen con límites y se comprueba que el adaptador declara LoRA y contiene pares de tensores presentes en la base. La entrada pública carga el paquete bajo el bloqueo del almacén, incluyendo esas comprobaciones.

@@ -5,9 +5,9 @@ use std::fs;
 use std::time::{Duration, Instant};
 
 use merken_slm::{
-    CancelToken, Control, Deadline, Engine, GenerateRequest, LlamaEngine, ModelFile, ModelManifest,
-    ModelPackage, ModelRole, ModelSlot, ModelStore, PROPOSAL_GBNF, Progress,
-    build_selection_grammar,
+    CancelToken, Control, Deadline, Engine, GenerateRequest, LlamaEngine, LlamaEngineConfig,
+    ModelFile, ModelManifest, ModelPackage, ModelRole, ModelSlot, ModelStore, PROPOSAL_GBNF,
+    Progress, build_selection_grammar,
 };
 use serde::Deserialize;
 
@@ -108,11 +108,12 @@ fn run() -> Result<(), Box<dyn Error>> {
         Deadline::after(Duration::from_secs(600)),
     );
     let load_start = Instant::now();
-    let engine = store.verify_and_load(
+    let engine = LlamaEngine::load_into(
+        &store,
         &manifest,
         &mut slot,
+        LlamaEngineConfig::default(),
         &mut load_ctl,
-        LlamaEngine::from_verified,
     )?;
     println!(
         "Verificación y carga: {:.3} s",
@@ -206,6 +207,9 @@ fn run() -> Result<(), Box<dyn Error>> {
             return Err("la salida restringida no es un objeto JSON".into());
         }
         println!("Gramática {name}: inicializada y JSON generado correctamente");
+    }
+    if exact != count {
+        return Err("paridad exacta incompleta".into());
     }
     Ok(())
 }
