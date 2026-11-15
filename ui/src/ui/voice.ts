@@ -8,6 +8,8 @@ import { indicatorName } from "./core-format";
 export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (active: boolean) => void): void {
   const dialog = element<HTMLDialogElement>("#voice-dialog");
   const hold = element<HTMLButtonElement>("#talk-hold");
+  const entry = element(".voice-entry");
+  const inlineStatus = element("#voice-inline-status");
   const close = element<HTMLButtonElement>("#voice-close");
   const form = element<HTMLFormElement>("#manual-form");
   const fields = element<HTMLFieldSetElement>("#manual-fields");
@@ -70,46 +72,52 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
     close.disabled = false; save.disabled = !available; setText(close, "Discard");
     controls.open(close);
   }
-  function release(): void {
+  function release(cancelled = false): void {
     if (!holding) return;
+    const captured = pointer;
     holding = false; pointer = null; hold.setAttribute("aria-pressed", "false");
+    entry.dataset.voiceState = "idle";
+    if (captured !== null && hold.hasPointerCapture(captured)) hold.releasePointerCapture(captured);
     onHolding?.(false);
-    element("#voice-held").hidden = true;
-    element("#voice-review").hidden = false;
-    setText(element("#voice-title"), "Check what was understood");
-    element("#type-instead").focus();
+    setText(inlineStatus, cancelled ? "Preview stopped · No audio captured" : "Voice unavailable · Use Type");
   }
-  function begin(): void {
-    if (busy || dialog.open) return;
-    hold.focus(); openSheet(); holding = true; hold.setAttribute("aria-pressed", "true");
+  function begin(): boolean {
+    if (holding || busy || dialog.open) return false;
+    hold.focus({ preventScroll: true }); holding = true; hold.setAttribute("aria-pressed", "true");
+    entry.dataset.voiceState = "holding";
+    setText(inlineStatus, "Visual preview · No audio captured");
     onHolding?.(true);
-    form.hidden = true; element("#voice-review").hidden = true; element("#voice-held").hidden = false;
-    setText(element("#voice-title"), "Hold to talk");
+    return true;
   }
   hold.addEventListener("pointerdown", event => {
     if (!event.isPrimary || event.button !== 0) return;
-    event.preventDefault(); begin(); pointer = event.pointerId;
+    event.preventDefault();
+    if (!begin()) return;
+    pointer = event.pointerId;
+    hold.setPointerCapture(pointer);
   });
   window.addEventListener("pointerup", event => { if (pointer === event.pointerId) release(); }, true);
-  window.addEventListener("pointercancel", event => { if (pointer === event.pointerId) release(); }, true);
+  window.addEventListener("pointercancel", event => { if (pointer === event.pointerId) release(true); }, true);
+  hold.addEventListener("lostpointercapture", () => { if (pointer !== null) release(true); });
   hold.addEventListener("keydown", event => {
-    if ((event.key === " " || event.key === "Enter") && !event.repeat) { event.preventDefault(); begin(); }
+    if (event.key === " " || event.key === "Enter") { event.preventDefault(); if (!event.repeat) begin(); }
   });
+  window.addEventListener("keydown", event => { if (holding && event.key === "Escape") { event.preventDefault(); release(true); } });
   window.addEventListener("keyup", event => {
     if (holding && pointer === null && (event.key === " " || event.key === "Enter")) { event.preventDefault(); release(); }
   }, true);
-  // AT-generated click has no down/up sequence. Open the same honest review.
-  hold.addEventListener("click", () => { if (!dialog.open) { begin(); release(); } });
-  window.addEventListener("blur", release);
-  document.addEventListener("visibilitychange", () => { if (document.hidden) release(); });
+  // An AT-generated click has no down/up sequence; announce availability inline.
+  hold.addEventListener("click", event => { if (event.detail === 0 && begin()) release(); });
+  window.addEventListener("blur", () => release(true));
+  window.addEventListener("pagehide", () => release(true));
+  document.addEventListener("visibilitychange", () => { if (document.hidden) release(true); });
   close.addEventListener("click", controls.close);
   dialog.addEventListener("close", () => { holding = false; pointer = null; opening += 1; hold.setAttribute("aria-pressed", "false"); onHolding?.(false); });
   async function manual(): Promise<void> {
     if (!dialog.open) openSheet();
     const revision = opening;
-    holding = false; pointer = null;
-    hold.setAttribute("aria-pressed", "false"); onHolding?.(false);
-    element("#voice-held").hidden = true; element("#voice-review").hidden = true; form.hidden = false;
+    release(true); entry.dataset.voiceState = "idle"; setText(inlineStatus, "");
+    form.hidden = false;
     setText(element("#voice-title"), "Type a reading");
     if (!time.value) time.value = new Date().toISOString().slice(0, 19);
     setText(element("#manual-profile"), available ? "On-device profile · Checking…" : "Browser mode");
@@ -125,7 +133,6 @@ export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (ac
     } else setText(result, "Local service unavailable. Your entry has been kept; try saving again.");
   }
   element("#manual-open").addEventListener("click", () => { void manual(); });
-  element("#type-instead").addEventListener("click", () => { void manual(); });
   function date(id: string): string {
     const raw = element<HTMLInputElement>(id).value;
     const parsed = new Date(raw + "Z");

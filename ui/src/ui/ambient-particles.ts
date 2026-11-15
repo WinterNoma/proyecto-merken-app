@@ -4,7 +4,7 @@ export function createAmbientParticles(canvas: HTMLCanvasElement) {
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
   const forcedColors = matchMedia("(forced-colors: active)");
   const frameMs = 1000 / 30;
-  const maxParticles = 84;
+  const maxParticles = 126;
   const samples = new Float32Array(120);
   const particles = Array.from({ length: maxParticles }, () => ({
     x: Math.random(), y: Math.random(), phase: Math.random() * Math.PI * 2,
@@ -87,6 +87,18 @@ export function createAmbientParticles(canvas: HTMLCanvasElement) {
       context.globalAlpha = (.24 + p.depth * .3 + energy * .16) * twinkle;
       context.drawImage(sprite, p.x * width - size / 2, p.y * height - size / 2, size, size);
     }
+    // Local orbit follows press activity, not an inferred audio waveform.
+    if (energy > .01) {
+      for (let i = 0; i < 14; i++) {
+        const angle = i / 14 * Math.PI * 2 + elapsed * .6;
+        const radius = 37 + Math.sin(angle * 3 + elapsed * .5) * 4;
+        const x = holdPoint.x * width + Math.cos(angle) * radius;
+        const y = holdPoint.y * height + Math.sin(angle) * radius;
+        const size = 3 + (i % 3);
+        context.globalAlpha = energy * (.35 + (i % 3) * .12);
+        context.drawImage(sprite, x - size / 2, y - size / 2, size, size);
+      }
+    }
     if (impulse && pulse) {
       const radius = 65 + (1 - impulse) * 65;
       context.globalAlpha = impulse * .13;
@@ -138,7 +150,7 @@ export function createAmbientParticles(canvas: HTMLCanvasElement) {
     canvas.width = Math.round(width * resolution);
     canvas.height = Math.round(height * resolution);
     context?.setTransform(resolution, 0, 0, resolution, 0, 0);
-    count = Math.min(maxParticles, Math.max(48, Math.round(width * height / 6000)));
+    count = Math.min(maxParticles, Math.max(72, Math.round(width * height / 4000)));
     canvas.dataset.particles = String(count);
     if (mode() === "reduced") draw(performance.now(), 0);
   }

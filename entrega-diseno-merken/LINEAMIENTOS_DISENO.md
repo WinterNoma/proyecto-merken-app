@@ -133,6 +133,12 @@ Respetar áreas seguras y mantener controles HTML de al menos 44 × 44 px. Permi
 
 [Ver muestra del movimiento en reposo](imagenes/18-particulas-en-reposo.gif).
 
+**Estado más reciente del micrófono:** se conserva la cápsula en reposo; al mantener pulsado se recoge a un círculo centrado con halos y el mensaje debajo, dentro de la misma vista. Al soltar vuelve a la cápsula. La escritura manual se abre solo al elegir Type; el micrófono ya no abre una pantalla. Mantener el foco, las áreas táctiles y el alto reservado para evitar saltos. Las partículas tienen un poco más de presencia y una órbita local durante la pulsación. Es una vista previa de actividad, todavía sin audio ni interpretación de voz.
+
+![Micrófono integrado durante la pulsación](imagenes/19-microfono-integrado.jpg)
+
+[Ver transición de reposo a pulsación y regreso](imagenes/20-microfono-integrado.gif).
+
 ### Figura humana
 
 Silueta clara, proporcionada y discreta, con acabado gris translúcido y contornos suaves. La figura visible de esta iteración es una imagen generada con transparencia, con una capa SVG separada para las zonas seleccionables.
@@ -279,6 +285,8 @@ Los parámetros pertenecen al prompt compartido. No son requisitos del frontend 
 | `16-ui-movil-compacta.jpg` | Captura de la implementación móvil compacta, con datos DEMO, sin scroll en 360 × 800. |
 | `17-ui-particulas.jpg` | Captura posterior con micrófono centrado y partículas detrás de la interfaz. |
 | `18-particulas-en-reposo.gif` | Muestra animada de la implementación real; datos DEMO y movimiento en reposo. |
+| `19-microfono-integrado.jpg` | Estado activo dentro de la vista, con halo y texto debajo, sin modal. |
+| `20-microfono-integrado.gif` | Transición real entre cápsula en reposo, círculo mantenido y regreso. |
 
 ## 12. Fuentes y entrega
 
