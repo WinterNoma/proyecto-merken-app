@@ -128,13 +128,13 @@ fn read_lock_reentrancy(lock_id: usize) -> Result<ReadAccess, SlmError> {
         .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?
 }
 
-fn ensure_write_not_reentrant(lock_id: usize) -> Result<(), SlmError> {
+fn ensure_write_not_reentrant() -> Result<(), SlmError> {
     HELD_STORE_LOCKS
         .try_with(|cell| {
             let held = cell
                 .try_borrow()
                 .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?;
-            if held.iter().any(|entry| entry.lock_id == lock_id) {
+            if !held.is_empty() {
                 return Err(SlmError::Engine(EngineErrorCode::LockReentrant));
             }
             Ok(())
@@ -239,22 +239,10 @@ fn acquire_read_lock<'a>(
 
 fn acquire_write_lock<'a>(
     lock: &'a Arc<RwLock<()>>,
-    ctl: Option<&mut Control<'_>>,
+    ctl: &mut Control<'_>,
 ) -> Result<StoreWriteGuard<'a>, SlmError> {
     let lock_id = Arc::as_ptr(lock) as usize;
-    ensure_write_not_reentrant(lock_id)?;
-
-    let Some(ctl) = ctl else {
-        let guard = lock
-            .write()
-            .map_err(|_| SlmError::Engine(EngineErrorCode::LockPoisoned))?;
-        push_held_lock(lock_id, LockMode::Write)?;
-        return Ok(StoreWriteGuard {
-            guard: Some(guard),
-            lock_id,
-            _marker: PhantomData,
-        });
-    };
+    ensure_write_not_reentrant()?;
 
     loop {
         ctl.check()?;
@@ -537,12 +525,21 @@ impl ModelStore {
     }
 
     /// Elimina del directorio del almacén los archivos declarados en `manifest` bajo bloqueo de escritura.
-    pub fn remove_package(&self, manifest: &ModelManifest) -> Result<(), SlmError> {
+    ///
+    /// Adquiere el bloqueo de escritura de forma acotada y cancelable mediante `ctl`, y rechaza
+    /// escrituras reentrantes o cruzadas mientras el hilo actual retenga algún bloqueo de almacén.
+    pub fn remove_package(
+        &self,
+        manifest: &ModelManifest,
+        ctl: &mut Control<'_>,
+    ) -> Result<(), SlmError> {
+        ctl.check()?;
         manifest.validate()?;
-        let _write_guard = acquire_write_lock(&self.lock, None)?;
+        let _write_guard = acquire_write_lock(&self.lock, ctl)?;
 
         let specs = package_specs(&manifest.package);
         for spec in specs {
+            ctl.check()?;
             let parts = safe_relative_components(&spec.name)?;
             let Some(target) = resolve_existing_file_no_symlinks(&self.root, &parts)? else {
                 continue;
@@ -564,7 +561,7 @@ impl ModelStore {
         let specs = package_specs(&manifest.package);
         let ordered_pairs = match_specs_and_inputs(&specs, inputs)?;
 
-        let _write_guard = acquire_write_lock(&self.lock, Some(ctl))?;
+        let _write_guard = acquire_write_lock(&self.lock, ctl)?;
 
         ensure_root_dir_no_symlink(&self.root)?;
 
@@ -860,7 +857,7 @@ mod tests {
         manifest::ModelRole,
     };
     use std::{
-        sync::mpsc,
+        sync::{Barrier, mpsc},
         thread,
         time::{Duration, Instant},
     };
@@ -1012,7 +1009,7 @@ mod tests {
         assert_eq!(verified.base_file().bytes(), payload.len() as u64);
         assert!(dir.0.join("granite.gguf").exists());
 
-        store.remove_package(&manifest).unwrap();
+        store.remove_package(&manifest, &mut ctl).unwrap();
         assert!(!dir.0.join("granite.gguf").exists());
     }
 
@@ -1394,32 +1391,41 @@ mod tests {
         store
             .install_bytes(&manifest, &[("model.gguf", payload)], &mut ctl)
             .unwrap();
+        other_store
+            .install_bytes(&other_manifest, &[("other.gguf", other_payload)], &mut ctl)
+            .unwrap();
 
-        // 1. Reentrada desde `factory` de `verify_and_load`: remove_package e install_bytes fallan sin bloquear.
+        // 1. Reentrada desde `factory` de `verify_and_load`: tanto en el mismo almacén como en
+        // otro almacén distinto, cualquier escritura (`remove_package` o `install_bytes`) falla.
         let mut slot: ModelSlot<StubEngine> = ModelSlot::new();
         let mut factory_ctl = default_ctl();
         store
             .verify_and_load(&manifest, &mut slot, &mut factory_ctl, |m, _| {
+                let mut inner_ctl = default_ctl();
                 assert_eq!(
-                    store.remove_package(&manifest),
+                    store.remove_package(&manifest, &mut inner_ctl),
                     Err(SlmError::Engine(EngineErrorCode::LockReentrant))
                 );
-                let mut inner_ctl = default_ctl();
                 assert_eq!(
                     store.install_bytes(&manifest, &[("model.gguf", payload)], &mut inner_ctl),
                     Err(SlmError::Engine(EngineErrorCode::LockReentrant))
                 );
-                // Otro almacén independiente sí puede escribirse desde la fábrica.
-                other_store
-                    .install_bytes(
+                assert_eq!(
+                    other_store.install_bytes(
                         &other_manifest,
                         &[("other.gguf", other_payload)],
                         &mut inner_ctl,
-                    )
-                    .unwrap();
+                    ),
+                    Err(SlmError::Engine(EngineErrorCode::LockReentrant))
+                );
+                assert_eq!(
+                    other_store.remove_package(&other_manifest, &mut inner_ctl),
+                    Err(SlmError::Engine(EngineErrorCode::LockReentrant))
+                );
                 Ok(StubEngine(m.model_id().to_owned()))
             })
             .unwrap();
+        assert!(other_dir.0.join("other.gguf").exists());
 
         // 2. Reentrada desde el callback `Progress::Loading` de `verify_and_load`.
         let loading_seen = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -1432,8 +1438,9 @@ mod tests {
             move |progress| {
                 if progress == Progress::Loading {
                     loading_seen_cb.store(true, Ordering::SeqCst);
+                    let mut cb_ctl = default_ctl();
                     assert_eq!(
-                        store_for_cb.remove_package(&manifest_for_cb),
+                        store_for_cb.remove_package(&manifest_for_cb, &mut cb_ctl),
                         Err(SlmError::Engine(EngineErrorCode::LockReentrant))
                     );
                 }
@@ -1458,16 +1465,18 @@ mod tests {
             move |progress| {
                 if progress == Progress::Loading {
                     slot_cb_seen_inner.store(true, Ordering::SeqCst);
+                    let mut cb_ctl = default_ctl();
                     assert_eq!(
-                        store_for_slot_cb.remove_package(&manifest_for_slot_cb),
+                        store_for_slot_cb.remove_package(&manifest_for_slot_cb, &mut cb_ctl),
                         Err(SlmError::Engine(EngineErrorCode::LockReentrant))
                     );
                 }
             },
         );
         slot.load(verified, &mut slot_ctl, |m, _| {
+            let mut inner_ctl = default_ctl();
             assert_eq!(
-                store.remove_package(&manifest),
+                store.remove_package(&manifest, &mut inner_ctl),
                 Err(SlmError::Engine(EngineErrorCode::LockReentrant))
             );
             Ok(StubEngine(m.model_id().to_owned()))
@@ -1475,8 +1484,183 @@ mod tests {
         .unwrap();
         assert!(slot_cb_seen.load(Ordering::SeqCst));
 
-        // 4. Al soltar el bloqueo tras la carga, `remove_package` vuelve a funcionar normalmente.
-        store.remove_package(&manifest).unwrap();
+        // 4. Escritura cruzada mientras el hilo ya retiene un bloqueo de escritura (`install_bytes`).
+        let write_cb_seen = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let write_cb_seen_inner = Arc::clone(&write_cb_seen);
+        let other_for_write_cb = other_store.clone();
+        let other_manifest_for_write_cb = other_manifest.clone();
+        let write_checks = Arc::new(AtomicU64::new(0));
+        let write_checks_clock = Arc::clone(&write_checks);
+        let write_start = Instant::now();
+        let write_deadline = Deadline::with_clock(
+            write_start,
+            Duration::from_secs(5),
+            Arc::new(move || {
+                if write_checks_clock.fetch_add(1, Ordering::SeqCst) == 2 {
+                    write_cb_seen_inner.store(true, Ordering::SeqCst);
+                    let mut cb_ctl = default_ctl();
+                    assert_eq!(
+                        other_for_write_cb
+                            .remove_package(&other_manifest_for_write_cb, &mut cb_ctl),
+                        Err(SlmError::Engine(EngineErrorCode::LockReentrant))
+                    );
+                }
+                write_start
+            }),
+        );
+        let mut write_cb_ctl = Control::without_progress(CancelToken::new(), write_deadline);
+        store
+            .install_bytes(&manifest, &[("model.gguf", payload)], &mut write_cb_ctl)
+            .unwrap();
+        assert!(write_cb_seen.load(Ordering::SeqCst));
+
+        // 5. Al soltar el bloqueo tras la carga, `remove_package` vuelve a funcionar normalmente.
+        store.remove_package(&manifest, &mut ctl).unwrap();
+        assert!(!dir.0.join("model.gguf").exists());
+        other_store
+            .remove_package(&other_manifest, &mut ctl)
+            .unwrap();
+        assert!(!other_dir.0.join("other.gguf").exists());
+    }
+
+    #[test]
+    fn cross_store_remove_from_factories_fails_without_deadlock_using_barrier() {
+        let dir_a = TempDir::new("cross_barrier_a");
+        let dir_b = TempDir::new("cross_barrier_b");
+        let payload_a = b"model-a-weights";
+        let payload_b = b"model-b-weights";
+        let manifest_a = single_manifest("model-a", "a.gguf", payload_a);
+        let manifest_b = single_manifest("model-b", "b.gguf", payload_b);
+
+        let store_a = ModelStore::new(&dir_a.0).unwrap();
+        let store_b = ModelStore::new(&dir_b.0).unwrap();
+        let mut ctl = default_ctl();
+        store_a
+            .install_bytes(&manifest_a, &[("a.gguf", payload_a)], &mut ctl)
+            .unwrap();
+        store_b
+            .install_bytes(&manifest_b, &[("b.gguf", payload_b)], &mut ctl)
+            .unwrap();
+
+        let barrier = Arc::new(Barrier::new(2));
+
+        let t1_store_a = store_a.clone();
+        let t1_store_b = store_b.clone();
+        let t1_manifest_a = manifest_a.clone();
+        let t1_manifest_b = manifest_b.clone();
+        let t1_barrier = Arc::clone(&barrier);
+        let handle_a = thread::spawn(move || {
+            let mut slot: ModelSlot<StubEngine> = ModelSlot::new();
+            let mut load_ctl = default_ctl();
+            t1_store_a
+                .verify_and_load(&t1_manifest_a, &mut slot, &mut load_ctl, |m, _| {
+                    t1_barrier.wait();
+                    let mut inner_ctl = default_ctl();
+                    let err = t1_store_b
+                        .remove_package(&t1_manifest_b, &mut inner_ctl)
+                        .unwrap_err();
+                    assert_eq!(err, SlmError::Engine(EngineErrorCode::LockReentrant));
+                    Ok(StubEngine(m.model_id().to_owned()))
+                })
+                .unwrap();
+        });
+
+        let t2_store_a = store_a.clone();
+        let t2_store_b = store_b.clone();
+        let t2_manifest_a = manifest_a.clone();
+        let t2_manifest_b = manifest_b.clone();
+        let t2_barrier = Arc::clone(&barrier);
+        let handle_b = thread::spawn(move || {
+            let mut slot: ModelSlot<StubEngine> = ModelSlot::new();
+            let mut load_ctl = default_ctl();
+            t2_store_b
+                .verify_and_load(&t2_manifest_b, &mut slot, &mut load_ctl, |m, _| {
+                    t2_barrier.wait();
+                    let mut inner_ctl = default_ctl();
+                    let err = t2_store_a
+                        .remove_package(&t2_manifest_a, &mut inner_ctl)
+                        .unwrap_err();
+                    assert_eq!(err, SlmError::Engine(EngineErrorCode::LockReentrant));
+                    Ok(StubEngine(m.model_id().to_owned()))
+                })
+                .unwrap();
+        });
+
+        handle_a.join().unwrap();
+        handle_b.join().unwrap();
+
+        assert!(store_a.verify(&manifest_a, &mut ctl).is_ok());
+        assert!(store_b.verify(&manifest_b, &mut ctl).is_ok());
+    }
+
+    #[test]
+    fn remove_package_waiting_on_lock_respects_cancel_and_timeout() {
+        let dir = TempDir::new("remove_cancel_and_timeout");
+        let payload = b"model-remove-lock-bytes";
+        let manifest = single_manifest("granite", "model.gguf", payload);
+
+        let store_a = ModelStore::new(&dir.0).unwrap();
+        let store_b = ModelStore::new(&dir.0).unwrap();
+        let mut ctl = default_ctl();
+        store_a
+            .install_bytes(&manifest, &[("model.gguf", payload)], &mut ctl)
+            .unwrap();
+
+        let (started_tx, started_rx) = mpsc::channel();
+        let (proceed_tx, proceed_rx) = mpsc::channel();
+        let store_reader = store_a.clone();
+        let manifest_load = manifest.clone();
+        let load_handle = thread::spawn(move || {
+            let mut slot: ModelSlot<StubEngine> = ModelSlot::new();
+            let mut load_ctl = default_ctl();
+            store_reader
+                .verify_and_load(&manifest_load, &mut slot, &mut load_ctl, |m, _| {
+                    started_tx.send(()).unwrap();
+                    proceed_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+                    Ok(StubEngine(m.model_id().to_owned()))
+                })
+                .unwrap();
+        });
+
+        started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+
+        let mut timeout_ctl = Control::without_progress(
+            CancelToken::new(),
+            Deadline::after(Duration::from_millis(25)),
+        );
+        assert_eq!(
+            store_b.remove_package(&manifest, &mut timeout_ctl),
+            Err(SlmError::Timeout)
+        );
+
+        let cancel = CancelToken::new();
+        let cancel_on_wait = cancel.clone();
+        let checks = Arc::new(AtomicU64::new(0));
+        let checks_clock = Arc::clone(&checks);
+        let start = Instant::now();
+        let deadline = Deadline::with_clock(
+            start,
+            Duration::from_secs(5),
+            Arc::new(move || {
+                // Check 0: entrada de remove_package; Check 1: previo a try_write;
+                // Check 2: tras el primer WouldBlock.
+                if checks_clock.fetch_add(1, Ordering::SeqCst) == 2 {
+                    cancel_on_wait.cancel();
+                }
+                start
+            }),
+        );
+        let mut cancel_ctl = Control::without_progress(cancel, deadline);
+        assert_eq!(
+            store_b.remove_package(&manifest, &mut cancel_ctl),
+            Err(SlmError::Cancelled)
+        );
+
+        proceed_tx.send(()).unwrap();
+        load_handle.join().unwrap();
+
+        assert!(dir.0.join("model.gguf").exists());
+        store_b.remove_package(&manifest, &mut ctl).unwrap();
         assert!(!dir.0.join("model.gguf").exists());
     }
 }
