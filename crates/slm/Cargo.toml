@@ -15,5 +15,9 @@ llama-cpp-2 = { version = "=0.1.161", default-features = false, optional = true 
 [features]
 native = ["dep:llama-cpp-2"]
 
+[[example]]
+name = "offline_probe"
+required-features = ["native"]
+
 [lints]
 workspace = true
