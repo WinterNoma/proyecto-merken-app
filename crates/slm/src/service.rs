@@ -1276,6 +1276,13 @@ mod tests {
         ("dormí mal", &[]),
         ("I slept poorly", &[]),
         ("temperatura -0,5", &["-0,5"]),
+        ("temperatura - 0,5", &["- 0,5"]),
+        ("pulse − 72", &["− 72"]),
+        ("pulso + 72", &["+ 72"]),
+        ("temperatura -\t0,5", &["-\t0,5"]),
+        ("pulse −\t72", &["−\t72"]),
+        ("pulso +\t72", &["+\t72"]),
+        ("temperatura - \t 0,5", &["- \t 0,5"]),
         ("pulse -72", &["-72"]),
         ("pulse −72", &["−72"]),
         ("pulse +72", &["+72"]),
@@ -1349,6 +1356,13 @@ mod tests {
     fn layer1_numeric_and_compound_citations_follow_the_core_extractor() {
         for (text, key, value, quote) in [
             ("temperatura -0,5", "celsius", None, None),
+            ("temperatura - 0,5", "celsius", None, None),
+            ("pulse − 72", "bpm", None, None),
+            ("pulso + 72", "bpm", None, None),
+            ("temperatura -\t0,5", "celsius", None, None),
+            ("pulse −\t72", "bpm", None, None),
+            ("pulso +\t72", "bpm", None, None),
+            ("temperatura - \t 0,5", "celsius", None, None),
             ("pulse -72", "bpm", None, None),
             ("pulse −72", "bpm", None, None),
             ("pulse +72", "bpm", None, None),
@@ -1356,6 +1370,7 @@ mod tests {
             ("temperatura +36,6", "celsius", None, None),
             ("temperatura 36,6", "celsius", Some(36.6), Some("36,6")),
             ("temperatura 36.6", "celsius", Some(36.6), Some("36.6")),
+            ("pulso 72", "bpm", Some(72.0), Some("72")),
             ("blood glucose 95", "mg_dl", Some(95.0), Some("95")),
             ("estado de ánimo 6", "score", Some(6.0), Some("6")),
         ] {
@@ -1376,6 +1391,27 @@ mod tests {
             assert!(proposal.negated.is_empty(), "{text}: {proposal:?}");
             assert!(proposal.uninterpreted.is_empty(), "{text}: {proposal:?}");
         }
+    }
+
+    #[test]
+    fn hyphen_between_words_is_not_a_numeric_residue() {
+        let text = "dolor - cabeza";
+        let mut proposal = interpret(text);
+        assert_eq!(proposal.records.len(), 1, "{proposal:?}");
+        assert_eq!(proposal.records[0].quote, text);
+        let score = proposal.records[0]
+            .fields
+            .iter()
+            .find(|field| field.key == "score")
+            .unwrap();
+        assert!(score.value.is_none());
+        assert!(score.quote.is_none());
+        // Exercise mention/zone coverage without the free-text description.
+        proposal.records[0]
+            .fields
+            .retain(|field| field.key != "description");
+        assert!(proposal.uninterpreted.is_empty(), "{proposal:?}");
+        assert!(unresolved_fragments(text, &proposal).is_empty());
     }
 
     #[test]

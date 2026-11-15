@@ -16,6 +16,7 @@ fn words(text: &str) -> Vec<Word<'_>> {
     let mut out = Vec::new();
     let mut start = None;
     let mut numeric = false;
+    let mut after_sign = false;
     for (offset, ch) in text
         .char_indices()
         .chain(std::iter::once((text.len(), ' ')))
@@ -27,12 +28,15 @@ fn words(text: &str) -> Vec<Word<'_>> {
                 .get(offset + ch.len_utf8()..)
                 .and_then(|tail| tail.chars().next())
                 .is_some_and(|next| next.is_ascii_digit());
-        // Keep attached numeric signs in the original token, even when core rejects it.
+        // Keep signs and horizontal spacing with the digits, matching core's
+        // atomic rejection of signed numbers. A hyphen between words is not numeric.
         let sign = matches!(ch, '-' | '−' | '+')
             && text
                 .get(offset + ch.len_utf8()..)
-                .and_then(|tail| tail.chars().next())
+                .and_then(|tail| tail.chars().find(|next| !matches!(next, ' ' | '\t')))
                 .is_some_and(|next| next.is_ascii_digit());
+        let sign_space = after_sign && matches!(ch, ' ' | '\t');
+        after_sign = sign || sign_space;
         if sign
             && let Some(begin) = start.take()
             && let Some(value) = text.get(begin..offset)
@@ -43,7 +47,12 @@ fn words(text: &str) -> Vec<Word<'_>> {
                 end: offset,
             });
         }
-        if ch.is_alphanumeric() || ('\u{0300}'..='\u{036f}').contains(&ch) || decimal || sign {
+        if ch.is_alphanumeric()
+            || ('\u{0300}'..='\u{036f}').contains(&ch)
+            || decimal
+            || sign
+            || sign_space
+        {
             if start.is_none() {
                 numeric = ch.is_ascii_digit() || sign;
             } else if ch.is_alphabetic() {
