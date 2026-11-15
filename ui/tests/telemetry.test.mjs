@@ -1559,3 +1559,71 @@ describe("telemetría local — panel telemetry-history.ts", () => {
     handle.destroy();
   });
 });
+
+
+describe("exportación JSON", () => {
+  test("el envoltorio omite input cuando no se proporciona", async () => {
+    createDomEnvironment();
+    const calls = [];
+    window.__TAURI_INTERNALS__ = { invoke: async (cmd, args) => { calls.push({ cmd, args }); return {}; } };
+    await coreMod.core.exportJson();
+    await coreMod.core.exportJson({ include_telemetry: false });
+    assert.equal(calls[0].cmd, "export_json");
+    assert.equal(calls[0].args == null || !("input" in calls[0].args), true);
+    assert.deepEqual(calls[1].args.input, { include_telemetry: false });
+  });
+
+  test("fuera de Tauri está deshabilitado y no invoca", async () => {
+    const { createHost } = createDomEnvironment();
+    const host = createHost();
+    const handle = historyMod.mountTelemetryHistory(host, () => []);
+    const button = host.querySelector(".tele-hist-export-button");
+    assert.equal(button.disabled, true);
+    assert.equal(host.querySelector(".tele-hist-export-checkbox").disabled, true);
+    button.dispatchEvent(new Event("click"));
+    await flushMicrotasks();
+    assert.equal(host.querySelector(".tele-hist-export-status").textContent, "");
+    assert.equal(host.querySelector(".tele-hist-empty").textContent, "History is available in the app");
+    handle.destroy();
+  });
+
+  test("ocupado, una sola llamada, éxito seguro y error", async () => {
+    const { createHost } = createDomEnvironment();
+    const pending = deferred();
+    const calls = [];
+    window.__TAURI_INTERNALS__ = { invoke: async (cmd, args) => {
+      if (cmd === "export_json") { calls.push(args); return calls.length === 1 ? pending.promise : Promise.reject({ code: "storage_error", field: null, message: "disk full" }); }
+      if (cmd === "list_telemetry") return [];
+      if (cmd === "verify_telemetry") return { ok: true, checked: 0, series_checked: 0, first_bad_reading_id: null, problem: null, checked_through_reading_id: null };
+    } };
+    const host = createHost();
+    const handle = historyMod.mountTelemetryHistory(host, () => []);
+    const button = host.querySelector(".tele-hist-export-button");
+    const checkbox = host.querySelector(".tele-hist-export-checkbox");
+    const status = host.querySelector(".tele-hist-export-status");
+    const path = host.querySelector(".tele-hist-export-path");
+    assert.equal(checkbox.checked, true);
+    checkbox.checked = false;
+    button.click();
+    button.dispatchEvent(new Event("click"));
+    assert.equal(button.disabled, true);
+    assert.equal(checkbox.disabled, true);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].input, { include_telemetry: false });
+    assert.equal(status.textContent, "Exporting…");
+    pending.resolve({ path: "C:/<file>&.json", file_name: "<file>&.json", bytes: 10, exported_at: "now", counts: { records: 1, events: 2, evaluations: 3, telemetry_readings: 4, outbox_pending: 5 } });
+    await flushMicrotasks();
+    assert.equal(status.getAttribute("role"), "status");
+    assert.equal(status.getAttribute("aria-live"), "polite");
+    assert.equal(status.textContent, "Exported <file>&.json · 1 records · 2 events · 3 evaluations · 4 telemetry readings");
+    assert.equal(path.textContent, "C:/<file>&.json");
+    assert.equal(path.children.length, 0);
+    assert.equal(status.children.length, 0);
+    assert.equal(button.disabled, false);
+    button.click();
+    await flushMicrotasks();
+    assert.equal(status.textContent, "Export failed: disk full");
+    assert.equal(path.textContent, "");
+    handle.destroy();
+  });
+});

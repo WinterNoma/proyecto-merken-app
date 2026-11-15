@@ -424,6 +424,19 @@ export interface SpeakResponse { request_id: string; chunks: number; duration_ms
 /** Each event contains one complete PCM16 mono WAV file in base64. */
 export interface VoiceChunkEvent { request_id: string; index: number; wav_base64: string }
 
+export interface ExportJsonInput {
+  include_telemetry?: boolean;
+  astronaut_key?: string;
+}
+
+export interface ExportJsonResult {
+  path: string;
+  file_name: string;
+  bytes: number;
+  exported_at: Iso;
+  counts: { records: number; events: number; evaluations: number; telemetry_readings: number; outbox_pending: number };
+}
+
 export const core = {
   speakText: (input: { request_id: string; text: string; voice?: string | null; speed?: number | null }) => invoke<SpeakResponse>("speak_text", { input }),
   speakCancel: (requestId: string) => invoke<boolean>("speak_cancel", { request_id: requestId }),
@@ -458,6 +471,9 @@ export const core = {
   /** Lista lecturas de telemetría local de la más reciente a la más antigua. */
   listTelemetry: (input: ListTelemetryInput) =>
     invoke<TelemetryItem[]>("list_telemetry", { input }),
+  /** Exporta los datos locales a un archivo JSON. */
+  exportJson: (input?: ExportJsonInput) =>
+    input === undefined ? invoke<ExportJsonResult>("export_json") : invoke<ExportJsonResult>("export_json", { input }),
   /** Verifica la integridad de la cadena de hashes de telemetría local. */
   verifyTelemetry: (input: VerifyTelemetryInput = {}) =>
     invoke<VerifyTelemetryResult>("verify_telemetry", { input }),
