@@ -17,6 +17,8 @@ pub mod engine;
 pub mod error;
 pub mod explain;
 pub mod interpreter;
+#[cfg(feature = "llama")]
+pub mod llama;
 pub mod manifest;
 pub mod slot;
 pub mod store;
@@ -37,6 +39,8 @@ pub use interpreter::{
     Interpreter, MAX_FIELDS_PER_RECORD, MAX_INTERPRETER_OUTPUT_BYTES, MAX_PROPOSAL_RECORDS,
     MAX_QUOTE_BYTES, MAX_QUOTE_ITEMS, PROPOSAL_GBNF, SlmInterpreter,
 };
+#[cfg(feature = "llama")]
+pub use llama::{DEFAULT_CONTEXT_SIZE, DEFAULT_THREADS, LlamaEngine, LlamaEngineConfig};
 pub use manifest::{
     ModelFile, ModelManifest, ModelPackage, ModelRole, VerifiedFile, VerifiedModel,
 };
