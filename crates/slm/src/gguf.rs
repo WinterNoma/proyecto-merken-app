@@ -208,6 +208,11 @@ fn header(path: &Path) -> Result<Header> {
         file_size,
     })
 }
+#[cfg(feature = "llama")]
+pub(crate) fn architecture(path: &Path) -> Result<String> {
+    header(path)?.architecture.ok_or(())
+}
+
 fn allowed_target(name: &str, blocks: u32) -> bool {
     let Some(rest) = name.strip_prefix("blk.") else {
         return false;
@@ -423,6 +428,39 @@ mod tests {
         let result = validate_adapter(&b, &a).is_ok();
         std::fs::remove_dir_all(dir).unwrap();
         result
+    }
+    #[cfg(feature = "llama")]
+    #[test]
+    fn architecture_selects_chat_template() {
+        use crate::{ChatTemplate, EngineErrorCode, SlmError};
+        let id = NEXT.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "merken-gguf-architecture-{}-{id}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("model.gguf");
+        for (arch, expected) in [
+            ("qwen3", Ok(ChatTemplate::Qwen3ChatmlNoThink)),
+            ("granite", Ok(ChatTemplate::Granite)),
+            (
+                "llama",
+                Err(SlmError::Engine(EngineErrorCode::UnsupportedArchitecture)),
+            ),
+        ] {
+            std::fs::write(
+                &file,
+                make(&[kv_string("general.architecture", arch)], &[], 0),
+            )
+            .unwrap();
+            assert_eq!(ChatTemplate::from_gguf(&file), expected);
+        }
+        std::fs::write(&file, make(&[], &[], 0)).unwrap();
+        assert_eq!(
+            ChatTemplate::from_gguf(&file),
+            Err(SlmError::Engine(EngineErrorCode::LoadFailed))
+        );
+        std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]
     fn valid_and_invalid_adapter_cases() {

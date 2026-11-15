@@ -52,3 +52,21 @@ El motor admite únicamente `PROPOSAL_GBNF` exacta o una gramática de selecció
 Antes de cargar un adaptador, la lectura acotada de cabeceras exige base `qwen3` y `qwen3.block_count`. Todos los pares LoRA deben apuntar a una de las siete matrices Qwen3 de atención o FFN de una capa existente; debe haber al menos un par. Se comprueban los tipos de metadatos consumidos por el cargador, la arquitectura coincidente, la alineación, los strings sin NUL y los tipos válidos de arrays sin anidamiento.
 
 Para cada tensor del adaptador se permiten solo F32 y F16, rango entre 1 y 256, formas compatibles con el destino base, offsets alineados y secuenciales sin solapamiento, y datos completos dentro del archivo. La suma de tamaños está limitada a 256 MiB y al tamaño del archivo. Las operaciones de tamaño y posición son comprobadas. La entrada pública mantiene el bloqueo del almacén desde la verificación hasta terminar la carga; esa exclusión cubre solo escritores que respetan el bloqueo. Estas medidas no constituyen validación clínica ni prueba de viabilidad en Android.
+
+## Intérprete Granite y plantillas de chat
+
+El manifiesto de confianza de la aplicación define Granite 4.0 350M Q4_K_M como intérprete de capa 2. El almacén busca el archivo en `<raíz de modelos>/granite-4.0-350m/granite-4.0-350m-Q4_K_M.gguf` y verifica tamaño y SHA-256 antes de cargarlo. No se usa un manifiesto del disco como autoridad. El servicio solo propone: el núcleo valida y la persona confirma cada campo.
+
+El motor lee `general.architecture` de la cabecera GGUF verificada: `qwen3` usa ChatML sin pensamiento y `granite` usa sus delimitadores de roles; otras arquitecturas devuelven `unsupported_architecture`. Los paquetes LoRA siguen limitados a Qwen3.
+
+Desde la raíz del repositorio, con la feature y dependencias disponibles, ejecuta:
+
+```powershell
+cargo run -p merken-slm --example granite_eval --features llama --offline -- "C:\Users\Salva\Desktop\git\nasa.spaceapps\externo\granite-4.0-350m\granite-4.0-350m-Q4_K_M.gguf" crates/slm/examples/data/granite_eval.jsonl --dump granite-dump.jsonl
+```
+
+La tabla separa JSON válido, validación y citas de la salida cruda, validación final tras el saneado, recall de pares indicador-valor, tokens y latencia. El resumen cuenta también casos sin valores esperados que devolvieron valores. El recall se calcula sobre la propuesta saneada; el núcleo puede descartar valores incluso si el modelo los extrajo. Los casos negativos no aportan al denominador del recall. Fallos individuales se miden sin alterar el código de salida; errores de configuración, lectura o carga sí detienen el ejemplo.
+
+El volcado opcional es JSONL y contiene texto sintético, salida cruda y problemas de `Proposal::check`; `raw_check_issues: null` indica que la salida no pudo deserializarse como `Proposal`. Se exige una ruta nueva para evitar sobrescribir archivos. Las clases `literal` y `words` separan cifras de números escritos; los controles sin número se agrupan en `literal`. Las frases añadidas son candidatas a casos difíciles para capa 1 y deben medirse, pues no se ha verificado su comportamiento.
+
+El núcleo sí acepta ciertos números escritos: por ejemplo, `quote_number("setenta y dos")` devuelve 72. Por ello `words` mantiene sus valores esperados y su recall no se fuerza a cero. `invented` cuenta valores numéricos finales cuya cita literal no respalda el valor según `quote_number`; `no_digit_match` cuenta los que no aparecen en cifras, incluso si están respaldados por palabras. `unresolved_cases` cuenta propuestas con `uninterpreted` no vacío, sin verificar que cubra toda la frase. El volcado puede revelar copia de ejemplos, pero solo al ejecutar el modelo.

@@ -24,3 +24,7 @@ workspace = true
 [[example]]
 name = "v5_parity"
 required-features = ["llama"]
+
+[[example]]
+name = "granite_eval"
+required-features = ["llama"]
