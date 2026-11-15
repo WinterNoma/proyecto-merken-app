@@ -548,11 +548,9 @@ mod tests {
         let (res, _) = run_interpret(input, &json_out);
         let proposal = res.unwrap();
         assert!(proposal.check(input).is_empty());
-        // Registro con cita inventada descartado; registro con cita válida mantiene solo lo veraz.
-        assert_eq!(proposal.records.len(), 1);
-        assert_eq!(proposal.records[0].indicator, Indicator::Mood);
-        assert_eq!(proposal.records[0].fields[0].value, None);
-        assert_eq!(proposal.records[0].time, TimeHint::Unspecified);
+        // Registro con cita inventada descartado; el de ánimo también, porque
+        // "feel dizzy" no nombra el ánimo (`mentions_indicator` en `check`).
+        assert!(proposal.records.is_empty());
         assert!(proposal.negated.is_empty());
         assert!(proposal.uninterpreted.is_empty());
     }
