@@ -18,6 +18,9 @@ jobs:
   apk:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
     env:
       CI: 'true'
       CARGO_TERM_COLOR: always
@@ -27,6 +30,7 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: '0'
       CARGO_PROFILE_DEV_INCREMENTAL: 'false'
       CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
       LLAMA_LIB_PROFILE: Release
     steps:
       - uses: actions/checkout@v4
@@ -53,33 +57,31 @@ jobs:
           rustup default stable
           rustup target add aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: native-slim-v7-1
       - name: Install locked JavaScript dependencies
         run: npm ci
-      - name: Bundle verified offline model assets on trusted builds
-        if: github.event_name != 'pull_request'
-        env:
-          SLM_BASE_URL: ${{ secrets.SLM_BASE_DOWNLOAD_URL }}
-          SLM_ADAPTER_URL: ${{ secrets.SLM_ADAPTER_DOWNLOAD_URL }}
-        run: |
-          test -n "$SLM_BASE_URL" && test -n "$SLM_ADAPTER_URL"
-          mkdir -p plugins/slm-assets/android/src/main/assets/slm
-          cd plugins/slm-assets/android/src/main/assets/slm
-          curl --fail --silent --show-error --retry 2 "$SLM_BASE_URL" -o space-health-base-Q4_K_M.gguf
-          curl --fail --silent --show-error --retry 2 "$SLM_ADAPTER_URL" -o wellbeing-v7-lora-f16.gguf
-          echo '4fce4f8510d16a058a9e6eef90d6ffd992135259e0fcadd42e69b06d1243dea1  space-health-base-Q4_K_M.gguf' | sha256sum --check --status
-          echo '521290d5207de280a7fc1ebc7517138e2dd994405347cc451a16fa60d5ffc2ef  wellbeing-v7-lora-f16.gguf' | sha256sum --check --status
       - name: Test Rust domain and adapters with synthetic fixtures
         run: cargo test --locked -p merken-core -p merken-store -p merken-sync -p merken-seed -p merken-slm
       - name: Initialize Android project
         run: npm run tauri -- android init --ci --skip-targets-install
       - name: Build installable ARM64 debug APK
         run: npm run tauri -- android build --ci --debug --apk --target aarch64
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: github.event_name != 'pull_request'
+        with:
+          role-to-assume: ${{ secrets.SLM_BUILD_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: merken-apk-models-${{ github.run_id }}
       - name: Verify APK signature and export
+        env:
+          SLM_ASSET_BUCKET: ${{ secrets.SLM_ASSET_BUCKET }}
+          TRUSTED_MODEL_BUILD: ${{ github.event_name != 'pull_request' }}
         run: |
           mkdir -p artifacts
           mapfile -t apks < <(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk')
           test "${#apks[@]}" -eq 1
-          cp "${apks[0]}" artifacts/merken-arm64-debug.apk
+          python3 .github/scripts/bundle_offline_models.py "${apks[0]}" artifacts/merken-arm64-debug.apk
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose artifacts/merken-arm64-debug.apk
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging artifacts/merken-arm64-debug.apk > artifacts/apk-info.txt
           (cd artifacts && sha256sum merken-arm64-debug.apk > SHA256SUMS.txt)
