@@ -16,6 +16,10 @@ pub mod control;
 pub mod engine;
 pub mod error;
 pub mod explain;
+#[cfg(any(feature = "llama", test))]
+mod gbnf;
+#[cfg(any(feature = "llama", test))]
+mod gguf;
 pub mod interpreter;
 #[cfg(feature = "llama")]
 pub mod llama;
