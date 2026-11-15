@@ -6,7 +6,7 @@ import mysql from "mysql2/promise";
 const host = process.env.TAURI_DEV_HOST;
 
 const dbPool = mysql.createPool({
-  host: process.env.MYSQL_HOST || "98.95.196.77",
+  host: process.env.MYSQL_HOST || "98.95.196.77", //RECORDAR QUITAR ETA WEA Y MOVERLO AL ENV(DA COMO QUE IGUAL PERO IMPORTANTE)
   port: Number(process.env.MYSQL_PORT) || 3306,
   user: process.env.MYSQL_USER || "merken_user",
   password: process.env.MYSQL_PASSWORD || "merkenlomasgrande1234",
