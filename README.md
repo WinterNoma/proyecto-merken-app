@@ -37,6 +37,24 @@ Empieza por [docs/requisitos-app-movil.md](docs/requisitos-app-movil.md) y por l
    ```
 5. Dependencias de JS: `npm install`
 
+## Preparar el entorno (Mac)
+
+1. Android Studio → Settings → Languages & Frameworks → Android SDK → pestaña **SDK Tools**: marca **NDK (Side by side)**, **Android SDK Command-line Tools** y **Platform-Tools**. Apply.
+2. Pega en la Terminal estas dos líneas, una detrás de otra: la primera instala Rust y los targets de Android; la segunda deja las variables fijas en `~/.zshrc`.
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && source "$HOME/.cargo/env" && rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+   ```
+   ```bash
+   echo 'export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"' >> ~/.zshrc && echo 'export ANDROID_HOME="$HOME/Library/Android/sdk"' >> ~/.zshrc && echo 'export NDK_HOME="$ANDROID_HOME/ndk/$(ls -1 $ANDROID_HOME/ndk | tail -1)"' >> ~/.zshrc && echo 'export PATH="$HOME/.cargo/bin:$ANDROID_HOME/platform-tools:$PATH"' >> ~/.zshrc
+   ```
+3. Cierra la Terminal, abre otra y, en la carpeta del proyecto (Node 20+; si falta, `brew install node`):
+   ```bash
+   npm install && npm run tauri android build -- --debug --open
+   ```
+   Se abre Android Studio: elige un emulador (**arm64** en Macs M1/M2/…) y dale a **Run ▶**. No cierres la Terminal mientras uses Android Studio.
+
+Sin instalar nada: GitHub Actions → **Android APK** genera un APK debug arm64 en cada push a `desarrollo`. Descarga el artifact y arrástralo al emulador.
+
 ## Comandos
 
 ```bash
