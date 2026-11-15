@@ -656,17 +656,18 @@ async fn sim_import(
     })
 }
 
-/// Lleva las últimas lecturas de un miembro de la tripulación (MySQL) al núcleo,
-/// como DEMO: sustituye la DEMO anterior y nunca se sube. Después, `get_status`.
+/// Lleva al núcleo, como DEMO, el historial de un miembro de la tripulación ya
+/// guardado en SQLite por el feed (no consulta MySQL). Sustituye la DEMO anterior
+/// y nunca se sube. Después, `get_status`.
 #[tauri::command]
 fn import_crew_member(
     state: tauri::State<'_, AppState>,
     input: crew_import::CrewImportInput,
 ) -> Result<ImportResult, StoreError> {
     let at = now();
-    let records = crew_import::crew_records(&input, at)?;
-    let id = crew_import::astronaut_id(input.crew_id);
+    let id = crew_import::astronaut_id(&input.astronaut_key);
     with_store(&state, |s| {
+        let records = crew_import::local_records(s, &input, at)?;
         s.import_synthetic(&id, input.display_name.trim(), &records, at)
     })
 }

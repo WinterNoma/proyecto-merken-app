@@ -70,19 +70,11 @@ const vitals = createVitals();
 // Copies the member's latest MySQL readings into the local core (DEMO), so the core
 // evaluation, Explain and Recommendations can use them. Never automatic.
 async function importToCore(member: AstronautProfile): Promise<string> {
-  const t = member.telemetry;
-  const result = await core.importCrewMember({
-    crew_id: Number(member.id), display_name: member.name, measured_at: member.measuredAt ?? null,
-    garmin_linked: member.garminLinked === true,
-    readings: {
-      heart_rate: t.heart_rate, systolic: t.blood_pressure.systolic, diastolic: t.blood_pressure.diastolic,
-      body_temperature: t.body_temperature, glucose: t.blood_sugar, oxygen_in_blood: t.oxygen_in_blood,
-      sleep_hours: t.sleep_hours, nutrition: t.nutrition, space_radiation: t.space_radiation,
-      distance_from_earth: t.distance_from_earth,
-    },
-  });
+  const result = await core.importCrewMember({ astronaut_key: member.id, display_name: member.name });
   await panel.refresh(true);
-  return result.imported + " readings saved in the on-device core as DEMO data" + (result.rejected ? " · " + result.rejected + " outside the accepted range" : "") + ". Mood is text and is not imported.";
+  return result.imported + " readings from this device's saved history are now in the on-device core as DEMO data"
+    + (result.rejected ? " · " + result.rejected + " not accepted by the core (for example, sleep without its start and end time)" : "")
+    + ". Mood is text and is not imported.";
 }
 const crew = createCrewSelector(member => { vitals.render(member); dashboard.member(member); }, available ? importToCore : undefined);
 const renderFeed = (state: FeedState): void => {

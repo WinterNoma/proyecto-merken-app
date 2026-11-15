@@ -7,7 +7,7 @@ import type { FeedState } from "./telemetry";
 
 export function createCrewSelector(
   onSelect: (member: AstronautProfile | null) => void,
-  // Installed app only: copies the member's latest readings into the local core (as DEMO).
+  // Installed app only: loads the member's history saved on this device into the local core (as DEMO).
   importToCore?: (member: AstronautProfile) => Promise<string>,
 ) {
   const trigger = element<HTMLButtonElement>("#crew-open");
@@ -39,11 +39,11 @@ export function createCrewSelector(
   function renderPreview(): void {
     const member = crew.find(entry => entry.id === previewId);
     confirm.disabled = !member;
-    useInCore.disabled = importing || !member?.measuredAt;
+    useInCore.disabled = importing || !member;
     // Only reset the message when another member is shown: the feed re-renders every few seconds.
     if (importToCore && !importing && statusFor !== (member?.id ?? null)) {
       statusFor = member?.id ?? null;
-      setText(coreStatus, member && !member.measuredAt ? "No measurement time from the ground database · Cannot be used in the core" : "");
+      setText(coreStatus, "");
     }
     if (!member) {
       setText(element("#crew-preview-name"), "No crew available");
@@ -91,13 +91,13 @@ export function createCrewSelector(
     const member = crew.find(entry => entry.id === previewId);
     if (!importToCore || !member || importing) return;
     importing = true; useInCore.disabled = true;
-    setText(coreStatus, "Saving " + member.name + "'s latest readings in the on-device core…");
+    setText(coreStatus, "Loading " + member.name + "'s saved history into the on-device core…");
     try {
       setText(coreStatus, await importToCore(member));
     } catch (error) {
       setText(coreStatus, typeof error === "object" && error !== null && "message" in error ? String(error.message) : "The readings could not be saved in the core");
     } finally {
-      importing = false; useInCore.disabled = !member.measuredAt;
+      importing = false; useInCore.disabled = false;
     }
   });
   confirm.addEventListener("click", () => {

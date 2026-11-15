@@ -1,42 +1,47 @@
-//! Lleva al núcleo las últimas lecturas de un miembro de la tripulación de MySQL.
+//! Lleva al núcleo el historial de un miembro de la tripulación que ya está
+//! guardado en este dispositivo (`telemetry_readings` de SQLite).
 //!
-//! Se guardan como DEMO con `Store::import_synthetic` (igual que la API de
-//! simulación): sustituyen la DEMO anterior, nunca se suben a Tierra y no se
-//! mezclan con datos reales del dispositivo. La hora de medida es la que da la
-//! base de datos de tierra; sin ella no se importa nada (el núcleo no inventa horas).
+//! MySQL hace de API de tierra: el feed guarda cada lectura en SQLite con la hora
+//! en que el dispositivo la recibió (`observed_at`). Aquí no se consulta MySQL:
+//! se leen esas lecturas locales y se cargan como DEMO con
+//! `Store::import_synthetic` (sustituyen la DEMO anterior, nunca se suben a
+//! Tierra y no se mezclan con datos reales). La hora de cada registro es la
+//! `observed_at` guardada; el núcleo no inventa horas.
 use merken_core::{catalog::Indicator, time::Timestamp};
-use merken_store::StoreError;
+use merken_store::{ListTelemetryInput, Store, StoreError, TelemetryItem};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 #[derive(Debug, Deserialize)]
 pub struct CrewImportInput {
-    pub crew_id: u32,
+    /// Clave del miembro en la telemetría local (el ID de MySQL).
+    pub astronaut_key: String,
     pub display_name: String,
-    /// Última recepción del miembro en la base de tierra (RFC 3339).
-    pub measured_at: Option<String>,
-    #[serde(default)]
-    pub garmin_linked: bool,
-    #[serde(default)]
-    pub readings: CrewReadings,
 }
 
-#[derive(Debug, Default, Deserialize)]
-pub struct CrewReadings {
-    pub heart_rate: Option<f64>,
-    pub systolic: Option<f64>,
-    pub diastolic: Option<f64>,
-    pub body_temperature: Option<f64>,
-    pub glucose: Option<f64>,
-    pub oxygen_in_blood: Option<f64>,
-    pub sleep_hours: Option<f64>,
-    pub nutrition: Option<f64>,
-    pub space_radiation: Option<f64>,
-    pub distance_from_earth: Option<f64>,
-}
+/// Indicadores del feed que el núcleo evalúa (el ánimo llega como etiqueta de
+/// texto y no es una puntuación; HRV y body battery no están en el núcleo).
+const CORE_INDICATORS: [Indicator; 9] = [
+    Indicator::HeartRate,
+    Indicator::BloodPressure,
+    Indicator::BodyTemperature,
+    Indicator::Glucose,
+    Indicator::OxygenInBlood,
+    Indicator::Sleep,
+    Indicator::Nutrition,
+    Indicator::SpaceRadiation,
+    Indicator::DistanceFromEarth,
+];
+/// El feed guarda una lectura por minuto aunque no cambie: se queda la última
+/// de cada tramo de 10 minutos para que el historial no sea solo repeticiones.
+const BUCKET_MS: i64 = 10 * 60_000;
+/// Lecturas por indicador que se pasan al núcleo (las más recientes).
+const PER_INDICATOR: usize = 48;
+/// Lecturas por indicador que se piden a SQLite (máximo de `list_telemetry`).
+const LIST_LIMIT: u32 = 1000;
 
-pub fn astronaut_id(crew_id: u32) -> String {
-    format!("mysql-crew-{crew_id}")
+pub fn astronaut_id(astronaut_key: &str) -> String {
+    format!("local-crew-{}", astronaut_key.trim())
 }
 
 fn invalid(field: &str, message: &str) -> StoreError {
@@ -47,156 +52,139 @@ fn invalid(field: &str, message: &str) -> StoreError {
     }
 }
 
-/// Registros con la forma de sincronización que acepta `import_synthetic`.
-/// Las lecturas fuera de rango no se filtran aquí: el núcleo las rechaza y las cuenta.
-pub fn crew_records(input: &CrewImportInput, now: Timestamp) -> Result<Vec<Value>, StoreError> {
-    let measured_at = input
-        .measured_at
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| {
-            invalid(
-                "measured_at",
-                "This crew member has no measurement time in the ground database; nothing was imported",
-            )
-        })?;
-    let measured_at = Timestamp::parse_rfc3339(measured_at).map_err(|_| {
-        invalid(
-            "measured_at",
-            "The ground database sent an invalid measurement time",
-        )
-    })?;
-    let r = &input.readings;
-    let mut values: Vec<(Indicator, Value)> = Vec::new();
-    let mut push = |indicator: Indicator, value: Option<Value>| {
-        if let Some(value) = value {
-            values.push((indicator, value));
+fn indicator_name(indicator: Indicator) -> Option<String> {
+    serde_json::to_value(indicator)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+}
+
+/// De lecturas en cualquier orden, la última de cada tramo, de la más antigua
+/// a la más reciente, como mucho `PER_INDICATOR`.
+fn thin(mut items: Vec<TelemetryItem>) -> Vec<TelemetryItem> {
+    items.sort_by_key(|item| (item.observed_at.millis(), item.reading_id));
+    let mut kept: Vec<TelemetryItem> = Vec::new();
+    for item in items {
+        let bucket = item.observed_at.millis().div_euclid(BUCKET_MS);
+        match kept.last_mut() {
+            Some(last) if last.observed_at.millis().div_euclid(BUCKET_MS) == bucket => *last = item,
+            _ => kept.push(item),
         }
-    };
-    push(
-        Indicator::HeartRate,
-        r.heart_rate.map(|v| json!({ "bpm": v })),
-    );
-    push(
-        Indicator::BloodPressure,
-        r.systolic
-            .zip(r.diastolic)
-            .map(|(s, d)| json!({ "systolic": s, "diastolic": d })),
-    );
-    push(
-        Indicator::BodyTemperature,
-        r.body_temperature.map(|v| json!({ "celsius": v })),
-    );
-    push(Indicator::Glucose, r.glucose.map(|v| json!({ "mg_dl": v })));
-    push(
-        Indicator::OxygenInBlood,
-        r.oxygen_in_blood.map(|v| json!({ "percentage": v })),
-    );
-    push(
-        Indicator::Sleep,
-        r.sleep_hours.map(|v| json!({ "hours": v })),
-    );
-    push(
-        Indicator::Nutrition,
-        r.nutrition.map(|v| json!({ "kcal": v })),
-    );
-    push(
-        Indicator::SpaceRadiation,
-        r.space_radiation.map(|v| json!({ "usv_h": v })),
-    );
-    push(
-        Indicator::DistanceFromEarth,
-        r.distance_from_earth.map(|v| json!({ "km": v })),
-    );
-    if values.is_empty() {
-        return Err(invalid(
-            "readings",
-            "This crew member has no numeric readings to import",
-        ));
     }
-    let astronaut = astronaut_id(input.crew_id);
-    let source = if input.garmin_linked {
-        "garmin"
-    } else {
-        "earth"
-    };
-    values
-        .into_iter()
-        .map(|(indicator, value)| {
-            let name = serde_json::to_value(indicator)
-                .ok()
-                .and_then(|v| v.as_str().map(str::to_owned))
-                .ok_or_else(|| invalid("indicator", "Unknown indicator"))?;
-            Ok(json!({
+    let skip = kept.len().saturating_sub(PER_INDICATOR);
+    kept.into_iter().skip(skip).collect()
+}
+
+/// Registros con la forma de sincronización que acepta `import_synthetic`,
+/// sacados del historial local. Los valores que el núcleo no acepte se
+/// rechazan y se cuentan en `import_synthetic`.
+pub fn local_records(
+    store: &Store,
+    input: &CrewImportInput,
+    now: Timestamp,
+) -> Result<Vec<Value>, StoreError> {
+    let key = input.astronaut_key.trim();
+    let astronaut = astronaut_id(key);
+    let mut records = Vec::new();
+    for indicator in CORE_INDICATORS {
+        let name =
+            indicator_name(indicator).ok_or_else(|| invalid("indicator", "Unknown indicator"))?;
+        let items = store.list_telemetry(ListTelemetryInput {
+            astronaut_key: key.to_owned(),
+            indicator: Some(name.clone()),
+            from: None,
+            to: None,
+            limit: Some(LIST_LIMIT),
+        })?;
+        for item in thin(items) {
+            let measured_at = item.observed_at;
+            records.push(json!({
                 "record_id": format!("{astronaut}-{name}-{}", measured_at.millis()),
                 "astronaut_id": astronaut,
                 "indicator": name,
-                "value": value,
+                "value": item.value,
                 "unit": indicator.unit(),
                 "measured_at": measured_at.to_rfc3339(),
                 "logged_at": now.to_rfc3339(),
-                "source": source,
+                "source": "earth",
                 "interpreted_by": null,
                 "replaces": null,
                 "external_id": null,
                 "note": null,
                 "schema_version": 1,
                 "app_version": env!("CARGO_PKG_VERSION"),
-            }))
-        })
-        .collect()
+            }));
+        }
+    }
+    if records.is_empty() {
+        return Err(invalid(
+            "astronaut_key",
+            "No readings for this crew member are saved on this device yet",
+        ));
+    }
+    Ok(records)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use merken_store::{RecordTelemetryInput, TelemetryReadingInput};
 
-    fn input(measured_at: Option<&str>) -> CrewImportInput {
-        CrewImportInput {
-            crew_id: 1,
-            display_name: "Test".into(),
-            measured_at: measured_at.map(str::to_owned),
-            garmin_linked: true,
-            readings: CrewReadings {
-                heart_rate: Some(93.0),
-                systolic: Some(120.0),
-                diastolic: Some(80.0),
-                sleep_hours: Some(3.4),
-                ..Default::default()
-            },
+    fn reading(indicator: &str, value: Value, unit: &str) -> TelemetryReadingInput {
+        TelemetryReadingInput {
+            astronaut_key: "2".into(),
+            astronaut_name: "Alex Morgan".into(),
+            indicator: indicator.into(),
+            value,
+            unit: unit.into(),
         }
     }
 
     #[test]
-    fn builds_one_record_per_reading_with_the_ground_time() {
-        let now =
-            Timestamp::parse_rfc3339("2026-11-15T14:00:00Z").unwrap_or(Timestamp::from_millis(0));
-        let records = crew_records(&input(Some("2026-11-15T13:53:30.993Z")), now);
-        let records = records.unwrap_or_default();
-        assert_eq!(records.len(), 3);
-        for r in &records {
-            assert_eq!(r["astronaut_id"], "mysql-crew-1");
-            assert_eq!(r["measured_at"], "2026-11-15T13:53:30.993Z");
-            assert_eq!(r["source"], "garmin");
-            let dto = serde_json::from_value::<merken_core::record::RecordDto>(r.clone());
-            assert!(dto.is_ok(), "{r}");
+    fn imports_the_local_history_with_its_saved_times() -> Result<(), StoreError> {
+        let mut store = Store::open_in_memory()?;
+        let start =
+            Timestamp::parse_rfc3339("2026-11-15T12:00:00Z").map_err(|_| invalid("t", "t"))?;
+        // Una lectura cada 5 minutos durante una hora: 13 lecturas, 7 tramos de 10 min.
+        for step in 0..13_i64 {
+            let at = start.saturating_add_ms(step * 5 * 60_000);
+            store.record_telemetry(
+                RecordTelemetryInput {
+                    readings: vec![
+                        reading("heart_rate", json!({ "bpm": 70 + step }), "bpm"),
+                        reading("mood", json!({ "label": "CALM" }), ""),
+                    ],
+                },
+                at,
+                "test",
+            )?;
         }
+        let input = CrewImportInput {
+            astronaut_key: "2".into(),
+            display_name: "Alex Morgan".into(),
+        };
+        let now = start.saturating_add_ms(3_600_000);
+        let records = local_records(&store, &input, now)?;
         assert_eq!(
-            records[1]["value"],
-            json!({ "systolic": 120.0, "diastolic": 80.0 })
+            records.len(),
+            7,
+            "one heart-rate reading per 10-minute slot, no mood"
         );
-        assert_eq!(records[2]["unit"], "h");
+        assert!(records.iter().all(|r| r["indicator"] == "heart_rate"));
+        assert_eq!(records[0]["measured_at"], "2026-11-15T12:05:00.000Z");
+        assert_eq!(records[6]["value"], json!({ "bpm": 82 }));
+        let imported = store.import_synthetic(&astronaut_id("2"), "Alex Morgan", &records, now)?;
+        assert_eq!((imported.imported, imported.rejected), (7, 0));
+        Ok(())
     }
 
     #[test]
-    fn refuses_members_without_a_measurement_time_or_readings() {
-        let now = Timestamp::from_millis(0);
-        assert!(crew_records(&input(None), now).is_err());
-        assert!(crew_records(&input(Some("  ")), now).is_err());
-        assert!(crew_records(&input(Some("yesterday")), now).is_err());
-        let mut empty = input(Some("2026-11-15T13:53:30Z"));
-        empty.readings = CrewReadings::default();
-        assert!(crew_records(&empty, now).is_err());
+    fn refuses_a_member_with_no_local_readings() -> Result<(), StoreError> {
+        let store = Store::open_in_memory()?;
+        let input = CrewImportInput {
+            astronaut_key: "9".into(),
+            display_name: "Nobody".into(),
+        };
+        assert!(local_records(&store, &input, Timestamp::from_millis(0)).is_err());
+        Ok(())
     }
 }

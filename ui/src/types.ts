@@ -23,7 +23,4 @@ export interface AstronautProfile {
   name: string;
   telemetry: AstronautTelemetry;
   invalid?: { indicator: string; reason: string }[];
-  /** Last time the ground database received this member's data (ISO), if any. */
-  measuredAt?: string | null;
-  garminLinked?: boolean;
 }

@@ -300,17 +300,11 @@ export interface SimImportInput {
   token?: string;
 }
 
+/** Historial de un miembro ya guardado en la telemetría local (SQLite). */
 export interface CrewImportInput {
-  crew_id: number;
+  /** Clave de la telemetría local (el ID del miembro en la base de tierra). */
+  astronaut_key: string;
   display_name: string;
-  measured_at: string | null;
-  garmin_linked: boolean;
-  readings: {
-    heart_rate: number | null; systolic: number | null; diastolic: number | null;
-    body_temperature: number | null; glucose: number | null; oxygen_in_blood: number | null;
-    sleep_hours: number | null; nutrition: number | null; space_radiation: number | null;
-    distance_from_earth: number | null;
-  };
 }
 
 export interface SimImportResult {
