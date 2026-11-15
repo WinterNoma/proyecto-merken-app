@@ -21,10 +21,12 @@ import { icon, type IconName } from "./ui/icons";
 import { createPreviewFeed } from "./ui/visual-preview";
 import type { FeedState } from "./ui/telemetry";
 import { createAmbientParticles } from "./ui/ambient-particles";
+import { setupRecommendations } from "./ui/recommendations";
 
 // A dev-only visual fixture. It never polls MySQL or invokes the local core.
 const preview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "1";
 const available = isTauri() && !preview;
+setupRecommendations(available);
 if (preview) {
   element("#visual-preview").hidden = false;
   element("#crew-dialog-description").textContent = "Browse synthetic sample crew. No device profile is changed.";
@@ -72,7 +74,7 @@ const renderFeed = (state: FeedState): void => {
   vitals.feed(state);
   dashboard.feed(state);
 };
-const feed = preview ? createPreviewFeed(renderFeed) : createTelemetryFeed(renderFeed);
+const feed = preview ? createPreviewFeed(renderFeed) : createTelemetryFeed(renderFeed, available && !import.meta.env.DEV);
 element("#feed-retry").addEventListener("click", () => { void feed.refresh(); });
 const panel = createCorePanel(available, dashboard.core);
 setupHelp(available, panel);

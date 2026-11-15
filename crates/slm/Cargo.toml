@@ -10,13 +10,15 @@ default = []
 # Motor real con llama.cpp (Fase 1). Desactivado por defecto: sin él el crate
 # solo trae el contrato, el control y el MockEngine.
 llama = ["dep:llama-cpp-2"]
+# Nombre usado por las recomendaciones offline (V7); es el mismo motor.
+native = ["llama"]
 
 [dependencies]
 merken-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.10"
-llama-cpp-2 = { version = "=0.1.161", optional = true }
+llama-cpp-2 = { version = "=0.1.161", default-features = false, optional = true }
 
 [lints]
 workspace = true
@@ -28,3 +30,7 @@ required-features = ["llama"]
 [[example]]
 name = "granite_eval"
 required-features = ["llama"]
+
+[[example]]
+name = "offline_probe"
+required-features = ["native"]
