@@ -299,6 +299,98 @@ export interface SimImportResult {
   last_measured_at: Iso | null;
 }
 
+// ---------- Telemetría local con trazabilidad ----------
+
+export type TelemetryIndicator =
+  | "heart_rate"
+  | "oxygen_in_blood"
+  | "blood_pressure"
+  | "glucose"
+  | "body_temperature"
+  | "sleep"
+  | "nutrition"
+  | "space_radiation"
+  | "distance_from_earth"
+  | "mood"
+  | "hrv"
+  | "body_battery";
+
+export type TelemetryValue =
+  | { bpm: number }
+  | { percentage: number }
+  | { systolic: number; diastolic: number }
+  | { mg_dl: number }
+  | { celsius: number }
+  | { hours: number }
+  | { kcal: number }
+  | { usv_h: number }
+  | { km: number }
+  | { label: string }
+  | { ms: number }
+  | { value: number };
+
+export interface TelemetryReadingInput {
+  astronaut_key: string;
+  astronaut_name: string;
+  indicator: TelemetryIndicator;
+  value: TelemetryValue;
+  unit: string;
+}
+
+export interface RecordTelemetryInput {
+  /** Entre 1 y 64 lecturas por lote. */
+  readings: TelemetryReadingInput[];
+}
+
+export interface RecordTelemetryResult {
+  stored: number;
+  skipped: number;
+  batch_id: string;
+}
+
+export interface ListTelemetryInput {
+  astronaut_key: string;
+  indicator?: TelemetryIndicator;
+  from?: Iso;
+  to?: Iso;
+  /** Por defecto 200, máximo 1000. */
+  limit?: number;
+}
+
+export interface TelemetryItem {
+  reading_id: number;
+  astronaut_key: string;
+  astronaut_name: string;
+  indicator: string;
+  value: unknown;
+  unit: string;
+  observed_at: Iso;
+  batch_id: string;
+  source: string;
+  app_version: string;
+  prev_hash: string;
+  row_hash: string;
+}
+
+export interface VerifyTelemetryInput {
+  astronaut_key?: string;
+}
+
+export type TelemetryProblem =
+  | "hash_mismatch"
+  | "broken_link"
+  | "missing_tail"
+  | "missing_series"
+  | "count_mismatch";
+
+export interface VerifyTelemetryResult {
+  ok: boolean;
+  checked: number;
+  series_checked: number;
+  first_bad_reading_id: number | null;
+  problem: TelemetryProblem | null;
+}
+
 export const core = {
   getProfile: () => invoke<ProfileResponse>("get_profile"),
   logRecord: (input: LogRecordInput) => invoke<LogResult>("log_record", { input }),
@@ -319,4 +411,13 @@ export const core = {
   /** Descarga los registros de un astronauta simulado y los guarda como DEMO
    *  (sustituye la DEMO anterior, nunca se suben). Después llama a getStatus(). */
   simImport: (input: SimImportInput) => invoke<SimImportResult>("sim_import", { input }),
+  /** Registra un lote (1..=64) de lecturas de telemetría en la cadena local. */
+  recordTelemetry: (input: RecordTelemetryInput) =>
+    invoke<RecordTelemetryResult>("record_telemetry", { input }),
+  /** Lista lecturas de telemetría local de la más reciente a la más antigua. */
+  listTelemetry: (input: ListTelemetryInput) =>
+    invoke<TelemetryItem[]>("list_telemetry", { input }),
+  /** Verifica la integridad de la cadena de hashes de telemetría local. */
+  verifyTelemetry: (input: VerifyTelemetryInput = {}) =>
+    invoke<VerifyTelemetryResult>("verify_telemetry", { input }),
 };

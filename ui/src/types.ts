@@ -15,6 +15,8 @@ export interface AstronautTelemetry {
   mood: string | null;
   nutrition: number | null;
   oxygen_in_blood: number | null;
+  hrv?: number | null;
+  body_battery?: number | null;
 }
 export interface AstronautProfile {
   id: string;

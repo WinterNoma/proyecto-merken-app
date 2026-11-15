@@ -7,7 +7,8 @@
 
 use merken_core::time::Timestamp;
 use merken_store::{
-    Scenario, Store, StoreError,
+    ListTelemetryInput, RecordTelemetryInput, RecordTelemetryResult, Scenario, Store, StoreError,
+    TelemetryItem, VerifyTelemetryResult,
     api::{
         CorrectRecordInput, EventItem, ImportResult, ListRecordsInput, LogRecordInput, LogResult,
         ProfileResponse, RaiseEventInput, RaiseEventResult, RecordItem, StatusResponse,
@@ -84,6 +85,11 @@ pub struct SimImportInput {
 #[derive(Serialize)]
 pub struct SimAstronautsResponse {
     pub astronauts: Vec<SimAstronaut>,
+}
+
+#[derive(Deserialize, Default)]
+pub struct VerifyTelemetryInput {
+    pub astronaut_key: Option<String>,
 }
 
 // ---------- Lógica sin Tauri (se puede probar) ----------
@@ -227,6 +233,31 @@ fn clear_demo(state: tauri::State<'_, AppState>) -> Result<(), StoreError> {
     with_store(&state, |s| s.clear_demo())
 }
 
+#[tauri::command]
+fn record_telemetry(
+    state: tauri::State<'_, AppState>,
+    input: RecordTelemetryInput,
+) -> Result<RecordTelemetryResult, StoreError> {
+    with_store(&state, |s| s.record_telemetry(input, now(), APP_VERSION))
+}
+
+#[tauri::command]
+fn list_telemetry(
+    state: tauri::State<'_, AppState>,
+    input: ListTelemetryInput,
+) -> Result<Vec<TelemetryItem>, StoreError> {
+    with_store(&state, |s| s.list_telemetry(input))
+}
+
+#[tauri::command]
+fn verify_telemetry(
+    state: tauri::State<'_, AppState>,
+    input: Option<VerifyTelemetryInput>,
+) -> Result<VerifyTelemetryResult, StoreError> {
+    let astronaut_key = input.and_then(|i| i.astronaut_key);
+    with_store(&state, |s| s.verify_telemetry(astronaut_key))
+}
+
 /// Lista los astronautas de la API de simulación (datos inventados).
 #[tauri::command]
 async fn sim_list_astronauts(
@@ -307,7 +338,10 @@ pub fn run() {
             load_demo,
             clear_demo,
             sim_list_astronauts,
-            sim_import
+            sim_import,
+            record_telemetry,
+            list_telemetry,
+            verify_telemetry
         ])
         .run(tauri::generate_context!());
     if let Err(e) = result {
@@ -359,6 +393,48 @@ mod tests {
         assert_eq!(st.alerts.len(), 1);
         let events = handle_list_events(&store, ListEventsInput::default())?;
         assert_eq!(events.events.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn telemetry_round_trip_and_verify_input_parsing() -> Result<(), StoreError> {
+        let mut store = Store::open_in_memory()?;
+        let now = Timestamp::from_millis(1_800_000_000_000);
+        let input: RecordTelemetryInput = serde_json::from_value(serde_json::json!({
+            "readings": [
+                {
+                    "astronaut_key": "astro-1",
+                    "astronaut_name": "Alex Morgan",
+                    "indicator": "heart_rate",
+                    "value": { "bpm": 72 },
+                    "unit": "bpm"
+                }
+            ]
+        }))
+        .map_err(|_| StoreError {
+            code: "invalid_schema".into(),
+            field: None,
+            message: "bad test json".into(),
+        })?;
+        let recorded = store.record_telemetry(input, now, APP_VERSION)?;
+        assert_eq!(recorded.stored, 1);
+
+        let items = store.list_telemetry(ListTelemetryInput {
+            astronaut_key: "astro-1".into(),
+            ..Default::default()
+        })?;
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].app_version, APP_VERSION);
+
+        let verify_empty: VerifyTelemetryInput =
+            serde_json::from_str("{}").map_err(|_| StoreError {
+                code: "invalid_schema".into(),
+                field: None,
+                message: "bad verify json".into(),
+            })?;
+        let verified = store.verify_telemetry(verify_empty.astronaut_key)?;
+        assert!(verified.ok);
+        assert_eq!(verified.checked, 1);
         Ok(())
     }
 }

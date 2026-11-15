@@ -1,9 +1,14 @@
 //! Persistencia local y cola de sincronización.
 pub mod api;
 pub mod records;
+pub mod telemetry;
 
 pub use merken_seed::Scenario;
 pub use records::PulledChange;
+pub use telemetry::{
+    ListTelemetryInput, RecordTelemetryInput, RecordTelemetryResult, TelemetryItem,
+    TelemetryReadingInput, VerifyTelemetryResult,
+};
 
 use api::ProfileResponse;
 use merken_core::{ValidationError, time::Timestamp};
@@ -76,7 +81,7 @@ impl Store {
     }
     fn initialize(mut conn: Connection) -> Result<Self, StoreError> {
         let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if version > 3 {
+        if version > 4 {
             return Err(StoreError {
                 code: "invalid_schema".into(),
                 field: None,
@@ -117,6 +122,44 @@ PRAGMA user_version=1;")?;
                  WHERE state = 'pending' AND entity IN ('record', 'evaluation')
                    AND json_extract(payload_json, '$.indicator') = 'headache';
                  PRAGMA user_version=3;",
+            )?;
+            tx.commit()?;
+        }
+        if version <= 3 {
+            // v4: telemetría local append-only (no entra en outbox ni se limpia con DEMO).
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE IF NOT EXISTS telemetry_readings (
+                     reading_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     astronaut_key TEXT NOT NULL,
+                     astronaut_name TEXT NOT NULL,
+                     indicator TEXT NOT NULL,
+                     value_json TEXT NOT NULL,
+                     unit TEXT NOT NULL,
+                     observed_at INTEGER NOT NULL,
+                     batch_id TEXT NOT NULL,
+                     source TEXT NOT NULL,
+                     app_version TEXT NOT NULL,
+                     prev_hash TEXT NOT NULL,
+                     row_hash TEXT NOT NULL
+                 );
+                 CREATE INDEX IF NOT EXISTS telemetry_readings_series
+                     ON telemetry_readings(astronaut_key, indicator, observed_at);
+                 CREATE INDEX IF NOT EXISTS telemetry_readings_astronaut_time
+                     ON telemetry_readings(astronaut_key, observed_at, reading_id);
+                 CREATE INDEX IF NOT EXISTS telemetry_readings_chain
+                     ON telemetry_readings(astronaut_key, indicator, reading_id);
+                 CREATE TRIGGER IF NOT EXISTS telemetry_readings_no_update
+                     BEFORE UPDATE ON telemetry_readings
+                     BEGIN
+                         SELECT RAISE(ABORT, 'telemetry_readings is append-only');
+                     END;
+                 CREATE TRIGGER IF NOT EXISTS telemetry_readings_no_delete
+                     BEFORE DELETE ON telemetry_readings
+                     BEGIN
+                         SELECT RAISE(ABORT, 'telemetry_readings is append-only');
+                     END;
+                 PRAGMA user_version=4;",
             )?;
             tx.commit()?;
         }
