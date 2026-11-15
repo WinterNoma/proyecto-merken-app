@@ -49,6 +49,7 @@ pub mod effective;
 pub mod evaluate;
 pub mod measurement;
 pub mod plausibility;
+pub mod proposal;
 pub mod record;
 pub mod rules;
 pub mod time;
