@@ -4,12 +4,13 @@
 //! poder cambiar de motor (llama.cpp, candle, ONNX Runtime):
 //! - **interpretar** texto → propuesta de registro con salida restringida por
 //!   gramática (capa 2 de RF-14); el usuario la confirma;
-//! - **explicar** una evaluación ya decidida por `merken-core` (RF-15);
-//! - **controlar** cancelación, progreso y plazo máximo (RNF-08), integridad de
-//!   manifiestos (RNF-13) y ranura única en memoria (RNF-09).
+//! - **explicar** una evaluación ya decidida por `merken-core` (RF-15),
+//!   seleccionando y ordenando únicamente frases curadas autorizadas por ID;
+//! - **controlar** cancelación, progreso y plazo máximo (RNF-08), integridad y
+//!   exclusión en almacén de modelos (RNF-13) y ranura única en memoria (RNF-09).
 //!
-//! El SLM ayuda, no decide: nunca asigna estados ni recomienda tratamientos.
-//! Si su salida no pasa la validación, se descarta.
+//! El SLM ayuda, no decide: nunca asigna estados, ni recomienda tratamientos,
+//! ni redacta texto libre en la nota clínica.
 
 pub mod control;
 pub mod engine;
@@ -18,19 +19,26 @@ pub mod explain;
 pub mod interpreter;
 pub mod manifest;
 pub mod slot;
+pub mod store;
 
 pub use control::{CancelToken, Control, Deadline, Progress};
 pub use engine::{
     DEFAULT_MAX_TOKENS, DEFAULT_SEED, DEFAULT_TEMPERATURE, Engine, GenerateRequest, MockEngine,
 };
-pub use error::{OutputIssue, SlmError};
+pub use error::{EngineErrorCode, OutputIssue, SlmError};
 pub use explain::{
-    AI_SUGGESTION_LABEL, AiNote, Document, Explainer, Explanation, FactId, FactLine,
-    MAX_NOTE_CHARS, MAX_NOTE_SENTENCES, MAX_WORDS_PER_SENTENCE, PlainEnglishPromptFormat,
-    PromptFormat, SlmExplainer, render_facts, validate_note,
+    AI_SUGGESTION_LABEL, AiNote, Explainer, Explanation, FactId, FactLine, Ficha, FichaId,
+    MAX_ID_LEN, MAX_SELECTED_STATEMENTS, MAX_SELECTION_OUTPUT_BYTES, MAX_STATEMENT_CHARS,
+    OfferedStatement, PlainEnglishPromptFormat, PromptFormat, RenderedStatement, SlmExplainer,
+    Statement, StatementId, build_selection_grammar, offered_statements, render_facts,
+    validate_selection,
 };
-pub use interpreter::{Interpreter, PROPOSAL_GBNF, SlmInterpreter};
+pub use interpreter::{
+    Interpreter, MAX_FIELDS_PER_RECORD, MAX_INTERPRETER_OUTPUT_BYTES, MAX_PROPOSAL_RECORDS,
+    MAX_QUOTE_BYTES, MAX_QUOTE_ITEMS, PROPOSAL_GBNF, SlmInterpreter,
+};
 pub use manifest::{
     ModelFile, ModelManifest, ModelPackage, ModelRole, VerifiedFile, VerifiedModel,
 };
 pub use slot::ModelSlot;
+pub use store::ModelStore;

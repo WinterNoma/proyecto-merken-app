@@ -8,6 +8,7 @@ use crate::{
 use merken_core::{
     ErrorCode,
     catalog::Indicator,
+    interpret::MAX_INPUT_CHARS,
     proposal::{
         InterpreterKind, PROPOSAL_SCHEMA_VERSION, Proposal, ProposedField, ProposedRecord,
         TimeHint, allowed_fields,
@@ -15,6 +16,17 @@ use merken_core::{
 };
 use serde::Deserialize;
 use serde_json::Value;
+
+/// Límite máximo en bytes de la salida cruda del modelo antes de deserializar JSON.
+pub const MAX_INTERPRETER_OUTPUT_BYTES: usize = 16 * 1024;
+/// Número máximo de registros permitidos en una salida cruda del intérprete SLM.
+pub const MAX_PROPOSAL_RECORDS: usize = 32;
+/// Número máximo de campos permitidos por registro en la salida cruda del intérprete SLM.
+pub const MAX_FIELDS_PER_RECORD: usize = 8;
+/// Número máximo de citas admitidas en `negated` o `uninterpreted`.
+pub const MAX_QUOTE_ITEMS: usize = 64;
+/// Tamaño máximo en bytes por cita individual devuelta por el intérprete SLM.
+pub const MAX_QUOTE_BYTES: usize = MAX_INPUT_CHARS * 4;
 
 /// Gramática GBNF que restringe la salida del SLM al contrato cerrado [`Proposal`].
 ///
@@ -108,6 +120,10 @@ pub trait Interpreter {
 }
 
 /// Intérprete de respaldo (capa 2 de RF-14) respaldado por un [`Engine`] y gramática GBNF.
+///
+/// Comparte el límite [`MAX_INPUT_CHARS`] de la capa determinista: rechaza entradas que
+/// superen ese límite antes de invocar al motor, acota la salida del modelo antes de
+/// analizarla y realiza comprobaciones cooperativas de [`Control`] durante el saneado.
 pub struct SlmInterpreter<E: Engine> {
     engine: E,
     model_version: String,
@@ -201,24 +217,100 @@ fn push_unique_quoted(list: &mut Vec<String>, input: &str, quote: &str) {
     }
 }
 
-fn dedup_quoted(list: &mut Vec<String>, input: &str) {
+fn dedup_quoted(
+    list: &mut Vec<String>,
+    input: &str,
+    ctl: &mut Control<'_>,
+) -> Result<(), SlmError> {
     let mut cleaned = Vec::with_capacity(list.len());
     for item in list.drain(..) {
+        ctl.check()?;
         push_unique_quoted(&mut cleaned, input, &item);
     }
     *list = cleaned;
+    Ok(())
 }
 
-fn sanitize_proposal(proposal: &mut Proposal, input: &str) -> Result<(), SlmError> {
-    dedup_quoted(&mut proposal.negated, input);
-    dedup_quoted(&mut proposal.uninterpreted, input);
+fn check_raw_proposal_limits(raw: &RawProposal, ctl: &mut Control<'_>) -> Result<(), SlmError> {
+    ctl.check()?;
+    if raw.records.len() > MAX_PROPOSAL_RECORDS {
+        return Err(SlmError::InvalidOutput(vec![OutputIssue::new(
+            "too_many_records",
+            "Interpreter output exceeds maximum allowed record count",
+        )]));
+    }
+    if raw.negated.len() > MAX_QUOTE_ITEMS || raw.uninterpreted.len() > MAX_QUOTE_ITEMS {
+        return Err(SlmError::InvalidOutput(vec![OutputIssue::new(
+            "too_many_quotes",
+            "Interpreter output exceeds maximum allowed quote list size",
+        )]));
+    }
+
+    for rec in &raw.records {
+        ctl.check()?;
+        if rec.fields.len() > MAX_FIELDS_PER_RECORD {
+            return Err(SlmError::InvalidOutput(vec![OutputIssue::new(
+                "too_many_fields",
+                "Interpreter record exceeds maximum allowed field count",
+            )]));
+        }
+        if rec.quote.len() > MAX_QUOTE_BYTES {
+            return Err(SlmError::InvalidOutput(vec![OutputIssue::new(
+                "quote_too_long",
+                "Interpreter record quote exceeds maximum allowed byte length",
+            )]));
+        }
+        if let TimeHint::Ambiguous { quote } = &rec.time
+            && quote.len() > MAX_QUOTE_BYTES
+        {
+            return Err(SlmError::InvalidOutput(vec![OutputIssue::new(
+                "quote_too_long",
+                "Interpreter time hint quote exceeds maximum allowed byte length",
+            )]));
+        }
+        for field in &rec.fields {
+            if field
+                .quote
+                .as_ref()
+                .is_some_and(|q| q.len() > MAX_QUOTE_BYTES)
+            {
+                return Err(SlmError::InvalidOutput(vec![OutputIssue::new(
+                    "quote_too_long",
+                    "Interpreter field quote exceeds maximum allowed byte length",
+                )]));
+            }
+        }
+    }
+
+    for quote in raw.negated.iter().chain(raw.uninterpreted.iter()) {
+        ctl.check()?;
+        if quote.len() > MAX_QUOTE_BYTES {
+            return Err(SlmError::InvalidOutput(vec![OutputIssue::new(
+                "quote_too_long",
+                "Interpreter quote entry exceeds maximum allowed byte length",
+            )]));
+        }
+    }
+
+    Ok(())
+}
+
+fn sanitize_proposal(
+    proposal: &mut Proposal,
+    input: &str,
+    ctl: &mut Control<'_>,
+) -> Result<(), SlmError> {
+    ctl.check()?;
+    dedup_quoted(&mut proposal.negated, input, ctl)?;
+    dedup_quoted(&mut proposal.uninterpreted, input, ctl)?;
 
     let max_iters = proposal.records.len().saturating_mul(16).saturating_add(16);
     for _ in 0..max_iters {
+        ctl.check()?;
         let issues = proposal.check(input);
         let Some(first) = issues.into_iter().next() else {
-            dedup_quoted(&mut proposal.negated, input);
-            dedup_quoted(&mut proposal.uninterpreted, input);
+            dedup_quoted(&mut proposal.negated, input, ctl)?;
+            dedup_quoted(&mut proposal.uninterpreted, input, ctl)?;
             return Ok(());
         };
 
@@ -230,8 +322,8 @@ fn sanitize_proposal(proposal: &mut Proposal, input: &str) -> Result<(), SlmErro
                         "Proposal schema_version does not match the core contract",
                     )]));
                 }
-                "negated" => dedup_quoted(&mut proposal.negated, input),
-                "uninterpreted" => dedup_quoted(&mut proposal.uninterpreted, input),
+                "negated" => dedup_quoted(&mut proposal.negated, input, ctl)?,
+                "uninterpreted" => dedup_quoted(&mut proposal.uninterpreted, input, ctl)?,
                 _ => {
                     return Err(SlmError::InvalidOutput(vec![OutputIssue::new(
                         "invalid_proposal",
@@ -340,10 +432,22 @@ fn sanitize_proposal(proposal: &mut Proposal, input: &str) -> Result<(), SlmErro
 impl<E: Engine> Interpreter for SlmInterpreter<E> {
     fn interpret(&mut self, text: &str, ctl: &mut Control<'_>) -> Result<Proposal, SlmError> {
         ctl.check()?;
+        if text.chars().count() > MAX_INPUT_CHARS {
+            return Err(SlmError::Unsupported(
+                "Input exceeds maximum allowed character limit".to_owned(),
+            ));
+        }
         let req = self.build_request(text);
         let raw_output = self.engine.generate(&req, ctl)?;
         ctl.check()?;
         ctl.report_and_check(Progress::Validating)?;
+
+        if raw_output.len() > MAX_INTERPRETER_OUTPUT_BYTES {
+            return Err(SlmError::InvalidOutput(vec![OutputIssue::new(
+                "output_too_large",
+                "Interpreter output exceeds maximum allowed byte size",
+            )]));
+        }
 
         let raw: RawProposal = serde_json::from_str(raw_output.trim()).map_err(|_| {
             SlmError::InvalidOutput(vec![OutputIssue::new(
@@ -359,10 +463,13 @@ impl<E: Engine> Interpreter for SlmInterpreter<E> {
             )]));
         }
 
+        check_raw_proposal_limits(&raw, ctl)?;
+
         let mut records = Vec::with_capacity(raw.records.len());
         let mut uninterpreted = raw.uninterpreted;
 
         for rec in raw.records {
+            ctl.check()?;
             match Indicator::parse(&rec.indicator) {
                 Ok(indicator) => records.push(ProposedRecord {
                     indicator,
@@ -395,7 +502,7 @@ impl<E: Engine> Interpreter for SlmInterpreter<E> {
             uninterpreted,
         };
 
-        sanitize_proposal(&mut proposal, text)?;
+        sanitize_proposal(&mut proposal, text, ctl)?;
         ctl.check()?;
         ctl.report_and_check(Progress::Done)?;
         Ok(proposal)
@@ -714,6 +821,142 @@ mod tests {
         let engine = MockEngine::with_responses([valid_json]);
         let mut interp = SlmInterpreter::new(engine, "granite-4.0-350m");
         assert_eq!(interp.interpret(input, &mut ctl), Err(SlmError::Timeout));
+    }
+
+    #[test]
+    fn input_exceeding_max_chars_is_rejected_without_calling_engine() {
+        let over_limit = "a".repeat(MAX_INPUT_CHARS + 1);
+        let engine = MockEngine::new();
+        let mut interp = SlmInterpreter::new(engine, "granite-4.0-350m");
+        let mut ctl =
+            Control::without_progress(CancelToken::new(), Deadline::after(Duration::from_secs(5)));
+        let res = interp.interpret(&over_limit, &mut ctl);
+        assert!(matches!(res, Err(SlmError::Unsupported(_))));
+        assert!(interp.engine().requests().is_empty());
+
+        let at_limit = format!("{}pulse 72", " ".repeat(MAX_INPUT_CHARS - 8));
+        assert_eq!(at_limit.chars().count(), MAX_INPUT_CHARS);
+        let valid_json = json!({
+            "schema_version": 1,
+            "interpreter": "slm",
+            "interpreter_version": "v1",
+            "records": [{
+                "indicator": "heart_rate",
+                "fields": [{"key": "bpm", "value": 72, "quote": "72"}],
+                "time": {"kind": "unspecified"},
+                "quote": "pulse 72"
+            }],
+            "negated": [],
+            "uninterpreted": []
+        })
+        .to_string();
+        let (ok_res, _) = run_interpret(&at_limit, &valid_json);
+        assert!(ok_res.is_ok());
+    }
+
+    #[test]
+    fn output_and_structural_limits_reject_excessive_payloads() {
+        let oversized = "x".repeat(MAX_INTERPRETER_OUTPUT_BYTES + 1);
+        let (res, _) = run_interpret("pulse 72", &oversized);
+        assert!(
+            matches!(res, Err(SlmError::InvalidOutput(ref issues)) if issues.iter().any(|i| i.code == "output_too_large"))
+        );
+
+        let too_many_records = json!({
+            "schema_version": 1,
+            "records": vec![json!({
+                "indicator": "heart_rate",
+                "fields": [],
+                "time": {"kind": "unspecified"},
+                "quote": "pulse"
+            }); MAX_PROPOSAL_RECORDS + 1],
+            "negated": [],
+            "uninterpreted": []
+        })
+        .to_string();
+        let (res_recs, _) = run_interpret("pulse 72", &too_many_records);
+        assert!(
+            matches!(res_recs, Err(SlmError::InvalidOutput(ref issues)) if issues.iter().any(|i| i.code == "too_many_records"))
+        );
+
+        let too_many_fields = json!({
+            "schema_version": 1,
+            "records": [{
+                "indicator": "heart_rate",
+                "fields": vec![json!({"key": "bpm", "value": 72, "quote": "72"}); MAX_FIELDS_PER_RECORD + 1],
+                "time": {"kind": "unspecified"},
+                "quote": "pulse 72"
+            }],
+            "negated": [],
+            "uninterpreted": []
+        })
+        .to_string();
+        let (res_fields, _) = run_interpret("pulse 72", &too_many_fields);
+        assert!(
+            matches!(res_fields, Err(SlmError::InvalidOutput(ref issues)) if issues.iter().any(|i| i.code == "too_many_fields"))
+        );
+
+        let long_quote = "a".repeat(MAX_QUOTE_BYTES + 1);
+        let long_quote_json = json!({
+            "schema_version": 1,
+            "records": [],
+            "negated": [long_quote],
+            "uninterpreted": []
+        })
+        .to_string();
+        let (res_quote, _) = run_interpret("pulse 72", &long_quote_json);
+        assert!(
+            matches!(res_quote, Err(SlmError::InvalidOutput(ref issues)) if issues.iter().any(|i| i.code == "quote_too_long"))
+        );
+    }
+
+    #[test]
+    fn deadline_expiring_inside_sanitization_loop_returns_timeout() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicU64, Ordering},
+        };
+        use std::time::Instant;
+
+        let input = "pulse 72";
+        // Propuesta con varios campos inválidos para forzar iteraciones en `sanitize_proposal`.
+        let json_out = json!({
+            "schema_version": 1,
+            "records": [{
+                "indicator": "heart_rate",
+                "fields": [
+                    {"key": "bpm", "value": 0, "quote": "72"},
+                    {"key": "extra_a", "value": 1, "quote": "72"},
+                    {"key": "extra_b", "value": 2, "quote": "72"}
+                ],
+                "time": {"kind": "ambiguous", "quote": "invented"},
+                "quote": "pulse 72"
+            }],
+            "negated": ["invented 1", "invented 2"],
+            "uninterpreted": []
+        })
+        .to_string();
+
+        let start = Instant::now();
+        let checks = Arc::new(AtomicU64::new(0));
+        let checks_clock = Arc::clone(&checks);
+        let deadline = Deadline::with_clock(
+            start,
+            Duration::from_secs(5),
+            Arc::new(move || {
+                let n = checks_clock.fetch_add(1, Ordering::SeqCst);
+                if n >= 12 {
+                    start + Duration::from_secs(10)
+                } else {
+                    start
+                }
+            }),
+        );
+        let mut ctl = Control::without_progress(CancelToken::new(), deadline);
+        let engine = MockEngine::with_responses([json_out]);
+        let mut interp = SlmInterpreter::new(engine, "granite-4.0-350m");
+        assert_eq!(interp.interpret(input, &mut ctl), Err(SlmError::Timeout));
+        assert!(checks.load(Ordering::SeqCst) >= 13);
     }
 
     #[test]

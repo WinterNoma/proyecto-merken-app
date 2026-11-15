@@ -12,7 +12,7 @@ use std::{
     time::SystemTime,
 };
 
-const HASH_BUF_BYTES: usize = 64 * 1024;
+pub(crate) const HASH_BUF_BYTES: usize = 64 * 1024;
 
 /// Papel funcional de un modelo dentro de `merken-slm`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -126,16 +126,19 @@ enum VerifiedPackage {
 
 /// Modelo verificado en disco y listo para cargarse en [`crate::ModelSlot`].
 ///
-/// Tipo opaco: solo [`ModelManifest::verify`] puede construirlo.
+/// Tipo opaco: solo [`ModelManifest::verify`] o [`crate::ModelStore`] pueden construirlo.
 ///
 /// # Mitigación frente a TOCTOU
 ///
-/// Los modelos viven en el almacenamiento privado de la aplicación, donde únicamente la
-/// propia aplicación tiene permisos de escritura; esa restricción es la mitigación frente
-/// a sustituciones concurrentes entre verificación y carga. Además,
-/// [`crate::ModelSlot::load`] vuelve a comprobar ausencia de enlaces simbólicos,
-/// confinamiento canónico, tamaño y fecha de modificación inmediatamente antes de entregar
-/// las rutas a la fábrica del motor.
+/// Los modelos residen en el almacenamiento privado de la aplicación Android, donde
+/// únicamente la propia aplicación tiene permisos de escritura; esa restricción es la
+/// frontera frente a procesos externos. Dentro del proceso, [`crate::ModelStore`] coordina
+/// todas las operaciones de instalación, actualización, verificación y carga mediante un
+/// `RwLock` por directorio: la verificación y la carga en [`crate::ModelSlot`] mantienen el
+/// bloqueo de lectura hasta que la fábrica del motor devuelve, bloqueando cualquier
+/// instalación concurrente. Además, [`crate::ModelSlot`] vuelve a comprobar ausencia de
+/// enlaces simbólicos, confinamiento canónico, tamaño y fecha de modificación justo antes
+/// de entregar las rutas a la fábrica.
 ///
 /// ```compile_fail
 /// use merken_slm::{ModelRole, VerifiedModel};
@@ -223,8 +226,8 @@ impl VerifiedModel {
     /// siguen sin enlaces simbólicos, bajo la raíz canónica y con el mismo tamaño y fecha
     /// de modificación observados al verificar.
     ///
-    /// Mitigación principal TOCTOU: los modelos residen en almacenamiento privado de la app
-    /// donde solo la app escribe; esta recomprobación reduce la ventana antes de la carga.
+    /// Mitigación principal TOCTOU: almacenamiento privado de la app Android + bloqueo de
+    /// lectura mantenido por [`crate::ModelStore`] durante verificación y carga.
     pub(crate) fn revalidate_before_load(&self) -> Result<(), SlmError> {
         let files = self.files();
         let mut present_count = 0usize;
@@ -264,7 +267,7 @@ impl VerifiedModel {
     }
 }
 
-fn safe_relative_components(rel: &str) -> Result<Vec<OsString>, SlmError> {
+pub(crate) fn safe_relative_components(rel: &str) -> Result<Vec<OsString>, SlmError> {
     if rel.trim().is_empty() {
         return Err(SlmError::Unsupported(
             "Model file name cannot be empty".to_owned(),
@@ -348,7 +351,7 @@ fn inspect_candidate(canonical_root: &Path, rel: &str) -> Result<CandidateState,
     ))
 }
 
-fn is_valid_sha256_hex(hex: &str) -> bool {
+pub(crate) fn is_valid_sha256_hex(hex: &str) -> bool {
     hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
@@ -506,9 +509,21 @@ impl ModelManifest {
     /// Comprueba existencia, ausencia de enlaces simbólicos, confinamiento canónico, tamaño
     /// y SHA-256 en streaming de los archivos en `dir`, respetando cancelación y plazo en `ctl`.
     ///
+    /// Adquiere el bloqueo de lectura compartido del directorio para evitar instalaciones
+    /// concurrentes durante la verificación. Para mantener el mismo bloqueo de lectura de
+    /// forma continua hasta terminar la carga del motor, usa [`crate::ModelStore::verify_and_load`].
+    ///
     /// Si faltan todos los archivos devuelve [`SlmError::ModelMissing`].
     /// Si falta parte de un paquete `BaseWithAdapter` devuelve [`SlmError::IncompletePair`].
     pub fn verify(&self, dir: &Path, ctl: &mut Control<'_>) -> Result<VerifiedModel, SlmError> {
+        crate::store::with_dir_read_lock(dir, || self.verify_unlocked(dir, ctl))
+    }
+
+    pub(crate) fn verify_unlocked(
+        &self,
+        dir: &Path,
+        ctl: &mut Control<'_>,
+    ) -> Result<VerifiedModel, SlmError> {
         ctl.check()?;
         self.validate()?;
 

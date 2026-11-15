@@ -1,21 +1,21 @@
-//! Explicador de evaluaciones de `merken-core` con bloque determinista y nota SLM cerrada (RF-15).
+//! Explicador de evaluaciones de `merken-core` con hechos deterministas y selección curada (RF-15).
 
 pub mod facts;
-pub mod note;
 pub mod prompt;
+pub mod selection;
 
 #[cfg(test)]
 mod tests;
 
 pub use facts::{FactId, FactLine, render_facts};
-pub use note::{
-    AI_SUGGESTION_LABEL, AiNote, Document, ERR_EMPTY_NOTE, ERR_FORBIDDEN_NEGATION,
-    ERR_FORBIDDEN_NUMBER, ERR_INCOMPATIBLE_STATUS, ERR_MALFORMED_CITATION, ERR_NON_ENGLISH,
-    ERR_OUT_OF_VOCABULARY, ERR_SENTENCE_COUNT, ERR_SENTENCE_TOO_LONG, ERR_TOO_LONG,
-    ERR_UNKNOWN_CITATION, ERR_UNVERIFIED_APPROVAL, MAX_NOTE_CHARS, MAX_NOTE_SENTENCES,
-    MAX_WORDS_PER_SENTENCE, validate_note,
-};
 pub use prompt::{PlainEnglishPromptFormat, PromptFormat};
+pub use selection::{
+    AI_SUGGESTION_LABEL, AiNote, ERR_DUPLICATE_SELECTION, ERR_EXTRA_FIELDS, ERR_INVALID_JSON,
+    ERR_INVALID_SCHEMA, ERR_OUTPUT_TOO_LARGE, ERR_TOO_MANY_SELECTIONS, ERR_UNKNOWN_SELECTION,
+    Ficha, FichaId, MAX_ID_LEN, MAX_SELECTED_STATEMENTS, MAX_SELECTION_OUTPUT_BYTES,
+    MAX_STATEMENT_CHARS, OfferedStatement, RenderedStatement, Statement, StatementId,
+    build_selection_grammar, offered_statements, validate_selection,
+};
 
 use crate::{
     control::{Control, Progress},
@@ -25,7 +25,7 @@ use crate::{
 use merken_core::evaluate::Evaluation;
 use serde::Serialize;
 
-/// Resultado del explicador: hechos deterministas siempre visibles y nota opcional validada del SLM.
+/// Resultado del explicador: hechos deterministas siempre visibles y nota opcional curada.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Explanation {
     pub facts: Vec<FactLine>,
@@ -36,16 +36,16 @@ pub struct Explanation {
 
 /// Trait para explicadores de evaluaciones deterministas (RF-15).
 pub trait Explainer {
-    /// Explica una evaluación produciendo hechos deterministas y, opcionalmente, una nota validada.
+    /// Explica una evaluación produciendo hechos deterministas y, opcionalmente, frases curadas.
     fn explain(
         &mut self,
         eval: &Evaluation,
-        docs: &[Document],
+        fichas: &[Ficha],
         ctl: &mut Control<'_>,
     ) -> Result<Explanation, SlmError>;
 }
 
-/// Explicador respaldado por un [`Engine`] con validación de vocabulario cerrado para la nota.
+/// Explicador respaldado por un [`Engine`] que selecciona y ordena frases autorizadas mediante GBNF.
 pub struct SlmExplainer<E: Engine> {
     engine: E,
     model_id: String,
@@ -101,12 +101,13 @@ impl<E: Engine> SlmExplainer<E> {
         &self,
         eval: &Evaluation,
         facts: &[FactLine],
-        docs: &[Document],
+        offered: &[OfferedStatement],
     ) -> GenerateRequest {
+        let ids: Vec<&str> = offered.iter().map(|s| s.selection_id.as_str()).collect();
         GenerateRequest {
             system: self.prompt_format.system_prompt().to_owned(),
-            prompt: self.prompt_format.format_prompt(eval, facts, docs),
-            grammar: None,
+            prompt: self.prompt_format.format_prompt(eval, facts, offered),
+            grammar: Some(build_selection_grammar(&ids)),
             max_tokens: self.max_tokens,
             temperature: DEFAULT_TEMPERATURE,
             seed: DEFAULT_SEED,
@@ -118,18 +119,19 @@ impl<E: Engine> Explainer for SlmExplainer<E> {
     fn explain(
         &mut self,
         eval: &Evaluation,
-        docs: &[Document],
+        fichas: &[Ficha],
         ctl: &mut Control<'_>,
     ) -> Result<Explanation, SlmError> {
         ctl.check()?;
         let facts = render_facts(eval);
-        let req = self.build_request(eval, &facts, docs);
+        let offered = offered_statements(fichas, eval.status)?;
+        let req = self.build_request(eval, &facts, &offered);
         let raw = self.engine.generate(&req, ctl)?;
         ctl.check()?;
         ctl.report_and_check(Progress::Validating)?;
 
-        let (note, note_discarded) = match validate_note(&raw, &facts, docs) {
-            Ok(valid) => (Some(valid), None),
+        let (note, note_discarded) = match validate_selection(&raw, &offered) {
+            Ok(valid) => (valid, None),
             Err(code) => (None, Some(code)),
         };
 
