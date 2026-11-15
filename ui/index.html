@@ -6,8 +6,11 @@
 <title>Merken · Health observations</title><script type="module" src="/src/main.ts"></script>
 </head>
 <body>
+<div class="ambient-backdrop" aria-hidden="true"></div>
+<canvas id="ambient-particles" class="ambient-particles" aria-hidden="true"></canvas>
 <a class="skip-link" href="#main">Skip to observations</a>
 <div class="app-shell">
+<aside id="visual-preview" class="preview-banner" hidden><span><strong>DEMO</strong> · Synthetic readings · Nothing is saved</span><a href="./">Exit preview</a></aside>
 <header class="app-header">
 <a class="wordmark" href="#main" aria-label="Merken home">MERKEN</a>
 <button id="crew-open" class="crew-trigger" type="button" aria-haspopup="dialog" aria-controls="crew-dialog"><span class="crew-identity"><span class="caption">Crew member</span><span id="crew-name">Loading crew…</span></span></button>
@@ -17,6 +20,7 @@
 <h1 class="sr-only">Health observations</h1>
 <div id="screens" class="workspace">
 <section id="overview" class="screen overview" aria-label="Health overview" tabindex="-1">
+<div class="overview-heading"><p class="eyebrow">YOUR HEALTH, IN VIEW</p><h2>Daily overview</h2><p class="overview-intro">A moment to check in.</p></div>
 <div id="overall-box" class="overall-box panel" data-tone="neutral">
 <div class="overall-line"><span id="overall-status" class="status-chip" role="status" aria-atomic="true"></span><span id="overview-demo" class="demo-tag" hidden>DEMO</span><span id="feed-status" class="feed-status">Connecting…</span></div>
 <p id="overall-scope" class="caption">MySQL · Reading-level assessment</p>
@@ -31,7 +35,7 @@
 <button type="button" id="vital-oxygen" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">SpO₂</span><span class="reading"><span class="reading-value">--</span> <span class="unit">%</span></span><span class="vital-status"></span><span class="reference" hidden>Ref: ≥ 94%</span></button>
 <button type="button" id="vital-mood" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Mood</span><span class="reading"><span class="reading-value">--</span> <span class="unit"></span></span><span class="vital-status"></span><span class="reference" hidden>Self-reported</span></button></div>
 <div class="body-center"><div id="body-map"></div><div id="body-extra" class="body-extra"></div><p id="zone-selection" class="zone-selection" role="status">Select a zone</p><button id="zones-open" class="text-button" type="button" aria-haspopup="dialog" aria-controls="zones-dialog">All zones</button></div>
-<div class="reading-column"><button type="button" id="vital-temperature" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Temperature</span><span class="reading"><span class="reading-value">--</span> <span class="unit">°C</span></span><span class="vital-status"></span><span class="reference" hidden>Ref: 36.1 - 38.0 °C</span></button>
+<div class="reading-column"><button type="button" id="vital-temperature" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Temp</span><span class="reading"><span class="reading-value">--</span> <span class="unit">°C</span></span><span class="vital-status"></span><span class="reference" hidden>Ref: 36.1 - 38.0 °C</span></button>
 <button type="button" id="vital-glucose" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Glucose</span><span class="reading"><span class="reading-value">--</span> <span class="unit">mg/dL</span></span><span class="vital-status"></span><span class="reference" hidden>Ref: 70-180 mg/dL</span></button>
 <button type="button" id="vital-sleep" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Sleep</span><span class="reading"><span class="reading-value">--</span> <span class="unit">h</span></span><span class="vital-status"></span><span class="reference" hidden>No reference supplied</span></button>
 <button type="button" id="vital-nutrition" class="vital-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Nutrition</span><span class="reading"><span class="reading-value">--</span> <span class="unit">kcal</span></span><span class="vital-status"></span><span class="reference" hidden>Context only</span></button></div>
@@ -39,7 +43,7 @@
 <p id="body-source" class="source-line">Body zones · Not evaluated in browser</p>
 <div class="context-grid"><button type="button" id="vital-radiation" class="context-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Radiation</span><span class="reading"><span class="reading-value">--</span> <span class="unit">µSv/h</span></span><span class="vital-status"></span><span class="reference" hidden>Context only</span></button>
 <button type="button" id="vital-distance" class="context-card panel" data-tone="neutral" aria-haspopup="dialog" aria-controls="reading-dialog"><span class="card-label">Distance</span><span class="reading"><span class="reading-value">--</span> <span class="unit">km</span></span><span class="vital-status"></span><span class="reference" hidden>Context only</span></button><button id="sync-open" class="context-card panel" type="button"><span class="card-label">Sync</span><span id="overview-sync">Unavailable</span></button></div>
-<div class="voice-entry"><button id="talk-hold" class="talk-button" type="button" aria-label="Hold to talk" aria-haspopup="dialog" aria-controls="voice-dialog"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></button><span class="caption">Hold to talk</span><button id="manual-open" class="text-button" type="button" aria-haspopup="dialog" aria-controls="voice-dialog">Type a reading</button></div>
+<div class="voice-entry"><button id="talk-hold" class="talk-button" type="button" aria-label="Hold to talk" aria-haspopup="dialog" aria-controls="voice-dialog"><span class="mic-disc"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></span><span>Hold to talk</span><span class="mic-dots" aria-hidden="true">···</span></button><button id="manual-open" class="text-button" type="button" aria-label="Type a reading" aria-haspopup="dialog" aria-controls="voice-dialog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14Z"/></svg><span class="manual-label">Type a reading</span><span class="manual-label-compact" aria-hidden="true">Type</span></button></div>
 </section>
         <section id="core-panel" class="core-section screen" hidden tabindex="-1" aria-labelledby="core-title">
           <div class="section-heading"><div><p class="eyebrow">02 / Device record</p><h2 id="core-title">History / On-device record</h2></div><span id="demo-badge" class="status-chip" data-tone="neutral" hidden>DEMO</span></div>

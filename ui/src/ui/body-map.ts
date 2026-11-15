@@ -2,21 +2,25 @@ import type { BodyZone, StatusResponse } from "../core-api";
 import { element, el, setText } from "./dom";
 import { badge, statusCopy, paintBadge } from "./status-copy";
 import { modal } from "./dialog";
+import humanBodyUrl from "../assets/body-reference.webp";
+import humanGeometry from "../assets/body-reference-geometry.json";
 
-// Anatomical left is the viewer's right. Back and other have explicit controls.
+// Invisible regions over the generated cutout. Its alpha-derived contour clips
+// highlights; the illustration itself is never reconstructed as vector art.
+// Anatomical left is the viewer's right.
 const shapes: Record<BodyZone, string | null> = {
-  head: "M90 10C76 10 69 21 70 36L73 48Q77 59 90 61Q103 59 107 48L110 36C111 21 104 10 90 10Z",
-  neck: "M80 61L80 72L75 77Q90 83 105 77L100 72L100 61Q90 66 80 61Z",
-  chest: "M73 79Q60 81 56 89L63 125L66 145Q90 152 114 145L117 125L124 89Q120 81 107 79Q90 88 73 79Z",
-  abdomen: "M66 149Q90 156 114 149L115 178Q122 195 115 212L96 219L90 212L84 219L65 212Q58 195 65 178Z",
-  right_arm: "M53 89Q43 95 40 116L32 149L22 182L34 187L49 155L58 127Z",
-  left_arm: "M127 89Q137 95 140 116L148 149L158 182L146 187L131 155L122 127Z",
-  right_hand: "M21 186L33 191L31 206L25 220Q22 224 19 219L14 213L15 199Z",
-  left_hand: "M159 186L147 191L149 206L155 220Q158 224 161 219L166 213L165 199Z",
-  right_leg: "M65 216L85 223L88 226L85 269L81 293L78 338L64 338L60 293L59 265Z",
-  left_leg: "M115 216L95 223L92 226L95 269L99 293L102 338L116 338L120 293L121 265Z",
-  right_foot: "M64 342L78 342L79 356Q78 362 69 362L51 362Q46 358 53 353Z",
-  left_foot: "M102 342L116 342L127 353Q134 358 129 362L111 362Q102 362 101 356Z",
+  head: "M58 0H122V59H58Z",
+  neck: "M68 59H112V78H68Z",
+  chest: "M48 78H132L124 110L122 149H58L56 110Z",
+  abdomen: "M58 149H122L135 222H45Z",
+  right_arm: "M48 78L56 110L58 149L37 208H12L17 144L28 87Z",
+  left_arm: "M132 78L124 110L122 149L143 208H168L163 144L152 87Z",
+  right_hand: "M0 208H40V254H0Z",
+  left_hand: "M140 208H180V254H140Z",
+  right_leg: "M45 222H90V393H46Z",
+  left_leg: "M90 222H135L134 393H90Z",
+  right_foot: "M45 393H90V435H45Z",
+  left_foot: "M90 393H135V435H90Z",
   back: null, other: null,
 };
 export const bodyZones = Object.keys(shapes) as BodyZone[];
@@ -27,10 +31,31 @@ export function zoneName(zone: BodyZone): string {
 export function createBodyMap(onSelect: (zone: BodyZone) => void) {
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", "0 0 180 375");
+  svg.setAttribute("viewBox", `0 0 ${humanGeometry.width} ${humanGeometry.height}`);
   svg.setAttribute("class", "body-map");
   svg.setAttribute("role", "group");
   svg.setAttribute("aria-label", "Body zones, front view");
+  const defs = document.createElementNS(ns, "defs");
+  const clip = document.createElementNS(ns, "clipPath");
+  clip.id = "human-body-clip";
+  const outline = document.createElementNS(ns, "path");
+  outline.setAttribute("d", humanGeometry.outline); clip.append(outline); defs.append(clip);
+  const image = document.createElementNS(ns, "image");
+  image.setAttribute("href", humanBodyUrl);
+  image.setAttribute("width", String(humanGeometry.width));
+  image.setAttribute("height", String(humanGeometry.height));
+  image.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  image.setAttribute("class", "body-image");
+  image.setAttribute("aria-hidden", "true"); image.setAttribute("pointer-events", "none");
+  const fallback = outline.cloneNode() as SVGPathElement;
+  fallback.setAttribute("class", "body-fallback");
+  fallback.setAttribute("aria-hidden", "true"); fallback.setAttribute("pointer-events", "none");
+  svg.append(defs, image, fallback);
+  const hits = document.createElementNS(ns, "g");
+  hits.setAttribute("aria-hidden", "true");
+  const regions = document.createElementNS(ns, "g");
+  regions.setAttribute("clip-path", "url(#human-body-clip)");
+  svg.append(hits, regions);
   const nodes = new Map<BodyZone, SVGPathElement | HTMLButtonElement>();
   const rows = new Map<BodyZone, HTMLButtonElement>();
   const labels = new Map<BodyZone, HTMLElement>();
@@ -52,14 +77,14 @@ export function createBodyMap(onSelect: (zone: BodyZone) => void) {
     node.setAttribute("aria-pressed", "false"); node.dataset.zone = zone;
     node.dataset.tone = "neutral";
     if (node instanceof SVGElement) {
-      node.setAttribute("d", geometry!); node.setAttribute("class", "body-zone"); svg.append(node);
+      node.setAttribute("d", geometry!); node.setAttribute("class", "body-zone"); regions.append(node);
       if (smallZones.has(zone)) {
         // Invisible, wider hit area behind every visible zone, so neighbours drawn
         // on top keep their own taps; the anatomy stays unchanged.
         const hit = document.createElementNS(ns, "path");
         hit.setAttribute("d", geometry!); hit.setAttribute("class", "zone-hit"); hit.setAttribute("aria-hidden", "true");
         hit.addEventListener("click", () => { select(zone); onSelect(zone); });
-        svg.insertBefore(hit, svg.firstChild);
+        hits.append(hit);
       }
       node.addEventListener("keydown", event => {
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); select(zone); onSelect(zone); }

@@ -1,5 +1,15 @@
-export type IconName = "ok" | "warn" | "alarm" | "neutral" | "no_data" | "stale" | "history" | "info" | "demo" | "sync" | "crew" | "left" | "right" | "close" | "chevron";
+export type IconName = "ok" | "warn" | "alarm" | "neutral" | "no_data" | "stale" | "history" | "info" | "demo" | "sync" | "crew" | "left" | "right" | "close" | "chevron" | "pulse" | "pressure" | "oxygen" | "mood" | "temperature" | "glucose" | "sleep" | "nutrition" | "radiation" | "earth";
 const paths: Record<IconName, string> = {
+  pulse: '<path d="M20.5 4.5a5.3 5.3 0 0 0-7.5 0L12 5.6l-1.1-1.1a5.3 5.3 0 0 0-7.5 7.5L12 21l8.5-9a5.3 5.3 0 0 0 0-7.5Z"/>',
+  pressure: '<rect x="3" y="3" width="11" height="13" rx="3"/><path d="M8 7v5M14 10h3a4 4 0 0 1 4 4v3a4 4 0 0 1-8 0v-1"/>',
+  oxygen: '<path d="M12 3c-2 4-7 8-7 12a7 7 0 0 0 14 0c0-4-5-8-7-12Z"/><path d="M8 15a4 4 0 0 0 4 4"/>',
+  mood: '<circle cx="12" cy="12" r="9"/><path d="M8 14s1 3 4 3 4-3 4-3M8 9h.01M16 9h.01"/>',
+  temperature: '<path d="M9 14.5V5a3 3 0 0 1 6 0v9.5a5 5 0 1 1-6 0Z M12 8v10"/>',
+  glucose: '<path d="M12 2C10 7 5 11 5 15a7 7 0 0 0 14 0c0-4-5-8-7-13Z"/>',
+  sleep: '<path d="M21 13a9 9 0 0 1-10-10A9 9 0 1 0 21 13Z"/>',
+  nutrition: '<path d="M4 3v6a3 3 0 0 0 6 0V3M7 3v18M16 21V3c4 2 5 7 5 11h-5"/>',
+  radiation: '<circle cx="12" cy="12" r="2"/><path d="m9 8-3-5a10 10 0 0 0-4 7h6M15 8l3-5a10 10 0 0 1 4 7h-6M9 16l-3 5a10 10 0 0 0 12 0l-3-5"/>',
+  earth: '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 6h14M5 18h14"/>',
   ok: '<circle cx="12" cy="12" r="9"/><path d="m7.5 12 3 3 6-6"/>',
   warn: '<path d="M12 3 22 21H2Z M12 9v5 M12 17v.2"/>',
   alarm: '<path d="m8 2-6 6v8l6 6h8l6-6V8l-6-6Z M12 7v7 M12 17v.2"/>',

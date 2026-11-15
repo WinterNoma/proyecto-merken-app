@@ -5,7 +5,7 @@ import { modal } from "./dialog";
 import { bodyZones, zoneName } from "./body-map";
 import { indicatorName } from "./core-format";
 
-export function setupVoice(available: boolean, panel: CorePanel): void {
+export function setupVoice(available: boolean, panel: CorePanel, onHolding?: (active: boolean) => void): void {
   const dialog = element<HTMLDialogElement>("#voice-dialog");
   const hold = element<HTMLButtonElement>("#talk-hold");
   const close = element<HTMLButtonElement>("#voice-close");
@@ -73,6 +73,7 @@ export function setupVoice(available: boolean, panel: CorePanel): void {
   function release(): void {
     if (!holding) return;
     holding = false; pointer = null; hold.setAttribute("aria-pressed", "false");
+    onHolding?.(false);
     element("#voice-held").hidden = true;
     element("#voice-review").hidden = false;
     setText(element("#voice-title"), "Check what was understood");
@@ -81,6 +82,7 @@ export function setupVoice(available: boolean, panel: CorePanel): void {
   function begin(): void {
     if (busy || dialog.open) return;
     hold.focus(); openSheet(); holding = true; hold.setAttribute("aria-pressed", "true");
+    onHolding?.(true);
     form.hidden = true; element("#voice-review").hidden = true; element("#voice-held").hidden = false;
     setText(element("#voice-title"), "Hold to talk");
   }
@@ -101,11 +103,12 @@ export function setupVoice(available: boolean, panel: CorePanel): void {
   window.addEventListener("blur", release);
   document.addEventListener("visibilitychange", () => { if (document.hidden) release(); });
   close.addEventListener("click", controls.close);
-  dialog.addEventListener("close", () => { holding = false; pointer = null; opening += 1; hold.setAttribute("aria-pressed", "false"); });
+  dialog.addEventListener("close", () => { holding = false; pointer = null; opening += 1; hold.setAttribute("aria-pressed", "false"); onHolding?.(false); });
   async function manual(): Promise<void> {
     if (!dialog.open) openSheet();
     const revision = opening;
     holding = false; pointer = null;
+    hold.setAttribute("aria-pressed", "false"); onHolding?.(false);
     element("#voice-held").hidden = true; element("#voice-review").hidden = true; form.hidden = false;
     setText(element("#voice-title"), "Type a reading");
     if (!time.value) time.value = new Date().toISOString().slice(0, 19);
