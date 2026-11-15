@@ -11,6 +11,7 @@ import { element } from "./ui/dom";
 import { createVitals } from "./ui/vitals";
 import { createCrewSelector } from "./ui/crew";
 import { createTelemetryFeed } from "./ui/telemetry";
+import { mountTelemetryHistory } from "./ui/telemetry-history";
 import { createCorePanel } from "./ui/core-panel";
 import { setupHelp } from "./ui/help";
 
@@ -45,10 +46,26 @@ if (import.meta.env.DEV) Object.defineProperty(window, "__merkenAmbient", {
 const dashboard = createDashboard(available, zone => {
   ambient.pulseAt(document.querySelector(`.body-zone[data-zone="${zone}"]`) ?? element("#body-map"));
 });
-setupPages(index => ambient.setActive(index === 0));
+// Historial de telemetría guardada en el dispositivo (solo dentro de la app).
+let latestCrew: { id: string; name: string }[] = [];
+const historyHost = element("#telemetry-history");
+const history = available ? mountTelemetryHistory(historyHost, () => latestCrew) : null;
+historyHost.hidden = !available;
+let historyTimer: number | null = null;
+setupPages(index => {
+  ambient.setActive(index === 0);
+  if (!history) return;
+  // El historial solo se refresca mientras su pantalla está a la vista.
+  if (historyTimer !== null) { window.clearInterval(historyTimer); historyTimer = null; }
+  if (index === 1) {
+    void history.refresh();
+    historyTimer = window.setInterval(() => { void history.refresh(); }, 10000);
+  }
+});
 const vitals = createVitals();
 const crew = createCrewSelector(member => { vitals.render(member); dashboard.member(member); });
 const renderFeed = (state: FeedState): void => {
+  latestCrew = state.crew.map(member => ({ id: member.id, name: member.name }));
   crew.update(state);
   vitals.feed(state);
   dashboard.feed(state);
@@ -59,6 +76,10 @@ const panel = createCorePanel(available, dashboard.core);
 setupHelp(available, panel);
 setupVoice(available, panel, ambient.setHolding);
 window.addEventListener("pagehide", event => {
-  if (!event.persisted) { feed.stop(); panel.stop(); ambient.destroy(); }
+  if (!event.persisted) {
+    feed.stop(); panel.stop(); ambient.destroy();
+    if (historyTimer !== null) window.clearInterval(historyTimer);
+    history?.destroy();
+  }
 });
 import.meta.hot?.dispose(() => ambient.destroy());
