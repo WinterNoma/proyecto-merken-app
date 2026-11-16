@@ -749,6 +749,7 @@ pub fn run() {
             verify_telemetry,
             recommendations::recommendations_cached_crew,
             recommendations::recommendations_sync_backend,
+            recommendations::recommendations_refresh_backend,
             recommendations::recommendations_generate,
             recommendations::recommendations_cancel,
             export_json

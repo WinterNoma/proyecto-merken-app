@@ -20,6 +20,8 @@ pub struct RecommendationState {
     busy: Arc<AtomicBool>,
     cancel: Arc<AtomicBool>,
     models: Arc<Mutex<Option<PathBuf>>>,
+    session: Arc<Mutex<Option<String>>>,
+    snapshot_busy: AtomicBool,
 }
 #[derive(Deserialize)]
 pub struct GroundLogin {
@@ -76,27 +78,71 @@ pub fn recommendations_cached_crew(
         .map(Some)
         .map_err(|_| err("Cached backend snapshot is invalid"))
 }
+const ORIGIN: &str = "https://deployconmerken.gabogrobier.dev";
+const EXPIRED: &str = "Ground-station session expired; sign in again";
+
+fn unreachable() -> StoreError {
+    err("Ground station is unreachable; cached data remains available")
+}
+fn check_session(state: &RecommendationState, status: reqwest::StatusCode) -> Result<(), StoreError> {
+    if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        *state
+            .session
+            .lock()
+            .map_err(|_| err("Ground-station session is unavailable"))? = None;
+        return Err(err(EXPIRED));
+    }
+    Ok(())
+}
+fn ground_client() -> Result<reqwest::Client, StoreError> {
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|_| err("Secure connection could not initialize"))
+}
+struct SnapshotGuard<'a>(&'a AtomicBool);
+impl Drop for SnapshotGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+fn acquire_snapshot(busy: &AtomicBool) -> Option<SnapshotGuard<'_>> {
+    if busy.swap(true, Ordering::SeqCst) {
+        None
+    } else {
+        Some(SnapshotGuard(busy))
+    }
+}
+fn session_cookie(state: &RecommendationState) -> Result<Option<String>, StoreError> {
+    state
+        .session
+        .lock()
+        .map(|session| session.clone())
+        .map_err(|_| err("Ground-station session is unavailable"))
+}
 #[tauri::command]
 pub async fn recommendations_sync_backend(
     app: tauri::AppHandle,
+    state: tauri::State<'_, RecommendationState>,
     input: GroundLogin,
 ) -> Result<BackendCache, StoreError> {
     if input.username.is_empty() || input.username.len() > 100 || input.password.len() > 512 {
         return Err(err("Enter your ground-station login"));
     }
-    // Fixed HTTPS origin: no arbitrary host, embedded credentials or inference API.
-    let origin = "https://deployconmerken.gabogrobier.dev";
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(std::time::Duration::from_secs(20))
-        .build()
-        .map_err(|_| err("Secure connection could not initialize"))?;
+    let _guard = acquire_snapshot(&state.snapshot_busy)
+        .ok_or_else(|| err("A ground snapshot sync is already running"))?;
+    let client = ground_client()?;
     let login = client
-        .post(format!("{origin}/api/demo-session"))
+        .post(format!("{ORIGIN}/api/demo-session"))
         .form(&[("username", input.username), ("password", input.password)])
         .send()
         .await
-        .map_err(|_| err("Ground station is unreachable; cached data remains available"))?;
+        .map_err(|_| unreachable())?;
+    check_session(&state, login.status())?;
+    if !login.status().is_success() {
+        return Err(err("Ground-station sign-in failed"));
+    }
     let cookie = login
         .headers()
         .get_all(reqwest::header::SET_COOKIE)
@@ -109,19 +155,46 @@ pub async fn recommendations_sync_backend(
         })
         .ok_or_else(|| err("Ground-station sign-in failed"))?
         .to_owned();
+    let cache = download_snapshot(&app, &state, &client, &cookie).await?;
+    *state
+        .session
+        .lock()
+        .map_err(|_| err("Ground-station session is unavailable"))? = Some(cookie);
+    Ok(cache)
+}
+#[tauri::command]
+pub async fn recommendations_refresh_backend(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, RecommendationState>,
+) -> Result<Option<BackendCache>, StoreError> {
+    let Some(_guard) = acquire_snapshot(&state.snapshot_busy) else {
+        return Ok(None);
+    };
+    let Some(cookie) = session_cookie(&state)? else {
+        return Ok(None);
+    };
+    download_snapshot(&app, &state, &ground_client()?, &cookie)
+        .await
+        .map(Some)
+}
+async fn download_snapshot(
+    app: &tauri::AppHandle,
+    state: &RecommendationState,
+    client: &reqwest::Client,
+    cookie: &str,
+) -> Result<BackendCache, StoreError> {
+    let origin = ORIGIN;
     let response = client
         .get(format!("{origin}/api/astronauts"))
-        .header(reqwest::header::COOKIE, &cookie)
+        .header(reqwest::header::COOKIE, cookie)
         .send()
         .await
-        .map_err(|_| err("Backend snapshot could not be downloaded"))?;
+        .map_err(|_| unreachable())?;
+    check_session(state, response.status())?;
     if !response.status().is_success() {
         return Err(err("Backend snapshot was not authorized"));
     }
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|_| err("Backend snapshot download failed"))?;
+    let bytes = response.bytes().await.map_err(|_| unreachable())?;
     if bytes.len() > 2 * 1024 * 1024 {
         return Err(err("Backend snapshot exceeds the device limit"));
     }
@@ -145,21 +218,23 @@ pub async fn recommendations_sync_backend(
             .to_string();
         let context_response = client
             .get(format!("{origin}/api/astronauts/{id}/recommendations"))
-            .header(reqwest::header::COOKIE, &cookie)
+            .header(reqwest::header::COOKIE, cookie)
             .send()
             .await
-            .map_err(|_| {
-                err("Core context could not be synchronized; previous snapshot remains available")
-            })?;
+            .map_err(|_| unreachable())?;
+        check_session(state, context_response.status())?;
         if !context_response.status().is_success() {
             return Err(err(
                 "Core context is unavailable; previous snapshot remains available",
             ));
         }
-        let context: Value = context_response
-            .json()
-            .await
-            .map_err(|_| err("Invalid core context"))?;
+        let context: Value = context_response.json().await.map_err(|error| {
+            if error.is_decode() {
+                err("Invalid core context")
+            } else {
+                unreachable()
+            }
+        })?;
         row.as_object_mut()
             .ok_or_else(|| err("Invalid backend row"))?
             .insert("analysisContext".into(), context);
@@ -168,7 +243,7 @@ pub async fn recommendations_sync_backend(
         received_at: now().to_rfc3339(),
         crew,
     };
-    let path = cache_path(&app)?;
+    let path = cache_path(app)?;
     let pending = path.with_extension("pending");
     std::fs::write(
         &pending,
@@ -176,7 +251,6 @@ pub async fn recommendations_sync_backend(
     )
     .map_err(|_| err("Backend snapshot could not be saved"))?;
     std::fs::rename(pending, path).map_err(|_| err("Backend snapshot could not be saved"))?;
-    // Credentials and session cookie are dropped; they are never persisted.
     Ok(cache)
 }
 #[tauri::command]
@@ -487,4 +561,32 @@ pub async fn recommendations_generate(
     })
     .await
     .map_err(|_| err("Offline generation was interrupted; core alerts remain available"))?
+}
+
+#[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+
+    #[test]
+    fn unauthorized_or_forbidden_clears_session() {
+        for status in [
+            reqwest::StatusCode::UNAUTHORIZED,
+            reqwest::StatusCode::FORBIDDEN,
+        ] {
+            let state = RecommendationState::default();
+            if let Ok(mut session) = state.session.lock() {
+                *session = Some("cookie".into());
+            }
+            assert!(check_session(&state, status).is_err());
+            assert!(matches!(session_cookie(&state), Ok(None)));
+        }
+    }
+
+    #[test]
+    fn no_session_cookie_is_none() {
+        assert!(matches!(
+            session_cookie(&RecommendationState::default()),
+            Ok(None)
+        ));
+    }
 }
