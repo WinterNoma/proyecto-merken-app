@@ -78,6 +78,11 @@ export function setupRecommendations(available: boolean): void {
   const syncStatus = element("#recommendation-sync-status");
   let cache: Cache | null = null;
   let task: "generate" | "sync" | null = null;
+  let sessionActive = false;
+  let closed = false;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let refreshPending: Promise<void> | null = null;
+  let generation = 0;
 
   function clearResult(): void {
     output.replaceChildren();
@@ -91,7 +96,7 @@ export function setupRecommendations(available: boolean): void {
       : "Uses the profile and readings stored on this device.";
   }
 
-  function roster(next: Cache | null, selectSnapshot = true): void {
+  function roster(next: Cache | null, selectSnapshot = true): boolean {
     cache = next;
     const selected = target.value;
     target.replaceChildren(new Option("On-device profile", ""));
@@ -100,10 +105,12 @@ export function setupRecommendations(available: boolean): void {
       option.disabled = !row.garminLinked;
       target.append(option);
     }
-    const preferred = next?.crew.find(row => row.garminLinked && String(row.id) === selected)
-      ?? next?.crew.find(row => row.garminLinked);
-    if (preferred && selectSnapshot) target.value = String(preferred.id);
+    const existing = next?.crew.find(row => row.garminLinked && String(row.id) === selected);
+    const missing = Boolean(selected && !existing);
+    const preferred = existing ?? (selectSnapshot ? next?.crew.find(row => row.garminLinked) : undefined);
+    target.value = preferred ? String(preferred.id) : "";
     describeSource();
+    return missing;
   }
 
   function setTask(next: typeof task): void {
@@ -148,6 +155,7 @@ export function setupRecommendations(available: boolean): void {
   });
 
   cancel.addEventListener("click", () => {
+    if (!available) return;
     cancel.disabled = true;
     status.textContent = "Cancellation requested.";
     void invoke("recommendations_cancel").catch(error => {
@@ -157,9 +165,66 @@ export function setupRecommendations(available: boolean): void {
     });
   });
 
+  function stopTimer(): void {
+    if (timer !== null) clearInterval(timer);
+    timer = null;
+  }
+
+  function acceptSnapshot(next: Cache, manual: boolean): void {
+    const missing = roster(next, manual);
+    window.dispatchEvent(new Event("merken:backend-snapshot"));
+    syncStatus.textContent = "Connected · updates every 15 s · Last snapshot " + utc(next.received_at)
+      + (!manual && missing ? " · Selected astronaut unavailable; using on-device profile." : "");
+  }
+
+  function handleSessionError(error: unknown): string {
+    const message = errorMessage(error);
+    if (message.includes("Ground-station session expired")) {
+      sessionActive = false;
+      stopTimer();
+    }
+    return message;
+  }
+
+  function refresh(): Promise<void> {
+    if (!available || !sessionActive || closed || document.hidden || task === "sync") return Promise.resolve();
+    if (refreshPending) return refreshPending;
+    const current = generation;
+    const pending = (async () => {
+      try {
+        const next = await invoke<Cache | null>("recommendations_refresh_backend");
+        if (next && sessionActive && !closed && current === generation) acceptSnapshot(next, false);
+      } catch (error) {
+        if (!sessionActive || closed) return;
+        // A stale refresh may not overwrite the manual Sync's status, but a session
+        // it found expired is still gone: always drop it so the timer stays off.
+        const message = handleSessionError(error);
+        if (current === generation) syncStatus.textContent = message;
+      }
+    })();
+    refreshPending = pending;
+    void pending.finally(() => { if (refreshPending === pending) refreshPending = null; });
+    return pending;
+  }
+
+  function startTimer(): void {
+    stopTimer();
+    if (available && sessionActive && !closed && !document.hidden && task !== "sync") {
+      timer = setInterval(() => { void refresh(); }, 15_000);
+    }
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopTimer();
+    else if (sessionActive && !closed) { void refresh(); startTimer(); }
+  });
+  window.addEventListener("pagehide", () => { closed = true; stopTimer(); });
+
   sync.addEventListener("submit", async event => {
     event.preventDefault();
     if (!available || task) return;
+    ++generation;
+    stopTimer();
     const input = { username: username.value, password: password.value };
     password.value = "";
     setTask("sync");
@@ -167,14 +232,18 @@ export function setupRecommendations(available: boolean): void {
     status.textContent = "";
     syncStatus.textContent = "Synchronizing measurements…";
     try {
-      roster(await invoke<Cache>("recommendations_sync_backend", { input }));
-      window.dispatchEvent(new Event("merken:backend-snapshot"));
-      syncStatus.textContent = "Snapshot saved on this device.";
+      if (refreshPending) await refreshPending;
+      const next = await invoke<Cache>("recommendations_sync_backend", { input });
+      if (!closed) {
+        sessionActive = true;
+        acceptSnapshot(next, true);
+      }
     } catch (error) {
-      syncStatus.textContent = errorMessage(error);
+      if (!closed) syncStatus.textContent = handleSessionError(error);
     } finally {
       input.password = "";
       setTask(null);
+      startTimer();
     }
   });
 
@@ -182,9 +251,10 @@ export function setupRecommendations(available: boolean): void {
     status.textContent = "Open the installed app to generate a recommendation.";
     return;
   }
+  const initialGeneration = generation;
   void invoke<Cache | null>("recommendations_cached_crew").then(saved => {
-    if (!cache) roster(saved, task === null);
+    if (!cache && initialGeneration === generation) roster(saved, task === null);
   }).catch(() => {
-    syncStatus.textContent = "The saved ground snapshot could not be loaded.";
+    if (initialGeneration === generation) syncStatus.textContent = "The saved ground snapshot could not be loaded.";
   });
 }
