@@ -361,7 +361,7 @@ export function createCorePanel(available: boolean, onChange: (status: StatusRes
   if (available) { void refresh(); }
   else {
     setText(element("#core-availability-title"), "Local service unavailable");
-    setText(element("#core-availability-copy"), "Open the Merken app to use on-device records.");
+    setText(element("#core-availability-copy"), "Open the Pulsys app to use on-device records.");
     onChange(null, null, false);
   }
   const timer = available ? window.setInterval(() => { if (!actionBusy) void refresh(); }, 10000) : null;

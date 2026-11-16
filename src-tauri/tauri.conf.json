@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Merken",
+  "productName": "Pulsys",
   "version": "0.1.0",
   "identifier": "com.merken.app",
   "build": {
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Merken",
+        "title": "Pulsys",
         "width": 420,
         "height": 860
       }

@@ -73,7 +73,7 @@ export function createDashboard(available: boolean, onZoneSelection?: (zone: Bod
       el("p", "caption", "Navigation zone: " + zoneName(link.zone) + ". This link does not indicate a symptom."));
     if (feed && !feed.live) feedSection.append(el("p", "caption", "Connection unavailable. Last received values only."));
     const local = el("section", "detail-local");
-    local.append(el("h3", "", "On-device evaluation"), el("p", "caption", available ? "Loading local record…" : "Local service unavailable. Open the Merken app to view recorded history."));
+    local.append(el("h3", "", "On-device evaluation"), el("p", "caption", available ? "Loading local record…" : "Local service unavailable. Open the Pulsys app to view recorded history."));
     content.replaceChildren(feedSection, local); controls.open(close);
     if (!available) return;
     const results = await Promise.allSettled([core.getStatus(), core.getProfile(), core.listRecords({ indicator: link.indicator, limit: 40 })]);

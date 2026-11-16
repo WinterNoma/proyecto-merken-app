@@ -162,7 +162,7 @@ function renderPalettes(): void {
     ];
     return `<article class="palette-card panel" style="--sample-bg:${palette.surface};--sample-text:${palette.text}">
       <p class="eyebrow">Palette ${String.fromCharCode(65 + index)}</p><h3>${palette.name}</h3><p>${palette.summary}</p>
-      <div class="palette-sample"><span>MERKEN</span><span>Observation record</span></div>
+      <div class="palette-sample"><span>PULSYS</span><span>Observation record</span></div>
       <dl class="swatch-list">${swatches.map(([name, color]) => `<div><dt><span class="swatch" style="background:${color}" aria-hidden="true"></span>${name}</dt><dd>${color}</dd></div>`).join("")}</dl>
       <div class="ratio-summary"><span>Text / surface <strong>${contrast(palette.text, palette.surface).toFixed(2)}:1</strong></span><span>Muted / surface <strong>${contrast(palette.muted, palette.surface).toFixed(2)}:1</strong></span><span>Border / raised <strong>${contrast(palette.border, palette.raised).toFixed(2)}:1</strong></span></div>
       <button class="button secondary" type="button" data-palette="${palette.id}" aria-pressed="${index === 0}">Preview ${palette.name}</button>
@@ -186,7 +186,7 @@ function renderType(): void {
 }
 
 function wordmark(mono: boolean): string {
-  return `<svg viewBox="0 0 520 180" role="img" aria-label="MERKEN" xmlns="http://www.w3.org/2000/svg"><text x="52" y="126" fill="${mono ? "currentColor" : "#E8EDF2"}" font-family="Barlow Semi Condensed, Arial Narrow, sans-serif" font-size="100" font-weight="600" letter-spacing="6">MERKEN</text></svg>`;
+  return `<svg viewBox="0 0 520 180" role="img" aria-label="PULSYS" xmlns="http://www.w3.org/2000/svg"><text x="52" y="126" fill="${mono ? "currentColor" : "#E8EDF2"}" font-family="Barlow Semi Condensed, Arial Narrow, sans-serif" font-size="100" font-weight="600" letter-spacing="6">PULSYS</text></svg>`;
 }
 
 function renderStateSpecimens(): void {

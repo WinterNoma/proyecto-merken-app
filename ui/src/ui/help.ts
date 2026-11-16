@@ -48,7 +48,7 @@ export function setupHelp(available: boolean, panel: CorePanel): void {
     setText(element("#help-profile"), available ? "On-device profile · Checking…" : "Browser mode · No on-device profile");
     setText(element("#help-consequence"), available
       ? "This will save an urgent event on this device. Ground receipt is not confirmed."
-      : "Local service unavailable. Requests cannot be recorded in browser mode. Open the Merken app to use on-device records.");
+      : "Local service unavailable. Requests cannot be recorded in browser mode. Open the Pulsys app to use on-device records.");
     // In browser mode the request cannot be recorded: keep the explanation, disable the action.
     confirm.disabled = !available;
     controls.open(cancel);
