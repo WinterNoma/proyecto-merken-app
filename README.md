@@ -55,6 +55,16 @@ Empieza por [docs/requisitos-app-movil.md](docs/requisitos-app-movil.md) y por l
 
 Sin instalar nada: GitHub Actions → **Android APK** genera un APK debug arm64 en cada push a `desarrollo`. Descarga el artifact y arrástralo al emulador.
 
+**Emulador en un PC con Windows o en un Mac Intel:** usa la build **x86_64**: Actions → **Android APK** → **Run workflow** → abi `x86_64`. La arm64 se cierra al abrirse en esos emuladores, y sirve para móviles y para los Mac con chip M.
+
+## Datos de los astronautas en la APK
+
+La APK **no se conecta a MySQL directamente**, y es a propósito: tendría que llevar dentro la contraseña de MySQL, que cualquiera puede sacar de un APK. Además, MySQL tendría que quedar abierto a todo internet.
+
+- **APK:** en **Recommendations → Ground-station snapshot**, inicia sesión con el usuario del backend (`deployconmerken.gabogrobier.dev`). Es el backend quien lee MySQL. A partir de ahí la app se actualiza sola cada 15 s mientras está abierta. La sesión vive solo en memoria, y al cerrar la app hay que volver a sincronizar. La contraseña no se guarda nunca.
+- **Modo dev** (`npm run dev` o `npm run tauri android dev`): Vite lee MySQL con las credenciales de `server/.env` (copia `server/.env.example`) y refresca cada 2 s.
+- Si algún día hace falta otra fuente, la vía correcta es una API propia con login delante de MySQL, nunca las credenciales dentro de la app.
+
 ## Comandos
 
 ```bash
