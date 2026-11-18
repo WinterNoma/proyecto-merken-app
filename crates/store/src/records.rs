@@ -1,6 +1,6 @@
 //! Registros, estado actual, evaluaciones guardadas, DEMO y página de descarga.
 //!
-//! Toda decisión de salud la toma `merken-core`; aquí solo se carga, se
+//! Toda decisión de salud la toma `pulsys-core`; aquí solo se carga, se
 //! guarda y se monta el JSON que espera la interfaz (`ui/src/core-api.ts`).
 
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
         LogResult, RecordItem, StatusResponse, SyncStatus,
     },
 };
-use merken_core::{
+use pulsys_core::{
     catalog::{BodyZone, Indicator},
     effective::{EffectiveSet, RecordView},
     evaluate::{self, Evaluation, EventView, NotEvaluatedReason},
@@ -20,17 +20,17 @@ use merken_core::{
     time::{Timestamp, mission_elapsed},
     validate_text,
 };
-use merken_seed::Scenario;
-use rusqlite::{OptionalExtension, Transaction, params};
+use pulsys_seed::Scenario;
+use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Límite de caracteres de `note`, `message` y `description` (contrato §9).
 pub const MAX_TEXT: usize = 2000;
-const DEFAULT_LIMIT: usize = 100;
-const MAX_LIMIT: usize = 500;
+pub(crate) const DEFAULT_LIMIT: usize = 100;
+pub(crate) const MAX_LIMIT: usize = 500;
 
-/// Fila de `records` ya validada con `merken-core`.
+/// Fila de `records` ya validada con `pulsys-core`.
 struct Row {
     view: RecordView,
     value: Value,
@@ -51,7 +51,7 @@ pub struct PulledChange {
     pub payload: Value,
 }
 
-fn err(code: &str, field: &str, message: &str) -> StoreError {
+pub(crate) fn err(code: &str, field: &str, message: &str) -> StoreError {
     StoreError {
         code: code.into(),
         field: Some(field.into()),
@@ -68,6 +68,19 @@ fn enum_to_str<T: Serialize>(v: &T) -> Result<String, StoreError> {
         Value::String(s) => Ok(s),
         _ => Err(StoreError::storage()),
     }
+}
+
+pub(crate) fn validated_record(
+    indicator: &str,
+    value_json: &str,
+    unit: &str,
+    source: &str,
+) -> Option<(Measurement, Value, RecordSource)> {
+    let indicator = Indicator::parse(indicator).ok()?;
+    let value = serde_json::from_str(value_json).ok()?;
+    let measurement = Measurement::validate(indicator, &value, Some(unit)).ok()?;
+    let source = enum_from_str(source).ok()?;
+    Some((measurement, value, source))
 }
 
 fn series_key_str(indicator: &str, zone: Option<BodyZone>) -> String {
@@ -156,18 +169,12 @@ impl Store {
             ) = item?;
             // RNF-02: lo que sale de SQLite se vuelve a validar. Una fila corrupta
             // se ignora en la evaluación en lugar de tumbar la app.
-            let Ok(indicator) = Indicator::parse(&indicator) else {
+            let Some((measurement, value, source)) =
+                validated_record(&indicator, &value_json, &unit, &source)
+            else {
                 continue;
             };
-            let Ok(value) = serde_json::from_str::<Value>(&value_json) else {
-                continue;
-            };
-            let Ok(measurement) = Measurement::validate(indicator, &value, Some(&unit)) else {
-                continue;
-            };
-            let Ok(source) = enum_from_str::<RecordSource>(&source) else {
-                continue;
-            };
+            let indicator = measurement.indicator();
             let body_zone = zone.and_then(|z| BodyZone::parse(&z).ok());
             let sync = if is_demo {
                 "local_only".to_owned()
@@ -315,13 +322,7 @@ impl Store {
             app_version: Some(app_version.to_owned()),
         };
         let tx = self.conn.transaction()?;
-        if !is_demo {
-            crate::clear_demo_in(&tx)?;
-        }
-        insert_record(&tx, &dto, measurement.body_zone(), &root_id, is_demo)?;
-        if !is_demo {
-            enqueue(&tx, "record", &record_id, &serde_json::to_value(&dto)?, now)?;
-        }
+        insert_local_record(&tx, &dto, measurement.body_zone(), &root_id, is_demo)?;
         tx.commit()?;
 
         let status = self.status(now, app_version)?;
@@ -335,7 +336,7 @@ impl Store {
             // ya está guardado, así que se devuelve `saved` con `no_data`.
             .unwrap_or_else(|| {
                 evaluate::evaluate_series(
-                    merken_core::effective::SeriesKey {
+                    pulsys_core::effective::SeriesKey {
                         indicator,
                         body_zone: measurement.body_zone(),
                     },
@@ -450,7 +451,7 @@ impl Store {
         Ok(items.into_iter().take(limit).map(|(_, it)| it).collect())
     }
 
-    /// `get_status`: evalúa todo con `merken-core` y guarda las evaluaciones que cambiaron.
+    /// `get_status`: evalúa todo con `pulsys-core` y guarda las evaluaciones que cambiaron.
     pub fn status(
         &mut self,
         now: Timestamp,
@@ -631,13 +632,7 @@ impl Store {
 
     /// `true` si hay algún dato que no sea DEMO (perfil, registros o eventos).
     pub fn has_real_data(&self) -> Result<bool, StoreError> {
-        Ok(self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM records WHERE is_demo = 0)
-                 OR EXISTS(SELECT 1 FROM events WHERE is_demo = 0)
-                 OR EXISTS(SELECT 1 FROM profile WHERE is_demo = 0)",
-            [],
-            |r| r.get(0),
-        )?)
+        has_real_data_in(&self.conn)
     }
 
     /// `load_demo`: carga un escenario DEMO. Nunca entra en la outbox.
@@ -647,16 +642,7 @@ impl Store {
         now: Timestamp,
         app_version: &str,
     ) -> Result<StatusResponse, StoreError> {
-        if self.has_real_data()? {
-            return Err(err(
-                "real_data_present",
-                "scenario",
-                "Demo data cannot be loaded while real data is stored on this device",
-            ));
-        }
-        self.clear_demo()?;
-        self.upsert_profile(&merken_seed::demo_profile(now), true, now)?;
-        let data = merken_seed::scenario(scenario, now);
+        let data = pulsys_seed::scenario(scenario, now);
         let mut prepared = Vec::new();
         for r in &data.records {
             let m = Measurement::validate(r.indicator, &r.value, None)?;
@@ -686,7 +672,10 @@ impl Store {
             let zone = e.body_zone.map(BodyZone::parse).transpose()?;
             events.push((self.new_id(now)?, kind, zone, e));
         }
-        let tx = self.conn.transaction()?;
+        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        ensure_demo_allowed(&tx, "scenario")?;
+        crate::clear_demo_in(&tx)?;
+        crate::upsert_profile_in(&tx, &pulsys_seed::demo_profile(now), true, now)?;
         for (dto, zone) in &prepared {
             insert_record(&tx, dto, *zone, &dto.record_id, true)?;
         }
@@ -721,14 +710,8 @@ impl Store {
         records: &[Value],
         now: Timestamp,
     ) -> Result<ImportResult, StoreError> {
-        if self.has_real_data()? {
-            return Err(err(
-                "real_data_present",
-                "astronaut_id",
-                "Simulated data cannot be loaded while real data is stored on this device",
-            ));
-        }
-        merken_core::validate_text("display_name", display_name, 200)?;
+        ensure_demo_allowed(&self.conn, "astronaut_id")?;
+        pulsys_core::validate_text("display_name", display_name, 200)?;
         if display_name.trim().is_empty() {
             return Err(err(
                 "invalid_value",
@@ -739,7 +722,7 @@ impl Store {
         // Un registro con fecha posterior a `now + FUTURE` no se carga: el núcleo
         // lo evaluaría como reciente aunque el reloj de la simulación vaya
         // adelantado (revisión de Sol, I2).
-        let latest = now.saturating_add_ms(merken_core::rules::FUTURE);
+        let latest = now.saturating_add_ms(pulsys_core::rules::FUTURE);
         let mut seen = std::collections::HashSet::new();
         let mut prepared = Vec::new();
         let mut rejected = 0_usize;
@@ -765,7 +748,7 @@ impl Store {
                 _ => rejected += 1,
             }
         }
-        let mut profile = merken_seed::demo_profile(now);
+        let mut profile = pulsys_seed::demo_profile(now);
         if let Some(a) = profile.get_mut("astronaut").and_then(Value::as_object_mut) {
             a.insert("astronaut_id".into(), Value::from(astronaut_id));
             a.insert("username".into(), Value::from("simulation"));
@@ -778,7 +761,8 @@ impl Store {
         let last = prepared.iter().map(|(d, _)| d.measured_at).max();
         // Borrar la DEMO anterior, guardar el perfil y los registros va en una
         // sola transacción: si algo falla, la DEMO anterior queda intacta (Sol, B1).
-        let tx = self.conn.transaction()?;
+        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        ensure_demo_allowed(&tx, "astronaut_id")?;
         crate::clear_demo_in(&tx)?;
         crate::upsert_profile_in(&tx, &profile, true, now)?;
         for (dto, zone) in &prepared {
@@ -1043,7 +1027,7 @@ fn pull_event(
     c: &PulledChange,
     received_at: Timestamp,
 ) -> Result<usize, StoreError> {
-    let dto: merken_core::record::EventDto =
+    let dto: pulsys_core::record::EventDto =
         serde_json::from_value(c.payload.clone()).map_err(|_| bad_payload(c))?;
     if dto.event_id != c.id {
         return Err(bad_payload(c));
@@ -1135,6 +1119,50 @@ fn set_state(tx: &Transaction<'_>, key: &str, value: &str) -> Result<(), StoreEr
     Ok(())
 }
 
+fn has_real_data_in(conn: &Connection) -> Result<bool, StoreError> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM records WHERE is_demo = 0)
+             OR EXISTS(SELECT 1 FROM events WHERE is_demo = 0)
+             OR EXISTS(SELECT 1 FROM profile WHERE is_demo = 0)",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+fn ensure_demo_allowed(conn: &Connection, field: &str) -> Result<(), StoreError> {
+    if has_real_data_in(conn)? {
+        return Err(err(
+            "real_data_present",
+            field,
+            "Synthetic data cannot be loaded while real data is stored on this device",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn insert_local_record(
+    tx: &Transaction<'_>,
+    dto: &RecordDto,
+    zone: Option<BodyZone>,
+    root_id: &str,
+    is_demo: bool,
+) -> Result<(), StoreError> {
+    if !is_demo {
+        crate::clear_demo_in(tx)?;
+    }
+    insert_record(tx, dto, zone, root_id, is_demo)?;
+    if !is_demo {
+        enqueue(
+            tx,
+            "record",
+            &dto.record_id,
+            &serde_json::to_value(dto)?,
+            dto.logged_at,
+        )?;
+    }
+    Ok(())
+}
+
 fn insert_record(
     tx: &Transaction<'_>,
     dto: &RecordDto,
@@ -1190,7 +1218,7 @@ fn synthetic_dto_ok(dto: &RecordDto, latest: Timestamp) -> bool {
     let id_ok = |id: &str| !id.trim().is_empty() && id.chars().count() <= 64;
     let text_ok = |t: &Option<String>, max: usize| {
         t.as_deref()
-            .is_none_or(|t| merken_core::validate_text("text", t, max).is_ok())
+            .is_none_or(|t| pulsys_core::validate_text("text", t, max).is_ok())
     };
     dto.schema_version == 1
         && id_ok(&dto.record_id)

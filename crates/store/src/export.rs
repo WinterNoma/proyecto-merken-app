@@ -6,7 +6,7 @@
 
 use crate::telemetry::{validate_astronaut_key, verify_telemetry_in};
 use crate::{Store, StoreError};
-use merken_core::time::Timestamp;
+use pulsys_core::time::Timestamp;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -217,7 +217,11 @@ fn export_pulled_changes(conn: &Connection) -> Result<Vec<Value>, StoreError> {
 }
 
 fn export_sync_state(conn: &Connection) -> Result<Value, StoreError> {
-    let mut stmt = conn.prepare("SELECT key, value FROM sync_state ORDER BY key ASC")?;
+    let mut stmt = conn.prepare(
+        "SELECT key, value FROM sync_state
+         WHERE key IN ('pull_cursor', 'last_pull_at', 'last_push_at')
+         ORDER BY key ASC",
+    )?;
     let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
     let mut map = Map::new();
     for row in rows {
@@ -362,8 +366,8 @@ impl Store {
             "format_version": EXPORT_FORMAT_VERSION,
             "exported_at": now.to_rfc3339(),
             "app_version": app_version,
-            "core_version": merken_core::VERSION,
-            "rules_version": merken_core::RULES_VERSION,
+            "core_version": pulsys_core::VERSION,
+            "rules_version": pulsys_core::RULES_VERSION,
             "scope": {
                 "include_telemetry": include_telemetry,
                 "astronaut_key": input.astronaut_key,
@@ -395,7 +399,7 @@ mod tests {
         api::{CorrectRecordInput, LogRecordInput, LogResult, RaiseEventInput},
         telemetry::{RecordTelemetryInput, TelemetryReadingInput},
     };
-    use merken_core::{catalog::Indicator, record::EventKind};
+    use pulsys_core::{catalog::Indicator, record::EventKind};
     use sha2::{Digest, Sha256};
 
     const V: &str = "0.1.0";
@@ -694,6 +698,34 @@ mod tests {
         assert_eq!(doc["telemetry"]["readings"], json!([]));
         assert_eq!(doc["telemetry"]["heads"], json!([]));
         assert_eq!(doc["telemetry"]["verification"]["ok"], true);
+    }
+
+    #[test]
+    fn export_sync_state_omits_internal_keys() -> Result<(), Box<dyn std::error::Error>> {
+        let store = Store::open_in_memory()?;
+        let internal_keys: i64 = store.conn.query_row(
+            "SELECT count(*) FROM sync_state WHERE key IN ('pulse_store_id', 'demo_generation')",
+            [],
+            |r| r.get(0),
+        )?;
+        assert_eq!(internal_keys, 2);
+        store.conn.execute_batch(
+            "INSERT INTO sync_state(key, value) VALUES
+                ('pull_cursor', 'test-cursor'),
+                ('last_pull_at', '2027-01-15T08:00:00.000Z'),
+                ('last_push_at', '2027-01-15T08:10:00.000Z');",
+        )?;
+
+        let (doc, _) = export(&store, &ExportInput::default());
+        assert_eq!(
+            doc["sync_state"],
+            json!({
+                "pull_cursor": "test-cursor",
+                "last_pull_at": "2027-01-15T08:00:00.000Z",
+                "last_push_at": "2027-01-15T08:10:00.000Z",
+            })
+        );
+        Ok(())
     }
 
     #[test]

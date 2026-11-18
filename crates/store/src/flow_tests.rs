@@ -1,4 +1,4 @@
-//! Pruebas de flujo completo de `merken-store`.
+//! Pruebas de flujo completo de `pulsys-store`.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -11,7 +11,7 @@ use crate::{
     api::{CorrectRecordInput, ListRecordsInput, LogRecordInput, LogResult, RaiseEventInput},
     records::PulledChange,
 };
-use merken_core::{
+use pulsys_core::{
     catalog::{BodyZone, Indicator},
     evaluate::{NotEvaluatedReason, Status},
     record::EventKind,
@@ -135,7 +135,7 @@ fn invalid_values_are_rejected_with_field() {
                 indicator: Indicator::HeartRate,
                 value: json!({"bpm": 70}),
                 measured_at: None,
-                source: Some(merken_core::record::RecordSource::Earth),
+                source: Some(pulsys_core::record::RecordSource::Earth),
                 note: None,
                 confirm_warnings: true,
             },
@@ -856,7 +856,14 @@ fn migration_v3_parks_pending_headache_outbox() {
         [],
     )
     .unwrap();
-    conn.pragma_update(None, "user_version", 2).unwrap();
+    conn.execute_batch(
+        "DROP TABLE pulse_operations;
+         DROP INDEX records_indicator_history;
+         DROP INDEX records_replaces;
+         DELETE FROM sync_state WHERE key IN ('pulse_store_id', 'demo_generation');
+         PRAGMA user_version=2;",
+    )
+    .unwrap();
     let store = Store::initialize(conn).unwrap();
     let pending: Vec<String> = store
         .pending_outbox(10)

@@ -1,6 +1,15 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "src-tauri", "plugins/slm-assets"]
+members = [
+    "crates/core",
+    "crates/store",
+    "crates/seed",
+    "crates/sync",
+    "crates/slm",
+    "crates/voice",
+    "crates/api",
+]
+exclude = ["src-tauri", "plugins/slm-assets", "crates/local-speech"]
 
 [workspace.package]
 version = "0.1.0"
@@ -9,11 +18,12 @@ license = "MIT"
 repository = "https://github.com/WinterNoma/proyecto-merken-app"
 
 [workspace.dependencies]
-merken-core = { path = "crates/core" }
-merken-store = { path = "crates/store" }
-merken-sync = { path = "crates/sync" }
-merken-slm = { path = "crates/slm" }
-merken-seed = { path = "crates/seed" }
+pulsys-api = { path = "crates/api" }
+pulsys-core = { path = "crates/core" }
+pulsys-store = { path = "crates/store" }
+pulsys-sync = { path = "crates/sync" }
+pulsys-slm = { path = "crates/slm" }
+pulsys-seed = { path = "crates/seed" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.42", features = ["bundled"] }

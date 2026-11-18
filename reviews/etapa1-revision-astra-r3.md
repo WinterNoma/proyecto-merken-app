@@ -1,0 +1,7 @@
+**Sí, se puede cerrar la etapa 1. El hallazgo 3 está cerrado** y no encontré regresiones atribuibles al cambio.
+
+- **Antes de que llegue el antecesor**, preparar la corrección o confirmar una acción restaurada devuelve `unresolved_root` con campo `replaces`. La prueba verifica que el historial conserva solo C, que la outbox y los recibos siguen vacíos y que el contador de escrituras de SQLite permanece idéntico. [target.rs:110](C:/Users/Salva/Desktop/git/nasa.spaceapps/crates/store/src/pulse/target.rs:110) · [history.rs:67](C:/Users/Salva/Desktop/git/nasa.spaceapps/crates/store/src/pulse_tests/history.rs:67)
+- **Después de que llega el antecesor**, la acción antigua expira. Una corrección preparada de nuevo se guarda con raíz A, coincide con el único punto efectivo del historial y genera una salida y un recibo. [history.rs:98](C:/Users/Salva/Desktop/git/nasa.spaceapps/crates/store/src/pulse_tests/history.rs:98)
+- **El reintento tras un commit conserva su garantía.** La búsqueda del recibo sigue precediendo a la revalidación de la raíz dentro de la transacción. [pulse.rs:217](C:/Users/Salva/Desktop/git/nasa.spaceapps/crates/store/src/pulse.rs:217)
+
+Ejecuté **11 pruebas de pulso en memoria** con el binario existente de `pulsys-store`: **11 aprobadas, 0 fallidas**, incluida la nueva regresión. Claude reportó core 86/86, store 70/70, api 9/9 + 1/1 y Clippy limpio. Revisión en solo lectura.

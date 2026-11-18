@@ -1,5 +1,5 @@
 //! Tipos de entrada y salida para la interfaz.
-use merken_core::{
+use pulsys_core::{
     catalog::{BodyZone, Indicator},
     evaluate::{Evaluation, Overall, Status},
     plausibility::PlausibilityWarning,

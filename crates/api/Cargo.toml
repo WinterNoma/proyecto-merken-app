@@ -1,0 +1,28 @@
+[package]
+name = "pulsys-api"
+description = "Fachada Rust de Pulsys"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pulsys-core.workspace = true
+pulsys-store.workspace = true
+time.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true
+serde_json.workspace = true
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+too_many_lines = "deny"
+too_many_arguments = "deny"
+excessive_nesting = "deny"

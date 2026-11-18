@@ -6,7 +6,7 @@
 //! `records`, `events`, `evaluations` ni `outbox`, ni entra en `clear_demo`.
 
 use crate::{Store, StoreError};
-use merken_core::{catalog::Indicator, time::Timestamp};
+use pulsys_core::{catalog::Indicator, time::Timestamp};
 use rusqlite::{OptionalExtension, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -843,7 +843,7 @@ mod tests {
         Scenario,
         api::{ListRecordsInput, LogRecordInput},
     };
-    use merken_core::catalog::Indicator;
+    use pulsys_core::catalog::Indicator;
     use rusqlite::Connection;
     use serde_json::json;
 
@@ -2012,7 +2012,7 @@ mod tests {
     impl TempDbPath {
         fn new(name: &str) -> Self {
             let path = std::env::temp_dir().join(format!(
-                "merken-telemetry-{name}-{}-{:?}.sqlite3",
+                "pulsys-telemetry-{name}-{}-{:?}.sqlite3",
                 std::process::id(),
                 std::thread::current().id()
             ));
@@ -2191,14 +2191,14 @@ mod tests {
             .unwrap();
         }
 
-        // Primera apertura: sube a v5 y conserva los datos v3.
+        // Primera apertura: sube a la versión actual y conserva los datos v3.
         {
             let mut store = Store::open(&db.0).unwrap();
             let ver: i64 = store
                 .conn
                 .pragma_query_value(None, "user_version", |r| r.get(0))
                 .unwrap();
-            assert_eq!(ver, 5);
+            assert_eq!(ver, crate::SCHEMA_VERSION);
             let rec_triggers: i64 = store
                 .conn
                 .pragma_query_value(None, "recursive_triggers", |r| r.get(0))
@@ -2229,14 +2229,14 @@ mod tests {
                 .unwrap();
         }
 
-        // Segunda apertura: idempotente y mantiene tanto v3 como v5.
+        // Segunda apertura: conserva los datos anteriores y los añadidos tras migrar.
         {
             let store = Store::open(&db.0).unwrap();
             let ver: i64 = store
                 .conn
                 .pragma_query_value(None, "user_version", |r| r.get(0))
                 .unwrap();
-            assert_eq!(ver, 5);
+            assert_eq!(ver, crate::SCHEMA_VERSION);
             let rec_triggers: i64 = store
                 .conn
                 .pragma_query_value(None, "recursive_triggers", |r| r.get(0))
@@ -2255,10 +2255,11 @@ mod tests {
             assert!(store.verify_telemetry(None).unwrap().ok);
         }
 
-        // Versión futura (6) rechazada con invalid_schema.
+        // Versión futura rechazada con invalid_schema.
         {
             let conn = Connection::open(&db.0).unwrap();
-            conn.pragma_update(None, "user_version", 6).unwrap();
+            conn.pragma_update(None, "user_version", crate::SCHEMA_VERSION + 1)
+                .unwrap();
         }
         let err = match Store::open(&db.0) {
             Ok(_) => panic!("expected unsupported schema version error"),
@@ -2328,14 +2329,14 @@ mod tests {
             );
         }
 
-        // Primera apertura: migra v4 antigua -> v5 y rellena telemetry_heads.
+        // Primera apertura: migra desde v4 y rellena telemetry_heads.
         {
             let mut store = Store::open(&db.0).unwrap();
             let ver: i64 = store
                 .conn
                 .pragma_query_value(None, "user_version", |r| r.get(0))
                 .unwrap();
-            assert_eq!(ver, 5);
+            assert_eq!(ver, crate::SCHEMA_VERSION);
 
             let heads = load_telemetry_heads(&store.conn, None).unwrap();
             assert_eq!(heads.len(), 3);
@@ -2414,7 +2415,7 @@ mod tests {
                 .conn
                 .pragma_query_value(None, "user_version", |r| r.get(0))
                 .unwrap();
-            assert_eq!(ver, 5);
+            assert_eq!(ver, crate::SCHEMA_VERSION);
             assert_eq!(
                 store.verify_telemetry(None).unwrap(),
                 VerifyTelemetryResult {
@@ -2461,7 +2462,7 @@ mod tests {
                 .conn
                 .pragma_query_value(None, "user_version", |r| r.get(0))
                 .unwrap();
-            assert_eq!(ver, 5);
+            assert_eq!(ver, crate::SCHEMA_VERSION);
             assert!(store.verify_telemetry(None).unwrap().ok);
 
             // Nuevo trigger BEFORE INSERT bloquea REPLACE incluso con recursive_triggers = 0.
@@ -2559,7 +2560,7 @@ mod tests {
             .conn
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(ver, 5);
+        assert_eq!(ver, crate::SCHEMA_VERSION);
 
         let heads = load_telemetry_heads(&store.conn, None).unwrap();
         let head = &heads[&("a1".to_owned(), "heart_rate".to_owned())];
