@@ -927,13 +927,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ZoneSnapshot dco_decode_zone_snapshot(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return ZoneSnapshot(
       evaluatedAtMs: dco_decode_CastedPrimitive_i_64(arr[0]),
       isDemo: dco_decode_bool(arr[1]),
-      zones: dco_decode_list_zone_state(arr[2]),
-      pulse: dco_decode_pulse_evaluation(arr[3]),
+      isStoreEmpty: dco_decode_bool(arr[2]),
+      zones: dco_decode_list_zone_state(arr[3]),
+      pulse: dco_decode_pulse_evaluation(arr[4]),
     );
   }
 
@@ -1581,11 +1582,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_evaluatedAtMs = sse_decode_CastedPrimitive_i_64(deserializer);
     var var_isDemo = sse_decode_bool(deserializer);
+    var var_isStoreEmpty = sse_decode_bool(deserializer);
     var var_zones = sse_decode_list_zone_state(deserializer);
     var var_pulse = sse_decode_pulse_evaluation(deserializer);
     return ZoneSnapshot(
       evaluatedAtMs: var_evaluatedAtMs,
       isDemo: var_isDemo,
+      isStoreEmpty: var_isStoreEmpty,
       zones: var_zones,
       pulse: var_pulse,
     );
@@ -2160,6 +2163,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_CastedPrimitive_i_64(self.evaluatedAtMs, serializer);
     sse_encode_bool(self.isDemo, serializer);
+    sse_encode_bool(self.isStoreEmpty, serializer);
     sse_encode_list_zone_state(self.zones, serializer);
     sse_encode_pulse_evaluation(self.pulse, serializer);
   }

@@ -2,6 +2,126 @@
   "@@locale": "en",
   "appTitle": "Pulsys",
   "wordmark": "PULSYS",
+  "navHistory": "History",
+  "navBody": "Body",
+  "navToday": "Today",
+  "navRecommendations": "Recommendations",
+  "navNeedHelp": "Need help",
+  "navHelpStage4": "Help request recording will be available in stage 4.",
+  "navLoadingStatus": "Loading current status…",
+  "navRetryStatus": "Status could not be refreshed. Retry",
+  "navPulseStatus": "Pulse · {status}",
+  "@navPulseStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "navZoneStatus": "{zone} · {status}",
+  "@navZoneStatus": {
+    "placeholders": {
+      "zone": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "navPressure": "Pressure",
+  "navOxygen": "SpO₂",
+  "navMood": "Mood",
+  "navTemperature": "Temperature",
+  "navGlucose": "Glucose",
+  "navSleep": "Sleep",
+  "navNutrition": "Nutrition",
+  "navRadiation": "Radiation",
+  "navDistance": "Distance",
+  "navSynchronization": "Synchronization",
+  "navContextValue": "{name} · No data",
+  "@navContextValue": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "navComingSoon": "Coming soon",
+  "navHoldToTalk": "Hold to talk",
+  "navAssistantHint": "Tell me what happened…",
+  "navContactFlightSurgeons": "Contact flight surgeons.",
+  "navGuidanceDisclaimer": "This is guidance, not a diagnosis.",
+  "navSuggestionComingSoon": "Suggested next step · Coming soon",
+  "historyRange6Hours": "6 h",
+  "historyRange24Hours": "24 h",
+  "historyRange7Days": "7 days",
+  "historyIndicators": "Indicators",
+  "historyExplainComingSoon": "Explain · Coming soon",
+  "historyEscalation": "Escalation · {level}",
+  "@historyEscalation": {
+    "placeholders": {
+      "level": {
+        "type": "String"
+      }
+    }
+  },
+  "historyContinueReading": "Continue reading",
+  "historySelfCare": "Self-care",
+  "historyFlagForGround": "Flag for Ground",
+  "historyUrgent": "Urgent",
+  "historySyncUnavailable": "Synchronization · No data",
+  "navBodyRightMarker": "R",
+  "navBodyLeftMarker": "L",
+  "navBodyRightLabel": "Astronaut’s right",
+  "navBodyLeftLabel": "Astronaut’s left",
+  "historyTrendTitle": "Pulse trend",
+  "historyDemoNotice": "Includes demo readings.",
+  "historyUnavailable": "Pulse history could not be loaded.",
+  "historySampleSummary": "Showing {shown} of the latest {total} readings.",
+  "@historySampleSummary": {
+    "placeholders": {
+      "shown": {
+        "type": "int",
+        "format": "decimalPattern"
+      },
+      "total": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "historyPlotRange": "Scale {minimum}–{maximum} bpm",
+  "@historyPlotRange": {
+    "placeholders": {
+      "minimum": {
+        "type": "String"
+      },
+      "maximum": {
+        "type": "String"
+      }
+    }
+  },
+  "historyTimeAxis": "Time (UTC)",
+  "historyReadings": "Readings",
+  "historyMeasuredColumn": "Measured (UTC)",
+  "historyPulseColumn": "Pulse",
+  "historyMeasuredLabel": "Measured {time} UTC",
+  "@historyMeasuredLabel": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "historyPulseLabel": "Pulse {bpm} beats per minute",
+  "@historyPulseLabel": {
+    "placeholders": {
+      "bpm": {
+        "type": "String"
+      }
+    }
+  },
   "pulseScreenTitle": "Pulse",
   "pulseSectionSubtitle": "Record a heart rate reading in bpm. Saved on this device.",
   "pulseBpmLabel": "Pulse (bpm)",
@@ -123,5 +243,260 @@
       }
     }
   },
-  "pulseLocalProfile": "Local profile"
+  "pulseLocalProfile": "Local profile",
+  "bodyLegendTitle": "Zone status",
+  "bodyTitle": "Body zones",
+  "@bodyTitle": {
+    "description": "Título de pantalla."
+  },
+  "bodyFront": "Front view",
+  "@bodyFront": {
+    "description": "Encabezado de la figura anatómica frontal."
+  },
+  "bodyList": "Zone list",
+  "@bodyList": {
+    "description": "Encabezado de la lista equivalente."
+  },
+  "bodyShowList": "Show zone list",
+  "@bodyShowList": {
+    "description": "Abre la lista desde la figura."
+  },
+  "bodyShowFigure": "Show body figure",
+  "@bodyShowFigure": {
+    "description": "Vuelve a la figura desde la lista."
+  },
+  "bodyDemo": "DEMO",
+  "@bodyDemo": {
+    "description": "Marca datos simulados en pantalla y ficha."
+  },
+  "bodyLoading": "Loading body zones…",
+  "@bodyLoading": {
+    "description": "Lectura de zonas en curso."
+  },
+  "bodyLoadError": "Body zones could not be loaded.",
+  "@bodyLoadError": {
+    "description": "Fallo de lectura de las zonas."
+  },
+  "bodyRetry": "Try again",
+  "@bodyRetry": {
+    "description": "Reintenta la consulta."
+  },
+  "bodyClose": "Close",
+  "@bodyClose": {
+    "description": "Cierra la ficha de zona."
+  },
+  "bodyStable": "Stable",
+  "@bodyStable": {
+    "description": "Estado estable devuelto por Rust."
+  },
+  "bodyChange": "Change",
+  "@bodyChange": {
+    "description": "Cambio devuelto por Rust."
+  },
+  "bodyAlarm": "Alarm",
+  "@bodyAlarm": {
+    "description": "Alarma devuelta por Rust."
+  },
+  "bodyNotEvaluated": "Not evaluated",
+  "@bodyNotEvaluated": {
+    "description": "Estado sin evaluar devuelto por Rust."
+  },
+  "bodyStatusUnavailable": "Status unavailable",
+  "@bodyStatusUnavailable": {
+    "description": "La respuesta no contiene esta zona."
+  },
+  "bodySnapshotTime": "Snapshot time (UTC)",
+  "@bodySnapshotTime": {
+    "description": "Fecha del resumen completo."
+  },
+  "bodyEvaluation": "Symptom evaluation",
+  "@bodyEvaluation": {
+    "description": "Encabezado de cada evaluación individual."
+  },
+  "bodyReason": "Reason",
+  "@bodyReason": {
+    "description": "Motivo devuelto en la evaluación."
+  },
+  "bodyNoData": "No data",
+  "@bodyNoData": {
+    "description": "Motivo no_data."
+  },
+  "bodyStale": "Stale reading",
+  "@bodyStale": {
+    "description": "Motivo stale."
+  },
+  "bodyTooFewData": "Insufficient history",
+  "@bodyTooFewData": {
+    "description": "Motivo too_few_data."
+  },
+  "bodyNotApplicable": "Context only",
+  "@bodyNotApplicable": {
+    "description": "Motivo not_applicable."
+  },
+  "bodyMissing": "Not provided",
+  "@bodyMissing": {
+    "description": "El campo no aparece en la respuesta."
+  },
+  "bodyEvaluationTime": "Evaluation time (UTC)",
+  "@bodyEvaluationTime": {
+    "description": "Fecha de la evaluación individual."
+  },
+  "bodySourceKind": "Source type",
+  "@bodySourceKind": {
+    "description": "Tipo de procedencia de la evaluación."
+  },
+  "bodySourceRef": "Source reference",
+  "@bodySourceRef": {
+    "description": "Referencia de la fuente devuelta por el núcleo."
+  },
+  "bodyPublished": "Published source",
+  "@bodyPublished": {
+    "description": "Tipo de fuente published."
+  },
+  "bodyApprovedProtocol": "Approved protocol",
+  "@bodyApprovedProtocol": {
+    "description": "Tipo de fuente approved_protocol."
+  },
+  "bodyDemoHeuristic": "Demo rule, not medical advice.",
+  "@bodyDemoHeuristic": {
+    "description": "Tipo de fuente demo_heuristic."
+  },
+  "bodyRuleId": "Rule ID",
+  "@bodyRuleId": {
+    "description": "Identificador de regla sin traducir."
+  },
+  "bodyRuleVersion": "Rule version",
+  "@bodyRuleVersion": {
+    "description": "Versión de la regla sin traducir."
+  },
+  "bodyNoEvidence": "No symptom evaluation was provided for this zone.",
+  "@bodyNoEvidence": {
+    "description": "La zona carece de evaluaciones individuales y sus metadatos."
+  },
+  "bodyHead": "Head",
+  "@bodyHead": {
+    "description": "Nombre anatómico de head."
+  },
+  "bodyNeck": "Neck",
+  "@bodyNeck": {
+    "description": "Nombre anatómico de neck."
+  },
+  "bodyChest": "Chest",
+  "@bodyChest": {
+    "description": "Nombre anatómico de chest."
+  },
+  "bodyAbdomen": "Abdomen",
+  "@bodyAbdomen": {
+    "description": "Nombre anatómico de abdomen."
+  },
+  "bodyRightArm": "Right arm",
+  "@bodyRightArm": {
+    "description": "Nombre anatómico de right_arm."
+  },
+  "bodyLeftArm": "Left arm",
+  "@bodyLeftArm": {
+    "description": "Nombre anatómico de left_arm."
+  },
+  "bodyRightHand": "Right hand",
+  "@bodyRightHand": {
+    "description": "Nombre anatómico de right_hand."
+  },
+  "bodyLeftHand": "Left hand",
+  "@bodyLeftHand": {
+    "description": "Nombre anatómico de left_hand."
+  },
+  "bodyRightLeg": "Right leg",
+  "@bodyRightLeg": {
+    "description": "Nombre anatómico de right_leg."
+  },
+  "bodyLeftLeg": "Left leg",
+  "@bodyLeftLeg": {
+    "description": "Nombre anatómico de left_leg."
+  },
+  "bodyRightFoot": "Right foot",
+  "@bodyRightFoot": {
+    "description": "Nombre anatómico de right_foot."
+  },
+  "bodyLeftFoot": "Left foot",
+  "@bodyLeftFoot": {
+    "description": "Nombre anatómico de left_foot."
+  },
+  "bodyBack": "Back",
+  "@bodyBack": {
+    "description": "Nombre anatómico de back."
+  },
+  "bodyOther": "Other",
+  "@bodyOther": {
+    "description": "Nombre anatómico de other."
+  },
+  "navEvaluation": "Evaluation",
+  "navReadings": "Readings",
+  "navPreviousResult": "{result} could not be refreshed. Previous data from {time}.",
+  "@navPreviousResult": {
+    "placeholders": {
+      "result": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "navResultFailed": "{result} could not be loaded.",
+  "@navResultFailed": {
+    "placeholders": {
+      "result": {
+        "type": "String"
+      }
+    }
+  },
+  "navResultLoading": "{result} is loading.",
+  "@navResultLoading": {
+    "placeholders": {
+      "result": {
+        "type": "String"
+      }
+    }
+  },
+  "navEvaluationNotForReading": "Evaluation unavailable for this reading.",
+  "navReason": "Reason and evaluation",
+  "navSources": "Sources",
+  "navMeasurements": "Measurements used",
+  "navEvidenceRecords": "Evaluation record IDs: {ids}",
+  "@navEvidenceRecords": {
+    "placeholders": {
+      "ids": {
+        "type": "String"
+      }
+    }
+  },
+  "navLeisureComingSoon": "Leisure preference · Coming soon",
+  "navExerciseComingSoon": "Mission exercise guidelines · Coming soon",
+  "historyPersistentAlert": "Persistent pulse change",
+  "historyRangeEmpty": "No pulse readings in the selected range ({range}).",
+  "@historyRangeEmpty": {
+    "placeholders": {
+      "range": {
+        "type": "String"
+      }
+    }
+  },
+  "historyDemoUnavailable": "DEMO scenarios are not available in this version.",
+  "navEvaluatedRecord": "Evaluated record: {id}",
+  "@navEvaluatedRecord": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "navEvidenceEvents": "Evaluation event IDs: {ids}",
+  "@navEvidenceEvents": {
+    "placeholders": {
+      "ids": {
+        "type": "String"
+      }
+    }
+  },
+  "navLatestPulse": "Latest pulse reading"
 }

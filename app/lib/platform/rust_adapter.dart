@@ -235,6 +235,7 @@ final class RustAdapter implements PulsysApi {
     return ZoneSnapshot(
       evaluatedAtUtc: _utc(snapshot.evaluatedAtMs),
       isDemo: snapshot.isDemo,
+      isStoreEmpty: snapshot.isStoreEmpty,
       zones: snapshot.zones.map(_zone).toList(),
       pulse: _evaluation(snapshot.pulse),
     );

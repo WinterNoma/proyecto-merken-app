@@ -533,12 +533,14 @@ enum TrendDirection { up, down }
 class ZoneSnapshot {
   final int evaluatedAtMs;
   final bool isDemo;
+  final bool isStoreEmpty;
   final List<ZoneState> zones;
   final PulseEvaluation pulse;
 
   const ZoneSnapshot({
     required this.evaluatedAtMs,
     required this.isDemo,
+    required this.isStoreEmpty,
     required this.zones,
     required this.pulse,
   });
@@ -547,6 +549,7 @@ class ZoneSnapshot {
   int get hashCode =>
       evaluatedAtMs.hashCode ^
       isDemo.hashCode ^
+      isStoreEmpty.hashCode ^
       zones.hashCode ^
       pulse.hashCode;
 
@@ -557,6 +560,7 @@ class ZoneSnapshot {
           runtimeType == other.runtimeType &&
           evaluatedAtMs == other.evaluatedAtMs &&
           isDemo == other.isDemo &&
+          isStoreEmpty == other.isStoreEmpty &&
           zones == other.zones &&
           pulse == other.pulse;
 }

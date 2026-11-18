@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:pulsys/app.dart';
 import 'package:pulsys/platform/pulsys_api.dart';
 
 import '../fakes/fake_pulsys_api.dart';
+import '../support/pulse_app.dart';
 
 Future<void> _scrollAndTap(WidgetTester tester, Finder finder) async {
   await tester.ensureVisible(finder);
@@ -25,7 +25,7 @@ void main() {
   ) async {
     final api = FakePulsysApi(clock: () => DateTime.utc(2026, 11, 18, 14, 30));
 
-    await tester.pumpWidget(PulsysApp(api: api));
+    await tester.pumpWidget(pulseTestApp(api));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(bpmFieldKey), '72');
@@ -59,7 +59,7 @@ void main() {
         ),
       ]);
 
-      await tester.pumpWidget(PulsysApp(api: api));
+      await tester.pumpWidget(pulseTestApp(api));
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byKey(bpmFieldKey), '201');
@@ -116,7 +116,7 @@ void main() {
       saveBeforeThrowing: true,
     );
 
-    await tester.pumpWidget(PulsysApp(api: api));
+    await tester.pumpWidget(pulseTestApp(api));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(bpmFieldKey), '68');
@@ -144,7 +144,7 @@ void main() {
   ) async {
     final api = FakePulsysApi();
 
-    await tester.pumpWidget(PulsysApp(api: api));
+    await tester.pumpWidget(pulseTestApp(api));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(saveButtonKey));
@@ -186,7 +186,7 @@ void main() {
     final gate = Completer<void>();
     final api = FakePulsysApi()..confirmGate = gate;
 
-    await tester.pumpWidget(PulsysApp(api: api));
+    await tester.pumpWidget(pulseTestApp(api));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(bpmFieldKey), '70');
@@ -212,7 +212,7 @@ void main() {
     final semantics = tester.ensureSemantics();
     try {
       final api = FakePulsysApi();
-      await tester.pumpWidget(PulsysApp(api: api));
+      await tester.pumpWidget(pulseTestApp(api));
       await tester.pumpAndSettle();
 
       expect(find.bySemanticsLabel('Pulse (bpm)'), findsOneWidget);
@@ -254,7 +254,7 @@ void main() {
       PulseWarning(code: PulseWarning.unusualValue, ruleId: 'plaus.heart_rate'),
     ]);
 
-    await tester.pumpWidget(PulsysApp(api: api));
+    await tester.pumpWidget(pulseTestApp(api));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
 

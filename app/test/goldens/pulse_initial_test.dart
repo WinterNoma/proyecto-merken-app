@@ -6,10 +6,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:pulsys/app.dart';
 import 'package:pulsys/features/pulse/pulse_screen.dart';
 
 import '../fakes/fake_pulsys_api.dart';
+import '../support/pulse_app.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -44,10 +44,7 @@ void main() {
     await tester.pumpWidget(
       MediaQuery(
         data: const MediaQueryData(disableAnimations: true),
-        child: RepaintBoundary(
-          key: boundary,
-          child: PulsysApp(api: api),
-        ),
+        child: RepaintBoundary(key: boundary, child: pulseTestApp(api)),
       ),
     );
     await tester.pumpAndSettle();
@@ -89,10 +86,7 @@ void main() {
     await tester.pumpWidget(
       MediaQuery(
         data: const MediaQueryData(disableAnimations: true),
-        child: RepaintBoundary(
-          key: boundary,
-          child: PulsysApp(api: api),
-        ),
+        child: RepaintBoundary(key: boundary, child: pulseTestApp(api)),
       ),
     );
     await tester.pumpAndSettle();

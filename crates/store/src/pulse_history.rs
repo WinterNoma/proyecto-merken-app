@@ -2,11 +2,13 @@ use crate::{
     Store, StoreError,
     pulse::PulsePoint,
     record_graph::{correction_root, winning_record},
-    records::{DEFAULT_LIMIT, MAX_LIMIT, validated_record},
+    records::{DEFAULT_LIMIT, validated_record},
 };
 use pulsys_core::{catalog::Indicator, measurement::Measurement, rules, time::Timestamp};
 use rusqlite::{Connection, Row, params};
 use std::collections::{HashMap, hash_map::Entry};
+
+const MAX_PULSE_HISTORY_LIMIT: usize = 2_000;
 
 const PULSE_CANDIDATES: &str = "
 SELECT record_id, replaces, value_json, unit, source, measured_at, logged_at, is_demo
@@ -23,7 +25,9 @@ impl Store {
         to: Option<Timestamp>,
         limit: Option<usize>,
     ) -> Result<Vec<PulsePoint>, StoreError> {
-        let limit = limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
+        let limit = limit
+            .unwrap_or(DEFAULT_LIMIT)
+            .clamp(1, MAX_PULSE_HISTORY_LIMIT);
         let tx = self.conn.unchecked_transaction()?;
         let mut statement = tx.prepare_cached(PULSE_CANDIDATES)?;
         let mut rows = statement.query(params![

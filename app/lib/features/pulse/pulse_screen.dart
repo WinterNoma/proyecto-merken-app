@@ -153,68 +153,71 @@ class _PulseScreenState extends State<PulseScreen> {
         final snapshot = controller.zoneSnapshot;
         final isDemo = snapshot?.isDemo ?? false;
 
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(l10n.wordmark),
-            actions: <Widget>[
-              if (isDemo)
-                Padding(
-                  padding: const EdgeInsets.only(right: PulsysSpacing.s4),
-                  child: _TagChip(label: l10n.pulseDemoTag),
-                ),
-            ],
-          ),
-          body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(PulsysSpacing.s4),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 640),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      Semantics(
-                        header: true,
-                        child: Text(
-                          l10n.pulseScreenTitle,
-                          style: PulsysTypography.sectionTitle,
+        return PopScope<void>(
+          canPop: controller.canLeaveForm,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(l10n.wordmark),
+              actions: <Widget>[
+                if (isDemo)
+                  Padding(
+                    padding: const EdgeInsets.only(right: PulsysSpacing.s4),
+                    child: _TagChip(label: l10n.pulseDemoTag),
+                  ),
+              ],
+            ),
+            body: SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(PulsysSpacing.s4),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 640),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        Semantics(
+                          header: true,
+                          child: Text(
+                            l10n.pulseScreenTitle,
+                            style: PulsysTypography.sectionTitle,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: PulsysSpacing.s1),
-                      Text(
-                        l10n.pulseSectionSubtitle,
-                        style: PulsysTypography.caption,
-                      ),
-                      const SizedBox(height: PulsysSpacing.s4),
-                      if (snapshot != null) ...<Widget>[
-                        _PulseStatusCard(
-                          snapshot: snapshot,
-                          isStale: controller.zonesLoadFailed,
+                        const SizedBox(height: PulsysSpacing.s1),
+                        Text(
+                          l10n.pulseSectionSubtitle,
+                          style: PulsysTypography.caption,
                         ),
                         const SizedBox(height: PulsysSpacing.s4),
-                      ],
-                      if (controller.zonesLoadFailed)
-                        _RetryNotice(
-                          key: const ValueKey<String>('pulse-status-retry'),
-                          message: l10n.pulseStatusUnavailable,
-                          action: l10n.pulseStatusRetry,
-                          onRetry: controller.refreshZones,
+                        if (snapshot != null) ...<Widget>[
+                          _PulseStatusCard(
+                            snapshot: snapshot,
+                            isStale: controller.zonesLoadFailed,
+                          ),
+                          const SizedBox(height: PulsysSpacing.s4),
+                        ],
+                        if (controller.zonesLoadFailed)
+                          _RetryNotice(
+                            key: const ValueKey<String>('pulse-status-retry'),
+                            message: l10n.pulseStatusUnavailable,
+                            action: l10n.pulseStatusRetry,
+                            onRetry: controller.refreshZones,
+                          ),
+                        if (controller.recoveryError != null)
+                          _PulseRecoveryNotice(controller: controller),
+                        _PulseFormCard(
+                          controller: controller,
+                          bpmController: _bpmController,
+                          timeController: _timeController,
+                          noteController: _noteController,
+                          saveFocusNode: _saveFocusNode,
+                          isDemo: isDemo,
                         ),
-                      if (controller.recoveryError != null)
-                        _PulseRecoveryNotice(controller: controller),
-                      _PulseFormCard(
-                        controller: controller,
-                        bpmController: _bpmController,
-                        timeController: _timeController,
-                        noteController: _noteController,
-                        saveFocusNode: _saveFocusNode,
-                        isDemo: isDemo,
-                      ),
-                      const SizedBox(height: PulsysSpacing.s4),
-                      _PulseFeedbackRegion(controller: controller),
-                      const SizedBox(height: PulsysSpacing.s5),
-                      _PulseHistorySection(controller: controller),
-                    ],
+                        const SizedBox(height: PulsysSpacing.s4),
+                        _PulseFeedbackRegion(controller: controller),
+                        const SizedBox(height: PulsysSpacing.s5),
+                        _PulseHistorySection(controller: controller),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -284,7 +287,13 @@ class _PulseStatusCard extends StatelessWidget {
             ),
             const SizedBox(height: PulsysSpacing.s2),
             Text(
-              l10n.zonesSummaryLabel(snapshot.zones.length),
+              l10n.zonesSummaryLabel(
+                snapshot.zones
+                    .where(
+                      (zone) => zone.status != EvaluationStatus.notEvaluated,
+                    )
+                    .length,
+              ),
               style: PulsysTypography.caption,
             ),
           ],

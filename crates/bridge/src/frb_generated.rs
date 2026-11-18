@@ -1069,11 +1069,13 @@ impl SseDecode for crate::api::ZoneSnapshot {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_evaluatedAtMs = <i64>::sse_decode(deserializer);
         let mut var_isDemo = <bool>::sse_decode(deserializer);
+        let mut var_isStoreEmpty = <bool>::sse_decode(deserializer);
         let mut var_zones = <Vec<crate::api::ZoneState>>::sse_decode(deserializer);
         let mut var_pulse = <crate::api::PulseEvaluation>::sse_decode(deserializer);
         return crate::api::ZoneSnapshot {
             evaluated_at_ms: var_evaluatedAtMs,
             is_demo: var_isDemo,
+            is_store_empty: var_isStoreEmpty,
             zones: var_zones,
             pulse: var_pulse,
         };
@@ -1609,6 +1611,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::ZoneSnapshot {
         [
             self.evaluated_at_ms.into_into_dart().into_dart(),
             self.is_demo.into_into_dart().into_dart(),
+            self.is_store_empty.into_into_dart().into_dart(),
             self.zones.into_into_dart().into_dart(),
             self.pulse.into_into_dart().into_dart(),
         ]
@@ -2182,6 +2185,7 @@ impl SseEncode for crate::api::ZoneSnapshot {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <i64>::sse_encode(self.evaluated_at_ms, serializer);
         <bool>::sse_encode(self.is_demo, serializer);
+        <bool>::sse_encode(self.is_store_empty, serializer);
         <Vec<crate::api::ZoneState>>::sse_encode(self.zones, serializer);
         <crate::api::PulseEvaluation>::sse_encode(self.pulse, serializer);
     }

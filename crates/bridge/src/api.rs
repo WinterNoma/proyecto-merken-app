@@ -222,6 +222,7 @@ pub struct PulseEvaluation {
 pub struct ZoneSnapshot {
     pub evaluated_at_ms: i64,
     pub is_demo: bool,
+    pub is_store_empty: bool,
     pub zones: Vec<ZoneState>,
     pub pulse: PulseEvaluation,
 }

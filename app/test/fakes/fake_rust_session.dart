@@ -110,11 +110,12 @@ final class FakeRustSession implements RustSession {
       .toList();
 
   @override
-  Future<ffi.ZoneSnapshot> zoneStatus() async => const ffi.ZoneSnapshot(
+  Future<ffi.ZoneSnapshot> zoneStatus() async => ffi.ZoneSnapshot(
     evaluatedAtMs: 1800000000000,
     isDemo: false,
     zones: <ffi.ZoneState>[],
-    pulse: ffi.PulseEvaluation(
+    isStoreEmpty: store.receipts.isEmpty,
+    pulse: const ffi.PulseEvaluation(
       status: ffi.EvaluationStatus.notEvaluated,
       reason: ffi.NotEvaluatedReason.noData,
       persistent: false,

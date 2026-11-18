@@ -385,6 +385,9 @@ final class PulseEvaluation {
   final int historyCount;
   final int historyNeeded;
   final Bpm? baselineBpm;
+
+  // Rust orders the evaluated record before the antecedents in this evidence.
+  String? get evaluatedRecordId => inputRecordIds.firstOrNull;
 }
 
 @immutable
@@ -392,6 +395,7 @@ final class ZoneSnapshot {
   ZoneSnapshot({
     required DateTime evaluatedAtUtc,
     required this.isDemo,
+    required this.isStoreEmpty,
     required List<ZoneState> zones,
     required this.pulse,
   }) : evaluatedAtUtc = evaluatedAtUtc.toUtc(),
@@ -399,6 +403,7 @@ final class ZoneSnapshot {
 
   final DateTime evaluatedAtUtc;
   final bool isDemo;
+  final bool isStoreEmpty;
   final List<ZoneState> zones;
   final PulseEvaluation pulse;
 }

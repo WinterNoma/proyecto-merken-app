@@ -65,6 +65,7 @@ pub struct PulseEvaluation {
 pub struct ZoneSnapshot {
     pub evaluated_at_ms: i64,
     pub is_demo: bool,
+    pub is_store_empty: bool,
     pub zones: Vec<ZoneState>,
     pub pulse: PulseEvaluation,
 }
@@ -145,6 +146,7 @@ pub fn zone_status(app: &mut App) -> Result<ZoneSnapshot, ApiError> {
     Ok(ZoneSnapshot {
         evaluated_at_ms: status.evaluated_at.millis(),
         is_demo: status.is_demo,
+        is_store_empty: app.store.is_empty_for_demo()?,
         zones,
         pulse: PulseEvaluation::from_evaluation(pulse),
     })

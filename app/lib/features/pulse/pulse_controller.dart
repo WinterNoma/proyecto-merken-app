@@ -79,11 +79,9 @@ final class PulseController extends ChangeNotifier {
   String get noteText => _noteText;
   String? get replaces => _replaces;
   ApiError? get recoveryError => _recoveryError;
-  bool get canEdit =>
-      !isSubmitting &&
-      !_recovering &&
-      _recoveryError == null &&
-      _phase != PulseFormPhase.confirming;
+  bool get canLeaveForm =>
+      !isSubmitting && !_recovering && _phase != PulseFormPhase.confirming;
+  bool get canEdit => canLeaveForm && _recoveryError == null;
   bool get canSubmit => canEdit && _phase != PulseFormPhase.saved;
   bool get canStartNewReading => canEdit && _pendingPrepared == null;
 

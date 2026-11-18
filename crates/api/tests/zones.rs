@@ -134,10 +134,43 @@ fn zones_project_symptom_evidence_and_independent_pulse_evaluation() -> Result<(
         ZoneSnapshot {
             evaluated_at_ms: NOW_MS,
             is_demo: false,
+            is_store_empty: false,
             zones: expected_zones(vec![latest, older]),
             pulse: expected_pulse(pulse_ids),
         },
     );
     close_store(app)?;
+    Ok(())
+}
+
+#[test]
+fn store_emptiness_includes_symptoms_and_non_pulse_records() -> Result<(), Box<dyn Error>> {
+    for (indicator, value) in [
+        (Indicator::Symptom, json!({"body_zone": "head", "score": 3})),
+        (Indicator::BodyTemperature, json!({"celsius": 36.8})),
+    ] {
+        let dir = tempfile::tempdir()?;
+        let mut app = open_store(
+            dir.path(),
+            APP_VERSION.into(),
+            Box::new(|| Ok(Timestamp::from_millis(NOW_MS))),
+        )?;
+        assert!(zone_status(&mut app)?.is_store_empty);
+        close_store(app)?;
+        let mut store = Store::open(&dir.path().join("pulsys.sqlite3"))?;
+        log_fixture(&mut store, indicator, value, 0)?;
+        store.close()?;
+        app = open_store(
+            dir.path(),
+            APP_VERSION.into(),
+            Box::new(|| Ok(Timestamp::from_millis(NOW_MS))),
+        )?;
+        assert!(!zone_status(&mut app)?.is_store_empty);
+        assert!(
+            pulsys_api::effective_pulse_history(&app, pulsys_api::HistoryQuery::default())?
+                .is_empty()
+        );
+        close_store(app)?;
+    }
     Ok(())
 }

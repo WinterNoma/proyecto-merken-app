@@ -156,5 +156,18 @@ fn history_limit_stops_candidate_validation() -> TestResult {
     let result = store.effective_pulse_history(None, None, Some(1))?;
     assert_eq!(winner_ids(&result), [("pulse-2004", "pulse-2004")]);
     assert_eq!(validations.load(Ordering::Relaxed), 1);
+
+    validations.store(0, Ordering::Relaxed);
+    let result = store.effective_pulse_history(None, None, Some(2_001))?;
+    assert_eq!(result.len(), 2_000);
+    assert_eq!(
+        result.first().map(|point| point.record_id.as_str()),
+        Some("pulse-2004"),
+    );
+    assert_eq!(
+        result.last().map(|point| point.record_id.as_str()),
+        Some("pulse-5"),
+    );
+    assert_eq!(validations.load(Ordering::Relaxed), 2_000);
     Ok(())
 }

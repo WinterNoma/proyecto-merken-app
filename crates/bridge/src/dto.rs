@@ -92,6 +92,7 @@ impl From<facade::ZoneSnapshot> for ZoneSnapshot {
         Self {
             evaluated_at_ms: snapshot.evaluated_at_ms,
             is_demo: snapshot.is_demo,
+            is_store_empty: snapshot.is_store_empty,
             zones: snapshot.zones.into_iter().map(ZoneState::from).collect(),
             pulse: snapshot.pulse.into(),
         }

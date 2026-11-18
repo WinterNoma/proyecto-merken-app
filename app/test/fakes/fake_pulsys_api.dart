@@ -32,6 +32,7 @@ final class FakePulsysApi implements PulsysApi {
     this.storeId = 'fake-store-1',
     this.astronautId,
     this.latency,
+    this.hasOtherRecords = false,
   }) : _clock = clock ?? (() => DateTime.utc(2026, 11, 18, 12, 0)),
        _zones = initialZones ?? _defaultZones(clock),
        _pulseEvaluation = initialPulseEvaluation {
@@ -42,6 +43,7 @@ final class FakePulsysApi implements PulsysApi {
   String storeId;
   String? astronautId;
   final Duration? latency;
+  final bool hasOtherRecords;
 
   final List<PulseInput> preparedInputs = <PulseInput>[];
   final List<PreparedPulse> confirmedActions = <PreparedPulse>[];
@@ -64,7 +66,7 @@ final class FakePulsysApi implements PulsysApi {
   final List<PulsePoint> _history = <PulsePoint>[];
   DemoTarget? demoTarget;
   final List<ZoneState> _zones;
-  final PulseEvaluation? _pulseEvaluation;
+  PulseEvaluation? _pulseEvaluation;
   int _nextRecordSeq = 1;
 
   PulseRecovery recovery = const NoPendingPulse();
@@ -114,6 +116,10 @@ final class FakePulsysApi implements PulsysApi {
 
   void enqueueZoneStatusError(ApiError error) {
     _zoneStatusErrors.add(error);
+  }
+
+  void setPulseEvaluation(PulseEvaluation evaluation) {
+    _pulseEvaluation = evaluation;
   }
 
   static List<ZoneState> _defaultZones(DateTime Function()? clock) {
@@ -302,7 +308,7 @@ final class FakePulsysApi implements PulsysApi {
 
     final from = resolved.fromUtc;
     final to = resolved.toUtc;
-    final limit = (resolved.limit ?? 100).clamp(1, 500);
+    final limit = (resolved.limit ?? 100).clamp(1, 2000);
 
     final replacedIds = _history
         .map((PulsePoint p) => p.replaces)
@@ -310,30 +316,30 @@ final class FakePulsysApi implements PulsysApi {
         .toSet();
 
     final filtered =
-        _history
-            .where((PulsePoint p) => !replacedIds.contains(p.recordId))
-            .where((PulsePoint p) {
-              if (from != null && p.measuredAtUtc.isBefore(from)) {
+        _history.indexed
+            .where((entry) => !replacedIds.contains(entry.$2.recordId))
+            .where((entry) {
+              final point = entry.$2;
+              if (from != null && point.measuredAtUtc.isBefore(from)) {
                 return false;
               }
-              if (to != null && p.measuredAtUtc.isAfter(to)) {
+              if (to != null && point.measuredAtUtc.isAfter(to)) {
                 return false;
               }
               return true;
             })
             .toList()
-          ..sort((PulsePoint a, PulsePoint b) {
-            final cmp = b.measuredAtUtc.compareTo(a.measuredAtUtc);
+          ..sort(((int, PulsePoint) a, (int, PulsePoint) b) {
+            final cmp = b.$2.measuredAtUtc.compareTo(a.$2.measuredAtUtc);
             if (cmp != 0) {
               return cmp;
             }
-            return b.recordId.compareTo(a.recordId);
+            return b.$1.compareTo(a.$1);
           });
 
-    if (filtered.length > limit) {
-      return List<PulsePoint>.unmodifiable(filtered.sublist(0, limit));
-    }
-    return List<PulsePoint>.unmodifiable(filtered);
+    return List<PulsePoint>.unmodifiable(
+      filtered.take(limit).map((entry) => entry.$2),
+    );
   }
 
   @override
@@ -351,6 +357,17 @@ final class FakePulsysApi implements PulsysApi {
     return ZoneSnapshot(
       evaluatedAtUtc: now,
       isDemo: demoTarget != null,
+      isStoreEmpty:
+          _history.isEmpty &&
+          !hasOtherRecords &&
+          demoTarget == null &&
+          !_zones.any(
+            (zone) => zone.symptoms.any(
+              (symptom) =>
+                  symptom.inputRecordIds.isNotEmpty ||
+                  symptom.inputEventIds.isNotEmpty,
+            ),
+          ),
       zones: _zones,
       pulse: pulse,
     );

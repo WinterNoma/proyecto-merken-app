@@ -106,6 +106,324 @@ abstract class AppLocalizations {
   /// **'PULSYS'**
   String get wordmark;
 
+  /// No description provided for @navHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get navHistory;
+
+  /// No description provided for @navBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Body'**
+  String get navBody;
+
+  /// No description provided for @navToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get navToday;
+
+  /// No description provided for @navRecommendations.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommendations'**
+  String get navRecommendations;
+
+  /// No description provided for @navNeedHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Need help'**
+  String get navNeedHelp;
+
+  /// No description provided for @navHelpStage4.
+  ///
+  /// In en, this message translates to:
+  /// **'Help request recording will be available in stage 4.'**
+  String get navHelpStage4;
+
+  /// No description provided for @navLoadingStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading current status…'**
+  String get navLoadingStatus;
+
+  /// No description provided for @navRetryStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Status could not be refreshed. Retry'**
+  String get navRetryStatus;
+
+  /// No description provided for @navPulseStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Pulse · {status}'**
+  String navPulseStatus(String status);
+
+  /// No description provided for @navZoneStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'{zone} · {status}'**
+  String navZoneStatus(String zone, String status);
+
+  /// No description provided for @navPressure.
+  ///
+  /// In en, this message translates to:
+  /// **'Pressure'**
+  String get navPressure;
+
+  /// No description provided for @navOxygen.
+  ///
+  /// In en, this message translates to:
+  /// **'SpO₂'**
+  String get navOxygen;
+
+  /// No description provided for @navMood.
+  ///
+  /// In en, this message translates to:
+  /// **'Mood'**
+  String get navMood;
+
+  /// No description provided for @navTemperature.
+  ///
+  /// In en, this message translates to:
+  /// **'Temperature'**
+  String get navTemperature;
+
+  /// No description provided for @navGlucose.
+  ///
+  /// In en, this message translates to:
+  /// **'Glucose'**
+  String get navGlucose;
+
+  /// No description provided for @navSleep.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep'**
+  String get navSleep;
+
+  /// No description provided for @navNutrition.
+  ///
+  /// In en, this message translates to:
+  /// **'Nutrition'**
+  String get navNutrition;
+
+  /// No description provided for @navRadiation.
+  ///
+  /// In en, this message translates to:
+  /// **'Radiation'**
+  String get navRadiation;
+
+  /// No description provided for @navDistance.
+  ///
+  /// In en, this message translates to:
+  /// **'Distance'**
+  String get navDistance;
+
+  /// No description provided for @navSynchronization.
+  ///
+  /// In en, this message translates to:
+  /// **'Synchronization'**
+  String get navSynchronization;
+
+  /// No description provided for @navContextValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} · No data'**
+  String navContextValue(String name);
+
+  /// No description provided for @navComingSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Coming soon'**
+  String get navComingSoon;
+
+  /// No description provided for @navHoldToTalk.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold to talk'**
+  String get navHoldToTalk;
+
+  /// No description provided for @navAssistantHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tell me what happened…'**
+  String get navAssistantHint;
+
+  /// No description provided for @navContactFlightSurgeons.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact flight surgeons.'**
+  String get navContactFlightSurgeons;
+
+  /// No description provided for @navGuidanceDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'This is guidance, not a diagnosis.'**
+  String get navGuidanceDisclaimer;
+
+  /// No description provided for @navSuggestionComingSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested next step · Coming soon'**
+  String get navSuggestionComingSoon;
+
+  /// No description provided for @historyRange6Hours.
+  ///
+  /// In en, this message translates to:
+  /// **'6 h'**
+  String get historyRange6Hours;
+
+  /// No description provided for @historyRange24Hours.
+  ///
+  /// In en, this message translates to:
+  /// **'24 h'**
+  String get historyRange24Hours;
+
+  /// No description provided for @historyRange7Days.
+  ///
+  /// In en, this message translates to:
+  /// **'7 days'**
+  String get historyRange7Days;
+
+  /// No description provided for @historyIndicators.
+  ///
+  /// In en, this message translates to:
+  /// **'Indicators'**
+  String get historyIndicators;
+
+  /// No description provided for @historyExplainComingSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Explain · Coming soon'**
+  String get historyExplainComingSoon;
+
+  /// No description provided for @historyEscalation.
+  ///
+  /// In en, this message translates to:
+  /// **'Escalation · {level}'**
+  String historyEscalation(String level);
+
+  /// No description provided for @historyContinueReading.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue reading'**
+  String get historyContinueReading;
+
+  /// No description provided for @historySelfCare.
+  ///
+  /// In en, this message translates to:
+  /// **'Self-care'**
+  String get historySelfCare;
+
+  /// No description provided for @historyFlagForGround.
+  ///
+  /// In en, this message translates to:
+  /// **'Flag for Ground'**
+  String get historyFlagForGround;
+
+  /// No description provided for @historyUrgent.
+  ///
+  /// In en, this message translates to:
+  /// **'Urgent'**
+  String get historyUrgent;
+
+  /// No description provided for @historySyncUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Synchronization · No data'**
+  String get historySyncUnavailable;
+
+  /// No description provided for @navBodyRightMarker.
+  ///
+  /// In en, this message translates to:
+  /// **'R'**
+  String get navBodyRightMarker;
+
+  /// No description provided for @navBodyLeftMarker.
+  ///
+  /// In en, this message translates to:
+  /// **'L'**
+  String get navBodyLeftMarker;
+
+  /// No description provided for @navBodyRightLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Astronaut’s right'**
+  String get navBodyRightLabel;
+
+  /// No description provided for @navBodyLeftLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Astronaut’s left'**
+  String get navBodyLeftLabel;
+
+  /// No description provided for @historyTrendTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pulse trend'**
+  String get historyTrendTitle;
+
+  /// No description provided for @historyDemoNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Includes demo readings.'**
+  String get historyDemoNotice;
+
+  /// No description provided for @historyUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Pulse history could not be loaded.'**
+  String get historyUnavailable;
+
+  /// No description provided for @historySampleSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing {shown} of the latest {total} readings.'**
+  String historySampleSummary(int shown, int total);
+
+  /// No description provided for @historyPlotRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Scale {minimum}–{maximum} bpm'**
+  String historyPlotRange(String minimum, String maximum);
+
+  /// No description provided for @historyTimeAxis.
+  ///
+  /// In en, this message translates to:
+  /// **'Time (UTC)'**
+  String get historyTimeAxis;
+
+  /// No description provided for @historyReadings.
+  ///
+  /// In en, this message translates to:
+  /// **'Readings'**
+  String get historyReadings;
+
+  /// No description provided for @historyMeasuredColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Measured (UTC)'**
+  String get historyMeasuredColumn;
+
+  /// No description provided for @historyPulseColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Pulse'**
+  String get historyPulseColumn;
+
+  /// No description provided for @historyMeasuredLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Measured {time} UTC'**
+  String historyMeasuredLabel(String time);
+
+  /// No description provided for @historyPulseLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pulse {bpm} beats per minute'**
+  String historyPulseLabel(String bpm);
+
   /// No description provided for @pulseScreenTitle.
   ///
   /// In en, this message translates to:
@@ -591,6 +909,396 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Local profile'**
   String get pulseLocalProfile;
+
+  /// No description provided for @bodyLegendTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Zone status'**
+  String get bodyLegendTitle;
+
+  /// Título de pantalla.
+  ///
+  /// In en, this message translates to:
+  /// **'Body zones'**
+  String get bodyTitle;
+
+  /// Encabezado de la figura anatómica frontal.
+  ///
+  /// In en, this message translates to:
+  /// **'Front view'**
+  String get bodyFront;
+
+  /// Encabezado de la lista equivalente.
+  ///
+  /// In en, this message translates to:
+  /// **'Zone list'**
+  String get bodyList;
+
+  /// Abre la lista desde la figura.
+  ///
+  /// In en, this message translates to:
+  /// **'Show zone list'**
+  String get bodyShowList;
+
+  /// Vuelve a la figura desde la lista.
+  ///
+  /// In en, this message translates to:
+  /// **'Show body figure'**
+  String get bodyShowFigure;
+
+  /// Marca datos simulados en pantalla y ficha.
+  ///
+  /// In en, this message translates to:
+  /// **'DEMO'**
+  String get bodyDemo;
+
+  /// Lectura de zonas en curso.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading body zones…'**
+  String get bodyLoading;
+
+  /// Fallo de lectura de las zonas.
+  ///
+  /// In en, this message translates to:
+  /// **'Body zones could not be loaded.'**
+  String get bodyLoadError;
+
+  /// Reintenta la consulta.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get bodyRetry;
+
+  /// Cierra la ficha de zona.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get bodyClose;
+
+  /// Estado estable devuelto por Rust.
+  ///
+  /// In en, this message translates to:
+  /// **'Stable'**
+  String get bodyStable;
+
+  /// Cambio devuelto por Rust.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get bodyChange;
+
+  /// Alarma devuelta por Rust.
+  ///
+  /// In en, this message translates to:
+  /// **'Alarm'**
+  String get bodyAlarm;
+
+  /// Estado sin evaluar devuelto por Rust.
+  ///
+  /// In en, this message translates to:
+  /// **'Not evaluated'**
+  String get bodyNotEvaluated;
+
+  /// La respuesta no contiene esta zona.
+  ///
+  /// In en, this message translates to:
+  /// **'Status unavailable'**
+  String get bodyStatusUnavailable;
+
+  /// Fecha del resumen completo.
+  ///
+  /// In en, this message translates to:
+  /// **'Snapshot time (UTC)'**
+  String get bodySnapshotTime;
+
+  /// Encabezado de cada evaluación individual.
+  ///
+  /// In en, this message translates to:
+  /// **'Symptom evaluation'**
+  String get bodyEvaluation;
+
+  /// Motivo devuelto en la evaluación.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason'**
+  String get bodyReason;
+
+  /// Motivo no_data.
+  ///
+  /// In en, this message translates to:
+  /// **'No data'**
+  String get bodyNoData;
+
+  /// Motivo stale.
+  ///
+  /// In en, this message translates to:
+  /// **'Stale reading'**
+  String get bodyStale;
+
+  /// Motivo too_few_data.
+  ///
+  /// In en, this message translates to:
+  /// **'Insufficient history'**
+  String get bodyTooFewData;
+
+  /// Motivo not_applicable.
+  ///
+  /// In en, this message translates to:
+  /// **'Context only'**
+  String get bodyNotApplicable;
+
+  /// El campo no aparece en la respuesta.
+  ///
+  /// In en, this message translates to:
+  /// **'Not provided'**
+  String get bodyMissing;
+
+  /// Fecha de la evaluación individual.
+  ///
+  /// In en, this message translates to:
+  /// **'Evaluation time (UTC)'**
+  String get bodyEvaluationTime;
+
+  /// Tipo de procedencia de la evaluación.
+  ///
+  /// In en, this message translates to:
+  /// **'Source type'**
+  String get bodySourceKind;
+
+  /// Referencia de la fuente devuelta por el núcleo.
+  ///
+  /// In en, this message translates to:
+  /// **'Source reference'**
+  String get bodySourceRef;
+
+  /// Tipo de fuente published.
+  ///
+  /// In en, this message translates to:
+  /// **'Published source'**
+  String get bodyPublished;
+
+  /// Tipo de fuente approved_protocol.
+  ///
+  /// In en, this message translates to:
+  /// **'Approved protocol'**
+  String get bodyApprovedProtocol;
+
+  /// Tipo de fuente demo_heuristic.
+  ///
+  /// In en, this message translates to:
+  /// **'Demo rule, not medical advice.'**
+  String get bodyDemoHeuristic;
+
+  /// Identificador de regla sin traducir.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule ID'**
+  String get bodyRuleId;
+
+  /// Versión de la regla sin traducir.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule version'**
+  String get bodyRuleVersion;
+
+  /// La zona carece de evaluaciones individuales y sus metadatos.
+  ///
+  /// In en, this message translates to:
+  /// **'No symptom evaluation was provided for this zone.'**
+  String get bodyNoEvidence;
+
+  /// Nombre anatómico de head.
+  ///
+  /// In en, this message translates to:
+  /// **'Head'**
+  String get bodyHead;
+
+  /// Nombre anatómico de neck.
+  ///
+  /// In en, this message translates to:
+  /// **'Neck'**
+  String get bodyNeck;
+
+  /// Nombre anatómico de chest.
+  ///
+  /// In en, this message translates to:
+  /// **'Chest'**
+  String get bodyChest;
+
+  /// Nombre anatómico de abdomen.
+  ///
+  /// In en, this message translates to:
+  /// **'Abdomen'**
+  String get bodyAbdomen;
+
+  /// Nombre anatómico de right_arm.
+  ///
+  /// In en, this message translates to:
+  /// **'Right arm'**
+  String get bodyRightArm;
+
+  /// Nombre anatómico de left_arm.
+  ///
+  /// In en, this message translates to:
+  /// **'Left arm'**
+  String get bodyLeftArm;
+
+  /// Nombre anatómico de right_hand.
+  ///
+  /// In en, this message translates to:
+  /// **'Right hand'**
+  String get bodyRightHand;
+
+  /// Nombre anatómico de left_hand.
+  ///
+  /// In en, this message translates to:
+  /// **'Left hand'**
+  String get bodyLeftHand;
+
+  /// Nombre anatómico de right_leg.
+  ///
+  /// In en, this message translates to:
+  /// **'Right leg'**
+  String get bodyRightLeg;
+
+  /// Nombre anatómico de left_leg.
+  ///
+  /// In en, this message translates to:
+  /// **'Left leg'**
+  String get bodyLeftLeg;
+
+  /// Nombre anatómico de right_foot.
+  ///
+  /// In en, this message translates to:
+  /// **'Right foot'**
+  String get bodyRightFoot;
+
+  /// Nombre anatómico de left_foot.
+  ///
+  /// In en, this message translates to:
+  /// **'Left foot'**
+  String get bodyLeftFoot;
+
+  /// Nombre anatómico de back.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get bodyBack;
+
+  /// Nombre anatómico de other.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get bodyOther;
+
+  /// No description provided for @navEvaluation.
+  ///
+  /// In en, this message translates to:
+  /// **'Evaluation'**
+  String get navEvaluation;
+
+  /// No description provided for @navReadings.
+  ///
+  /// In en, this message translates to:
+  /// **'Readings'**
+  String get navReadings;
+
+  /// No description provided for @navPreviousResult.
+  ///
+  /// In en, this message translates to:
+  /// **'{result} could not be refreshed. Previous data from {time}.'**
+  String navPreviousResult(String result, String time);
+
+  /// No description provided for @navResultFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'{result} could not be loaded.'**
+  String navResultFailed(String result);
+
+  /// No description provided for @navResultLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'{result} is loading.'**
+  String navResultLoading(String result);
+
+  /// No description provided for @navEvaluationNotForReading.
+  ///
+  /// In en, this message translates to:
+  /// **'Evaluation unavailable for this reading.'**
+  String get navEvaluationNotForReading;
+
+  /// No description provided for @navReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason and evaluation'**
+  String get navReason;
+
+  /// No description provided for @navSources.
+  ///
+  /// In en, this message translates to:
+  /// **'Sources'**
+  String get navSources;
+
+  /// No description provided for @navMeasurements.
+  ///
+  /// In en, this message translates to:
+  /// **'Measurements used'**
+  String get navMeasurements;
+
+  /// No description provided for @navEvidenceRecords.
+  ///
+  /// In en, this message translates to:
+  /// **'Evaluation record IDs: {ids}'**
+  String navEvidenceRecords(String ids);
+
+  /// No description provided for @navLeisureComingSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Leisure preference · Coming soon'**
+  String get navLeisureComingSoon;
+
+  /// No description provided for @navExerciseComingSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Mission exercise guidelines · Coming soon'**
+  String get navExerciseComingSoon;
+
+  /// No description provided for @historyPersistentAlert.
+  ///
+  /// In en, this message translates to:
+  /// **'Persistent pulse change'**
+  String get historyPersistentAlert;
+
+  /// No description provided for @historyRangeEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No pulse readings in the selected range ({range}).'**
+  String historyRangeEmpty(String range);
+
+  /// No description provided for @historyDemoUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'DEMO scenarios are not available in this version.'**
+  String get historyDemoUnavailable;
+
+  /// No description provided for @navEvaluatedRecord.
+  ///
+  /// In en, this message translates to:
+  /// **'Evaluated record: {id}'**
+  String navEvaluatedRecord(String id);
+
+  /// No description provided for @navEvidenceEvents.
+  ///
+  /// In en, this message translates to:
+  /// **'Evaluation event IDs: {ids}'**
+  String navEvidenceEvents(String ids);
+
+  /// No description provided for @navLatestPulse.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest pulse reading'**
+  String get navLatestPulse;
 }
 
 class _AppLocalizationsDelegate

@@ -107,6 +107,17 @@ impl Store {
         self.conn.close().map_err(|(_, error)| error.into())
     }
 
+    pub fn is_empty_for_demo(&self) -> Result<bool, StoreError> {
+        Ok(self.conn.query_row(
+            "SELECT NOT (EXISTS(SELECT 1 FROM records)
+                OR EXISTS(SELECT 1 FROM events)
+                OR EXISTS(SELECT 1 FROM telemetry_readings)
+                OR EXISTS(SELECT 1 FROM profile))",
+            [],
+            |row| row.get(0),
+        )?)
+    }
+
     fn initialize(mut conn: Connection) -> Result<Self, StoreError> {
         schema::migrate(&mut conn)?;
         record_graph::register_record_validation(&conn)?;
@@ -136,6 +147,36 @@ pub fn version_sqlite() -> Result<String, rusqlite::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn demo_emptiness_checks_all_user_data_tables() -> Result<(), Box<dyn std::error::Error>> {
+        for insert in [
+            "INSERT INTO records(record_id, indicator, value_json, unit, measured_at,
+                logged_at, source, root_id, is_demo)
+             VALUES('symptom', 'symptom', '{}', 'score', 0, 0, 'form', 'symptom', 0)",
+            "INSERT INTO events(event_id, kind, certainty, priority, occurred_at, logged_at, is_demo)
+             VALUES('help', 'need_help', 'confirmed', 'urgent', 0, 0, 0)",
+            "INSERT INTO telemetry_readings(astronaut_key, astronaut_name, indicator, value_json,
+                unit, observed_at, batch_id, source, app_version, prev_hash, row_hash)
+             VALUES('crew', 'Crew', 'sleep', '{}', 'h', 0, 'batch', 'live_api', 'test', '0', '1')",
+            "INSERT INTO profile(id, astronaut_json, medical_profile_json, medical_conditions_json,
+                profile_version, is_demo, updated_at) VALUES(1, '{}', '{}', '{}', 1, 0, 0)",
+        ] {
+            let store = Store::open_in_memory()?;
+            assert!(store.is_empty_for_demo()?);
+            store.conn.execute_batch(insert)?;
+            assert!(!store.is_empty_for_demo()?);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn derived_evaluations_do_not_fill_the_user_store() -> Result<(), Box<dyn std::error::Error>> {
+        let mut store = Store::open_in_memory()?;
+        store.status(Timestamp::from_millis(1_800_000_000_000), "test")?;
+        assert!(store.is_empty_for_demo()?);
+        Ok(())
+    }
+
     #[test]
     fn migration_can_be_reopened() -> Result<(), Box<dyn std::error::Error>> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/pulsys-store-tests");

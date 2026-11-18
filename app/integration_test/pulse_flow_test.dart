@@ -4,8 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:pulsys/app.dart';
+import 'package:pulsys/features/history/history_screen.dart';
+import 'package:pulsys/features/overview/status_summary.dart';
 import 'package:pulsys/features/pulse/pulse_controller.dart';
 import 'package:pulsys/features/pulse/pulse_screen.dart';
+import 'package:pulsys/features/pulse/pulse_format.dart';
 import 'package:pulsys/l10n/generated/app_localizations.dart';
 import 'package:pulsys/platform/device/app_environment.dart';
 import 'package:pulsys/platform/pulsys_api.dart';
@@ -64,6 +67,7 @@ Future<void> _pulseFlow(WidgetTester tester) async {
   );
 
   final first = await open();
+  expect((await first.zoneStatus()).isStoreEmpty, isTrue);
   await expectLater(
     first.preparePulse(PulseInput(key: 'invalid', bpm: input.bpm)),
     throwsA(
@@ -106,15 +110,36 @@ Future<void> _pulseFlow(WidgetTester tester) async {
   expect(afterReplay.single.recordId, receipt.recordId);
 
   final zones = await reopened.zoneStatus();
+  expect(zones.isStoreEmpty, isFalse);
   expect(zones.zones.map((ZoneState zone) => zone.zoneId), hasLength(14));
   expect(zones.evaluatedAtUtc.isUtc, isTrue);
 
   await tester.pumpWidget(PulsysApp(api: reopened));
   await _waitUntil(
     tester,
-    () => find.text('201 bpm').evaluate().isNotEmpty,
-    expected: 'the reopened 201 bpm reading in history',
+    () =>
+        _pageSelected(tester, 'today') &&
+        find.text('201 bpm').evaluate().isNotEmpty,
+    expected: 'the reopened 201 bpm reading on Today',
     api: reopened,
+  );
+  await _tapVisible(
+    tester,
+    find.byKey(const ValueKey('nav-history')),
+    api: reopened,
+  );
+  final row = find.byKey(ValueKey('history-reading-${receipt.recordId}'));
+  await _waitUntil(
+    tester,
+    () => _pageSelected(tester, 'history') && row.evaluate().isNotEmpty,
+    expected: 'the persisted record ID in History',
+    api: reopened,
+  );
+  await tester.ensureVisible(row);
+  await tester.pumpAndSettle();
+  expect(
+    find.descendant(of: row, matching: find.text('201 bpm')),
+    findsOneWidget,
   );
 }
 
@@ -148,6 +173,19 @@ Future<void> _uiPulseFlow(WidgetTester tester) async {
   );
   expect(await first.effectivePulseHistory(), isEmpty);
   await tester.pumpWidget(PulsysApp(api: first));
+  await _waitUntil(
+    tester,
+    () =>
+        _pageSelected(tester, 'today') &&
+        find.byKey(const ValueKey('overview-pulse-card')).evaluate().isNotEmpty,
+    expected: 'Today with its pulse card',
+    api: first,
+  );
+  await _tapVisible(
+    tester,
+    find.byKey(const ValueKey('overview-pulse-card')),
+    api: first,
+  );
   await _waitUntil(
     tester,
     () {
@@ -194,6 +232,58 @@ Future<void> _uiPulseFlow(WidgetTester tester) async {
     isNull,
   );
   expect(await first.effectivePulseHistory(), hasLength(1));
+
+  await tester.pageBack();
+  await _waitUntil(
+    tester,
+    () =>
+        _pageSelected(tester, 'today') &&
+        find
+            .byKey(const ValueKey('overview-pulse-card'))
+            .hitTestable()
+            .evaluate()
+            .isNotEmpty,
+    expected: 'Today after saving the original',
+    api: first,
+  );
+  await _tapVisible(
+    tester,
+    find.byKey(const ValueKey('nav-history')),
+    api: first,
+  );
+  final originalRow = find.byKey(
+    ValueKey('history-reading-${original.recordId}'),
+  );
+  await _waitUntil(
+    tester,
+    () => _pageSelected(tester, 'history') && originalRow.evaluate().isNotEmpty,
+    expected: 'History already loaded with the original row',
+    api: first,
+  );
+  await _tapVisible(
+    tester,
+    find.widgetWithText(ChoiceChip, l10n.historyRange6Hours),
+    api: first,
+  );
+  await tester.ensureVisible(originalRow);
+  await tester.pumpAndSettle();
+  expect(
+    find.descendant(of: originalRow, matching: find.text('201 bpm')),
+    findsOneWidget,
+  );
+  await _tapVisible(
+    tester,
+    find.byKey(const ValueKey('history-pulse-card')),
+    api: first,
+  );
+  await _waitUntil(
+    tester,
+    () =>
+        _pulseController(tester)?.historyLoading == false &&
+        _pulseController(tester)?.canEdit == true,
+    expected: 'pulse opened from the already loaded History',
+    api: first,
+  );
 
   await _tapVisible(
     tester,
@@ -274,6 +364,96 @@ Future<void> _uiPulseFlow(WidgetTester tester) async {
     independent.recordId,
   });
 
+  await tester.pageBack();
+  await _waitUntil(
+    tester,
+    () =>
+        _pageSelected(tester, 'history') &&
+        find.byType(HistoryScreen).hitTestable().evaluate().isNotEmpty,
+    expected: 'History after closing its pulse form',
+    api: first,
+  );
+  final reading = find.byKey(
+    ValueKey<String>('history-reading-${independent.recordId}'),
+  );
+  await _waitUntil(
+    tester,
+    () =>
+        find.byType(HistoryScreen).evaluate().isNotEmpty &&
+        reading.evaluate().isNotEmpty,
+    expected: 'the newly saved reading in the pulse trend',
+    api: first,
+    unexpected: () => find.text(l10n.historyUnavailable).evaluate().isNotEmpty,
+  );
+  await tester.ensureVisible(reading);
+  await tester.pumpAndSettle();
+  expect(
+    find.descendant(of: reading, matching: find.text('72 bpm')),
+    findsOneWidget,
+  );
+  expect(
+    find.byKey(const ValueKey<String>('history-trend-plot')),
+    findsOneWidget,
+  );
+  expect(
+    find.byKey(ValueKey<String>('history-reading-${original.recordId}')),
+    findsNothing,
+  );
+  expect(
+    tester
+        .widget<ChoiceChip>(
+          find.widgetWithText(ChoiceChip, l10n.historyRange6Hours),
+        )
+        .selected,
+    isTrue,
+  );
+  final correctedRow = find.byKey(
+    ValueKey('history-reading-${corrected.recordId}'),
+  );
+  expect(
+    find.descendant(of: correctedRow, matching: find.text('202 bpm')),
+    findsOneWidget,
+  );
+  final historyCard = find.byKey(const ValueKey('history-pulse-card'));
+  expect(
+    find.descendant(of: historyCard, matching: find.text('72 bpm')),
+    findsOneWidget,
+  );
+  final refreshed = await first.zoneStatus();
+  final statusLabel = PulseFormat.pulseStatus(l10n, refreshed.pulse).label;
+  expect(
+    find.descendant(of: historyCard, matching: find.text(statusLabel)),
+    findsOneWidget,
+  );
+  await _tapVisible(
+    tester,
+    find.byKey(const ValueKey('nav-recommendations')),
+    api: first,
+  );
+  expect(_pageSelected(tester, 'recommendations'), isTrue);
+  expect(find.text(l10n.navGuidanceDisclaimer), findsOneWidget);
+  await tester.binding.handlePopRoute();
+  await tester.pumpAndSettle();
+  expect(_pageSelected(tester, 'today'), isTrue);
+  expect(find.byKey(const ValueKey('overview-pulse-card')), findsOneWidget);
+  final todayCard = find.byKey(const ValueKey('overview-pulse-card'));
+  expect(
+    find.descendant(of: todayCard, matching: find.text('72 bpm')),
+    findsOneWidget,
+  );
+  expect(
+    find.descendant(of: todayCard, matching: find.text(statusLabel)),
+    findsOneWidget,
+  );
+  expect(
+    find.descendant(
+      of: find.byType(StatusSummary),
+      matching: find.textContaining(l10n.navPulseStatus(statusLabel)),
+    ),
+    findsOneWidget,
+  );
+  expect(find.byType(PulseScreen), findsNothing);
+
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pumpAndSettle();
   await first.close();
@@ -281,9 +461,34 @@ Future<void> _uiPulseFlow(WidgetTester tester) async {
   await tester.pumpWidget(PulsysApp(api: reopened));
   await _waitUntil(
     tester,
-    () => find.text('202 bpm').evaluate().isNotEmpty,
+    () =>
+        _pageSelected(tester, 'today') &&
+        find.byKey(const ValueKey('overview-pulse-card')).evaluate().isNotEmpty,
+    expected: 'Today after reopening the session',
+    api: reopened,
+  );
+  await _tapVisible(
+    tester,
+    find.byKey(const ValueKey('nav-history')),
+    api: reopened,
+  );
+  await _waitUntil(
+    tester,
+    () =>
+        _pageSelected(tester, 'history') &&
+        find
+            .byKey(ValueKey('history-reading-${corrected.recordId}'))
+            .evaluate()
+            .isNotEmpty,
     expected: 'the reopened 202 bpm reading in history',
     api: reopened,
+  );
+  final restoredRow = find.byKey(
+    ValueKey('history-reading-${corrected.recordId}'),
+  );
+  expect(
+    find.descendant(of: restoredRow, matching: find.text('202 bpm')),
+    findsOneWidget,
   );
   final restored = await reopened.effectivePulseHistory();
   expect(restored, hasLength(2));
@@ -299,6 +504,14 @@ Future<void> _uiPulseFlow(WidgetTester tester) async {
   expect(restoredReading.replaces, isNull);
 }
 
+bool _pageSelected(WidgetTester tester, String page) =>
+    tester
+        .widgetList<Semantics>(find.byKey(ValueKey('nav-$page')))
+        .firstOrNull
+        ?.properties
+        .selected ==
+    true;
+
 PulseController? _pulseController(WidgetTester tester) => tester
     .widgetList<PulseScreen>(find.byType(PulseScreen))
     .firstOrNull
@@ -312,6 +525,12 @@ Future<void> _enterBpm(
   try {
     await enterPulseBpm(tester, bpm: bpm);
     expect(_pulseController(tester)?.bpmText, bpm);
+    await _waitUntil(
+      tester,
+      () => tester.view.viewInsets.bottom > 0,
+      expected: 'the native keyboard to open before ending pulse entry',
+      api: api,
+    );
   } on Object catch (error) {
     fail('Cannot enter $bpm bpm: $error. ${await _observedState(tester, api)}');
   }
@@ -330,14 +549,51 @@ Future<void> _tapVisible(
     expected: 'the native keyboard to close before tapping $finder',
     api: api,
   );
+  final beforeReveal = _tapGeometry(tester, finder);
   await tester.ensureVisible(finder);
+  final afterReveal = _tapGeometry(tester, finder);
   await tester.pumpAndSettle();
   final target = finder.hitTestable();
   if (target.evaluate().length != 1) {
-    fail('Cannot tap $finder. ${await _observedState(tester, api)}');
+    fail(
+      'Cannot tap $finder. beforeReveal=$beforeReveal; '
+      'afterReveal=$afterReveal; afterSettle=${_tapGeometry(tester, finder)}; '
+      '${await _observedState(tester, api)}',
+    );
   }
   await tester.tap(target);
   await tester.pumpAndSettle();
+}
+
+String _tapGeometry(WidgetTester tester, Finder finder) {
+  final rect = tester.getRect(finder);
+  final context = tester.element(finder);
+  final scrolls = tester
+      .stateList<ScrollableState>(
+        find.ancestor(of: finder, matching: find.byType(Scrollable)),
+      )
+      .map(
+        (state) => <String, Object?>{
+          'pixels': state.position.pixels,
+          'viewport': state.position.viewportDimension,
+          'activity': state.position.activity.runtimeType.toString(),
+          'scrolling': state.position.isScrollingNotifier.value,
+        },
+      )
+      .toList();
+  return <String, Object?>{
+    'rect': rect.toString(),
+    'inset': tester.view.viewInsets.bottom,
+    'mediaInset': MediaQuery.viewInsetsOf(context).bottom,
+    'route': ModalRoute.of(context)?.settings.name,
+    'current': ModalRoute.of(context)?.isCurrent,
+    'scrolls': scrolls,
+    'hits': tester
+        .hitTestOnBinding(rect.center)
+        .path
+        .map((entry) => entry.target.runtimeType.toString())
+        .toList(),
+  }.toString();
 }
 
 Future<void> _waitUntil(
