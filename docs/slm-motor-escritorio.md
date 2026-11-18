@@ -10,14 +10,14 @@ Desde la raíz del worktree, en PowerShell, con CMake, Ninja y LLVM instalados:
 
 ```powershell
 $env:LIBCLANG_PATH = 'C:\Program Files\LLVM\bin'
-cargo fmt -p merken-slm -- --check
-cargo clippy --offline -p merken-slm --all-targets -- -D warnings
-cargo test --offline -p merken-slm
-cargo clippy --offline -p merken-slm --all-targets --features llama -- -D warnings
-cargo test --offline -p merken-slm --features llama
-$env:MERKEN_V5_DIR = '<ruta-al-paquete>\space-health-slm-v5-20261114'
-cargo run --offline -p merken-slm --release --features llama --example v5_parity
-cargo run --offline -p merken-slm --release --features llama --example v5_parity -- --limit 2
+cargo fmt -p pulsys-slm -- --check
+cargo clippy --offline -p pulsys-slm --all-targets -- -D warnings
+cargo test --offline -p pulsys-slm
+cargo clippy --offline -p pulsys-slm --all-targets --features llama -- -D warnings
+cargo test --offline -p pulsys-slm --features llama
+$env:PULSYS_V5_DIR = '<ruta-al-paquete>\space-health-slm-v5-20261114'
+cargo run --offline -p pulsys-slm --release --features llama --example v5_parity
+cargo run --offline -p pulsys-slm --release --features llama --example v5_parity -- --limit 2
 ```
 
 Las variables se asignan solo a la sesión actual. No se especifica otro `target-dir`. El ejemplo verifica tamaño y SHA-256 según `runtime.json`, lee los 40 casos ya normalizados y mide carga con verificación, latencia por caso, percentiles de rango más cercano y tokens de salida por segundo durante las llamadas. Las comparaciones exactas conservan espacios; las normalizadas reducen secuencias de espacios en blanco a uno. El ejemplo comprueba la inicialización de ambas gramáticas y que cada generación sea JSON válido. No mide memoria pico.
@@ -41,9 +41,9 @@ Si hay diferencias frente a las predicciones guardadas, revisar el prompt y sus 
 
 ## Modelo de amenazas
 
-Los manifiestos de modelo son de confianza: viajan con la aplicación y más adelante estarán firmados. El SHA-256 vincula cada archivo con su manifiesto; por sí solo no autentica un manifiesto. Las gramáticas las genera únicamente Merken. Las comprobaciones de esta ronda son defensa en profundidad ante paquetes defectuosos o corruptos que aun así coincidan con su manifiesto.
+Los manifiestos de modelo son de confianza: viajan con la aplicación y más adelante estarán firmados. El SHA-256 vincula cada archivo con su manifiesto; por sí solo no autentica un manifiesto. Las gramáticas las genera únicamente Pulsys. Las comprobaciones de esta ronda son defensa en profundidad ante paquetes defectuosos o corruptos que aun así coincidan con su manifiesto.
 
-Se aceptan dos riesgos residuales: si falla una asignación durante el análisis nativo de una gramática válida, llama.cpp puede imprimir la gramática completa mediante `fprintf`; las gramáticas de Merken no contienen datos de usuario. Además, un escritor externo que ignore el bloqueo del almacén puede sustituir archivos entre la verificación y su reapertura nativa.
+Se aceptan dos riesgos residuales: si falla una asignación durante el análisis nativo de una gramática válida, llama.cpp puede imprimir la gramática completa mediante `fprintf`; las gramáticas de Pulsys no contienen datos de usuario. Además, un escritor externo que ignore el bloqueo del almacén puede sustituir archivos entre la verificación y su reapertura nativa.
 
 ## Seguridad
 
@@ -62,7 +62,7 @@ El motor lee `general.architecture` de la cabecera GGUF verificada: `qwen3` usa 
 Desde la raíz del repositorio, con la feature y dependencias disponibles, ejecuta:
 
 ```powershell
-cargo run -p merken-slm --example granite_eval --features llama --offline -- "C:\Users\Salva\Desktop\git\nasa.spaceapps\externo\granite-4.0-350m\granite-4.0-350m-Q4_K_M.gguf" crates/slm/examples/data/granite_eval.jsonl --dump granite-dump.jsonl
+cargo run -p pulsys-slm --example granite_eval --features llama --offline -- "C:\Users\Salva\Desktop\git\nasa.spaceapps\externo\granite-4.0-350m\granite-4.0-350m-Q4_K_M.gguf" crates/slm/examples/data/granite_eval.jsonl --dump granite-dump.jsonl
 ```
 
 La tabla separa JSON válido, validación y citas de la salida cruda, validación final tras el saneado, recall de pares indicador-valor, tokens y latencia. El resumen cuenta también casos sin valores esperados que devolvieron valores. El recall se calcula sobre la propuesta saneada; el núcleo puede descartar valores incluso si el modelo los extrajo. Los casos negativos no aportan al denominador del recall. Fallos individuales se miden sin alterar el código de salida; errores de configuración, lectura o carga sí detienen el ejemplo.

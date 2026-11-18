@@ -31,6 +31,7 @@ externo/
 
 # Instrucciones locales de agentes
 CLAUDE.md
+AGENTS.md
 
 # Copias de seguridad locales de la base de datos (datos de astronautas)
 backups/

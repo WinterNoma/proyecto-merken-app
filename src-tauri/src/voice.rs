@@ -1,5 +1,5 @@
 use crate::{slm_error, strings, validate_request_id};
-use merken_store::StoreError;
+use pulsys_store::StoreError;
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "voice-tts")]
@@ -75,7 +75,7 @@ impl VoiceState {
 #[cfg(feature = "voice-tts")]
 #[derive(Default)]
 struct VoiceInner {
-    engine: Option<(merken_voice::TtsConfig, merken_voice::TtsEngine)>,
+    engine: Option<(pulsys_voice::TtsConfig, pulsys_voice::TtsEngine)>,
     active: Option<(String, Arc<AtomicBool>)>,
 }
 
@@ -84,8 +84,8 @@ fn unavailable() -> StoreError {
 }
 
 #[cfg(feature = "voice-tts")]
-fn voice_error(error: merken_voice::VoiceError) -> StoreError {
-    use merken_voice::VoiceError;
+fn voice_error(error: pulsys_voice::VoiceError) -> StoreError {
+    use pulsys_voice::VoiceError;
     match error {
         VoiceError::ModelMissing => slm_error("model_missing", None, strings::VOICE_MODEL_MISSING),
         VoiceError::TextInvalid => {
@@ -121,7 +121,7 @@ fn failed() -> StoreError {
 #[cfg(feature = "voice-tts")]
 struct Reservation {
     inner: Arc<Mutex<VoiceInner>>,
-    engine: Option<(merken_voice::TtsConfig, merken_voice::TtsEngine)>,
+    engine: Option<(pulsys_voice::TtsConfig, pulsys_voice::TtsEngine)>,
     cancelled: Arc<AtomicBool>,
 }
 #[cfg(feature = "voice-tts")]
@@ -153,7 +153,7 @@ pub async fn speak_text(
             .unwrap_or("af_heart")
             .parse()
             .map_err(|_| slm_error("text_invalid", Some("voice"), strings::VOICE_CONFIG_INVALID))?;
-        let config = merken_voice::TtsConfig {
+        let config = pulsys_voice::TtsConfig {
             voice,
             speed: input.speed.unwrap_or(1.0),
             threads: 4,
@@ -178,7 +178,7 @@ pub async fn speak_text(
         tauri::async_runtime::spawn_blocking(move || {
             let mut reservation = reservation;
             if reservation.cancelled.load(Ordering::SeqCst) {
-                return Err(voice_error(merken_voice::VoiceError::Cancelled));
+                return Err(voice_error(pulsys_voice::VoiceError::Cancelled));
             }
             if reservation
                 .engine
@@ -189,13 +189,13 @@ pub async fn speak_text(
             }
             if reservation.engine.is_none() {
                 let paths =
-                    merken_voice::KokoroPaths::from_dir(root.join("kokoro-int8-multi-lang-v1_0"))
+                    pulsys_voice::KokoroPaths::from_dir(root.join("kokoro-int8-multi-lang-v1_0"))
                         .map_err(voice_error)?;
-                let engine = merken_voice::TtsEngine::load(paths, config).map_err(voice_error)?;
+                let engine = pulsys_voice::TtsEngine::load(paths, config).map_err(voice_error)?;
                 reservation.engine = Some((config, engine));
             }
             if reservation.cancelled.load(Ordering::SeqCst) {
-                return Err(voice_error(merken_voice::VoiceError::Cancelled));
+                return Err(voice_error(pulsys_voice::VoiceError::Cancelled));
             }
             let mut count = 0_usize;
             let mut callback_failed = false;
@@ -227,7 +227,7 @@ pub async fn speak_text(
             }
             let pcm = pcm.map_err(voice_error)?;
             if token.load(Ordering::SeqCst) {
-                return Err(voice_error(merken_voice::VoiceError::Cancelled));
+                return Err(voice_error(pulsys_voice::VoiceError::Cancelled));
             }
             let duration_ms =
                 (pcm.samples.len() as u64).saturating_mul(1000) / u64::from(pcm.sample_rate);
@@ -318,14 +318,14 @@ fn select_stt_model_dir(root: &std::path::Path) -> Option<std::path::PathBuf> {
 #[cfg(feature = "voice-stt")]
 #[derive(Default)]
 struct SttInner {
-    engine: Option<(std::path::PathBuf, merken_voice::SttEngine)>,
+    engine: Option<(std::path::PathBuf, pulsys_voice::SttEngine)>,
     active: Option<String>,
 }
 
 #[cfg(feature = "voice-stt")]
 struct SttReservation {
     inner: Arc<Mutex<SttInner>>,
-    engine: Option<(std::path::PathBuf, merken_voice::SttEngine)>,
+    engine: Option<(std::path::PathBuf, pulsys_voice::SttEngine)>,
 }
 
 #[cfg(feature = "voice-stt")]
@@ -338,10 +338,10 @@ impl Drop for SttReservation {
 }
 
 #[cfg(feature = "voice-stt")]
-fn stt_voice_error(error: merken_voice::VoiceError) -> StoreError {
-    use merken_voice::VoiceError;
+fn stt_voice_error(error: pulsys_voice::VoiceError) -> StoreError {
+    use pulsys_voice::VoiceError;
     // Only the error kind (no audio, text or paths): visible in logcat on Android.
-    eprintln!("merken dictation error: {error:?}");
+    eprintln!("pulsys dictation error: {error:?}");
     match error {
         VoiceError::ModelMissing => slm_error("model_missing", None, strings::STT_MODEL_MISSING),
         VoiceError::AudioInvalid => slm_error("audio_invalid", None, strings::STT_AUDIO_INVALID),
@@ -504,10 +504,10 @@ fn run_transcribe_blocking(
     request_id: String,
     pcm_b64: String,
     sample_rate: i32,
-    language: merken_voice::SttLanguage,
+    language: pulsys_voice::SttLanguage,
 ) -> Result<TranscribeResponse, StoreError> {
     let samples = decode_pcm_f32le(&pcm_b64)?;
-    merken_voice::validate_audio(&samples, sample_rate).map_err(stt_voice_error)?;
+    pulsys_voice::validate_audio(&samples, sample_rate).map_err(stt_voice_error)?;
     let mut reservation = {
         let mut inner = stt_inner.lock().map_err(|_| stt_failed())?;
         if inner.active.is_some() {
@@ -520,7 +520,7 @@ fn run_transcribe_blocking(
         }
     };
     let dir = select_stt_model_dir(&root)
-        .ok_or_else(|| stt_voice_error(merken_voice::VoiceError::ModelMissing))?;
+        .ok_or_else(|| stt_voice_error(pulsys_voice::VoiceError::ModelMissing))?;
     if reservation
         .engine
         .as_ref()
@@ -529,13 +529,13 @@ fn run_transcribe_blocking(
         reservation.engine = None;
     }
     if reservation.engine.is_none() {
-        let paths = merken_voice::SttPaths::from_dir(dir.clone()).map_err(stt_voice_error)?;
-        let config = merken_voice::SttConfig {
+        let paths = pulsys_voice::SttPaths::from_dir(dir.clone()).map_err(stt_voice_error)?;
+        let config = pulsys_voice::SttConfig {
             threads: STT_THREADS,
             language,
         };
         config.validate().map_err(stt_voice_error)?;
-        let engine = merken_voice::SttEngine::load(paths, config).map_err(stt_voice_error)?;
+        let engine = pulsys_voice::SttEngine::load(paths, config).map_err(stt_voice_error)?;
         reservation.engine = Some((dir, engine));
     }
     let engine = &mut reservation.engine.as_mut().ok_or_else(stt_failed)?.1;
@@ -573,7 +573,7 @@ pub async fn transcribe_audio(
     {
         let sample_rate = parse_sample_rate(input.sample_rate)?;
         let lang_tag = validate_language_tag(input.language.as_deref())?;
-        let language: merken_voice::SttLanguage = lang_tag.parse().map_err(|_| {
+        let language: pulsys_voice::SttLanguage = lang_tag.parse().map_err(|_| {
             slm_error(
                 "audio_invalid",
                 Some("language"),
@@ -770,7 +770,7 @@ mod tests {
     #[test]
     fn stt_model_dir_prefers_whisper_base_then_small_then_canary() {
         let root = std::env::temp_dir().join(format!(
-            "merken-stt-dir-test-{}-{}",
+            "pulsys-stt-dir-test-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -806,7 +806,7 @@ mod tests {
     #[cfg(feature = "voice-stt")]
     #[test]
     fn stt_voice_error_mapping_is_stable() {
-        use merken_voice::VoiceError;
+        use pulsys_voice::VoiceError;
         assert_eq!(
             stt_voice_error(VoiceError::ModelMissing).code,
             "model_missing"
@@ -835,7 +835,7 @@ mod tests {
     #[test]
     fn stt_invalid_audio_fails_before_model_discovery_or_reservation() {
         let root = std::env::temp_dir().join(format!(
-            "merken-stt-audio-val-test-{}-{}",
+            "pulsys-stt-audio-val-test-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -863,7 +863,7 @@ mod tests {
             "req_short".into(),
             short_b64,
             16_000,
-            merken_voice::SttLanguage::Auto,
+            pulsys_voice::SttLanguage::Auto,
         )
         .expect_err("short audio should be rejected");
         assert_eq!(err.code, "audio_invalid");
@@ -877,7 +877,7 @@ mod tests {
             "req_clip".into(),
             clip_b64,
             16_000,
-            merken_voice::SttLanguage::Auto,
+            pulsys_voice::SttLanguage::Auto,
         )
         .expect_err("out-of-range audio should be rejected");
         assert_eq!(err.code, "audio_invalid");
@@ -891,7 +891,7 @@ mod tests {
             "req_valid".into(),
             valid_b64,
             16_000,
-            merken_voice::SttLanguage::Auto,
+            pulsys_voice::SttLanguage::Auto,
         )
         .expect_err("missing model directory should fail with model_missing");
         assert_eq!(err.code, "model_missing");

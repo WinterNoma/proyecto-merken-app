@@ -107,7 +107,7 @@ const status = await core.getStatus(); // el núcleo ya los evalúa
 
 - Se guardan como **DEMO**: mismas reglas que `loadDemo` (fallan con `real_data_present` si hay datos reales, nunca se suben y el primer dato real los borra). Cada importación **sustituye** la DEMO anterior: no se mezclan astronautas.
 - El perfil queda como `SIMULATION <nombre>`, con `is_demo: true`.
-- **Token:** nunca en el código. En el PC, la variable de entorno `MERKEN_SIM_TOKEN` antes de `npm run tauri dev`; en el móvil, un campo en la pantalla que lo pase como `token`. La URL se puede cambiar con `MERKEN_SIM_URL`.
+- **Token:** nunca en el código. En el PC, la variable de entorno `PULSYS_SIM_TOKEN` antes de `npm run tauri dev`; en el móvil, un campo en la pantalla que lo pase como `token`. La URL se puede cambiar con `PULSYS_SIM_URL`.
 - La petición sale desde Rust, no desde la WebView, así que no hay CORS. La API es HTTP sin cifrar: solo para la demo.
 - `rejected` cuenta los registros descartados: duplicados, de otro astronauta, con fecha posterior a ahora + 10 min, con `schema_version` distinto de 1, sin `record_id` o con textos demasiado largos, y los que no pasan la validación del núcleo.
 - Todo o nada: si la descarga falla o pasa de 20 000 registros, la DEMO anterior queda intacta.
@@ -150,7 +150,7 @@ If a worker channel closes or a panic unwinds, the response keeps its determinis
 
 Tauri emits `slm-progress` with `{ request_id, phase, tokens, max_tokens }`. Phases are `loading`, `generating`, `validating`, `done`; token counts are zero outside generation. Events contain no input, prompt or generated text. Ignore events for stale IDs. Visible Tauri messages are centralized in `src-tauri/src/strings.rs` in English (RNF-14).
 
-For manual desktop installation, create `<app_data_dir>/models/space-health-v5/` and copy both `space-health-base-Q4_K_M.gguf` and `space-health-lora-f16.gguf` from the v5 package. In a debug build `MERKEN_SLM_MODELS_DIR` selects the parent models directory. The embedded trusted manifest fixes sizes and SHA-256; a disk manifest is not trusted. Build with `slm-llama` to enable the backend. No interpreter model or curated fichas currently ships. Android integration and benchmarking remain Phase 3.
+For manual desktop installation, create `<app_data_dir>/models/space-health-v5/` and copy both `space-health-base-Q4_K_M.gguf` and `space-health-lora-f16.gguf` from the v5 package. In a debug build `PULSYS_SLM_MODELS_DIR` selects the parent models directory. The embedded trusted manifest fixes sizes and SHA-256; a disk manifest is not trusted. Build with `slm-llama` to enable the backend. No interpreter model or curated fichas currently ships. Android integration and benchmarking remain Phase 3.
 
 ```ts
 await core.slmRelease(); // Entering record entry; await model unloading first.
@@ -177,14 +177,14 @@ if (explanation.note) show(explanation.note.label);
 
 Build with the optional `voice-tts` feature to enable local English synthesis. Without it, these commands return `voice_unavailable`; the UI can hide its voice button. No audio or user text is sent to a server.
 
-- `speakText({ request_id, text, voice?, speed? })` invokes `speak_text({ input })` and returns `{ request_id, chunks, duration_ms }`; duration is the total generated audio duration. The ID follows the SLM rules (1–64 ASCII letters, digits, underscores or hyphens). Use a fresh ID per request. Text is limited to 600 characters and the voice engine supports English lexicon vocabulary. The default voice is `af_heart`, default speed is 1.0, and speed must be between 0.7 and 1.3. See [merken-voice](../../crates/voice/README.md) for voice IDs and text limitations. Invalid voice or speed returns `text_invalid` with the corresponding field.
+- `speakText({ request_id, text, voice?, speed? })` invokes `speak_text({ input })` and returns `{ request_id, chunks, duration_ms }`; duration is the total generated audio duration. The ID follows the SLM rules (1–64 ASCII letters, digits, underscores or hyphens). Use a fresh ID per request. Text is limited to 600 characters and the voice engine supports English lexicon vocabulary. The default voice is `af_heart`, default speed is 1.0, and speed must be between 0.7 and 1.3. See [pulsys-voice](../../crates/voice/README.md) for voice IDs and text limitations. Invalid voice or speed returns `text_invalid` with the corresponding field.
 - Listen for `voice-chunk` before invoking synthesis. Each event is `{ request_id, index, wav_base64 }`: index starts at zero and the base64 decodes to a complete PCM16 mono WAV for that chunk. Queue chunks in order as they arrive and ignore stale request IDs.
 - `speakCancel(requestId)` invokes `speak_cancel({ request_id })` and returns whether that request is active. Cancellation is cooperative between chunks; a native synthesis already running finishes before cancellation takes effect. Already emitted audio is not recalled.
 - `voiceRelease()` unloads the model and returns whether one was loaded. Await it when entering record entry or before loading the SLM (RNF-09). It returns `busy` while synthesis is active; cancel and wait for the request to finish before retrying. The UI must coordinate SLM and voice releases; the services do not unload each other automatically.
 
 One request at a time is admitted; another returns `busy`. The model loads on the first request and is reused. Changing voice or speed reloads it because those settings are fixed at engine construction. Errors use `{ code, field, message }` with stable codes `voice_unavailable`, `model_missing`, `text_invalid`, `text_unsupported`, `busy`, `cancelled`, and `synthesis_failed`; malformed request IDs use the SLM error `invalid_value` with field `request_id`. Errors do not include user text.
 
-Install the sherpa-onnx Kokoro v1.0 int8 package in `<app_data_dir>/models/kokoro-int8-multi-lang-v1_0/`, with `model.int8.onnx`, `voices.bin`, `tokens.txt` and `lexicon-us-en.txt`. Also copy [merken-us-en.txt](../../crates/voice/lexicon/merken-us-en.txt) into that directory. Debug builds use `MERKEN_SLM_MODELS_DIR` as the parent models directory when set, just like the SLM. The native sherpa-onnx libraries must also be available for the target platform; see the crate README.
+Install the sherpa-onnx Kokoro v1.0 int8 package in `<app_data_dir>/models/kokoro-int8-multi-lang-v1_0/`, with `model.int8.onnx`, `voices.bin`, `tokens.txt` and `lexicon-us-en.txt`. Also copy [pulsys-us-en.txt](../../crates/voice/lexicon/pulsys-us-en.txt) into that directory. Debug builds use `PULSYS_SLM_MODELS_DIR` as the parent models directory when set, just like the SLM. The native sherpa-onnx libraries must also be available for the target platform; see the crate README.
 
 On the measured PC, first audio arrived in about 2 seconds and real-time factor was about 1.3 with four threads. Mobile playback may pause between sentences; measure on the target device.
 
@@ -206,7 +206,7 @@ Build with the optional `voice-stt` feature (alone or alongside `voice-tts`) to 
 
 One STT transcription runs at a time, using its own state separate from TTS so speech synthesis and dictation do not block each other; a concurrent call returns `busy`. Transcription cannot be cancelled once dispatched: if the caller stops awaiting the promise, the native call continues running and new requests receive `busy` until it finishes. Error codes: `busy`, `audio_invalid`, `model_missing`, `transcription_failed`, `voice_unavailable`, and `invalid_value` for malformed `request_id`.
 
-STT uses the same models root as SLM and TTS (`<app_data_dir>/models/`, or `MERKEN_SLM_MODELS_DIR` in debug builds) and probes these subdirectories in order, loading the first directory that exists with 2 threads:
+STT uses the same models root as SLM and TTS (`<app_data_dir>/models/`, or `PULSYS_SLM_MODELS_DIR` in debug builds) and probes these subdirectories in order, loading the first directory that exists with 2 threads:
 
 1. `stt-whisper-base/`
 2. `stt-whisper-small/`

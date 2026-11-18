@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::time::Instant;
 
-use merken_voice::{SttConfig, SttEngine, SttLanguage, SttPaths};
+use pulsys_voice::{SttConfig, SttEngine, SttLanguage, SttPaths};
 
 fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)

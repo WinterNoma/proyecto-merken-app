@@ -4,7 +4,7 @@
 //! en inglés del contrato `source`/`motor`/`documents` previsto para Fase 1.
 
 use crate::explain::{facts::FactLine, selection::OfferedStatement};
-use merken_core::evaluate::Evaluation;
+use pulsys_core::evaluate::Evaluation;
 
 const PLAIN_ENGLISH_SYSTEM_PROMPT: &str = "\
 You assist an astronaut health evaluation by selecting up to 3 of the authorized statements below (RF-15, RNF-14).

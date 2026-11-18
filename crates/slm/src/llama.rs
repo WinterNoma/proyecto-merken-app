@@ -500,7 +500,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_nanos());
         let dir = std::env::temp_dir().join(format!(
-            "merken_slm_llama_test_{tag}_{}_{}",
+            "pulsys_slm_llama_test_{tag}_{}_{}",
             std::process::id(),
             nanos
         ));

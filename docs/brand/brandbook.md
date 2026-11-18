@@ -1,4 +1,4 @@
-# MERKEN
+# PULSYS
 
 Brand standard 01 · 14 November 2026 · Design proposal for team review
 
@@ -32,7 +32,7 @@ No neon, glow, animated scanning, decorative waveforms, star fields, glass panel
 
 ### Rules
 
-Use English throughout. Use sentence case for interface copy; uppercase is reserved for MERKEN, DEMO and short document identifiers. State the observation first, then its scope or limitation, then a useful action. Prefer one short sentence per idea. Avoid exclamation marks, humor, praise, reassurance without evidence and diagnostic labels such as “healthy,” “critical condition” or a disease name inferred by the interface.
+Use English throughout. Use sentence case for interface copy; uppercase is reserved for PULSYS, DEMO and short document identifiers. State the observation first, then its scope or limitation, then a useful action. Prefer one short sentence per idea. Avoid exclamation marks, humor, praise, reassurance without evidence and diagnostic labels such as “healthy,” “critical condition” or a disease name inferred by the interface.
 
 Use **reading** for a measurement, **evaluation** for a core result and **request** for a help event. Use **Stable**, never “All clear.” Use **Change**, never “Danger” for `change`. Preserve a core message when appropriate; do not rewrite away uncertainty or escalation. This application does not provide medical advice. Do not author treatment instructions in the presentation layer.
 
@@ -90,10 +90,10 @@ Availability and assessment are separate. Keep an existing persistent alarm visi
 
 ### Construction
 
-**MERKEN**, uppercase, Barlow Semi Condensed Semibold (600), natural glyph proportions, 0.06em tracking. One word, one line, no symbol or tagline incorporated into the mark. The narrower face provides a distinct document-header signature without borrowing the NASA worm or ESA mark.
+**PULSYS**, uppercase, Barlow Semi Condensed Semibold (600), natural glyph proportions, 0.06em tracking. One word, one line, no symbol or tagline incorporated into the mark. The narrower face provides a distinct document-header signature without borrowing the NASA worm or ESA mark.
 
-- Horizontal master: [`logo/merken-wordmark.svg`](logo/merken-wordmark.svg), pale ink `#E8EDF2`, transparent background; use on the dark palette.
-- Monochrome master: [`logo/merken-wordmark-mono.svg`](logo/merken-wordmark-mono.svg), `currentColor`, default black on a light background. In inline SVG, set one contrasting ink through `color`; use a light ink when reversed.
+- Horizontal master: [`logo/pulsys-wordmark.svg`](logo/pulsys-wordmark.svg), pale ink `#E8EDF2`, transparent background; use on the dark palette.
+- Monochrome master: [`logo/pulsys-wordmark-mono.svg`](logo/pulsys-wordmark-mono.svg), `currentColor`, default black on a light background. In inline SVG, set one contrasting ink through `color`; use a light ink when reversed.
 - Clear space: let **H** be the visible capital-letter height. Keep at least **0.5H** on every side, measured from the visible glyph edges. Other UI labels, borders and imagery stay outside that area. The specimen's dashed guide is instructional and never part of the logo.
 - Minimum digital width: **112 CSS px for the visible word**, excluding clear space. Use at least 24 mm in print. These are proposed minimums pending device and print checks.
 - Keep the mark unrotated and uncondensed. Do not redraw letters, add gradients, insert status lights, outline the word or recolor individual letters.
@@ -173,7 +173,7 @@ Never reduce label opacity to suggest inactivity. Mark an unavailable action wit
 
 **Headings: Barlow Semi Condensed 600. Body: Public Sans 400/600. Figures: Roboto Mono 400.**
 
-Barlow's moderate compression gives headings a disciplined label-like character and differentiates MERKEN without a futuristic display face. Public Sans provides open, steady paragraph and control text. Roboto Mono separates measurements, record identifiers and timestamps from prose, with fixed-width digits. Keep condensed text out of long paragraphs. Three families introduce a clear functional hierarchy at the cost of more font files.
+Barlow's moderate compression gives headings a disciplined label-like character and differentiates PULSYS without a futuristic display face. Public Sans provides open, steady paragraph and control text. Roboto Mono separates measurements, record identifiers and timestamps from prose, with fixed-width digits. Keep condensed text out of long paragraphs. Three families introduce a clear functional hierarchy at the cost of more font files.
 
 ### B / Technical Record
 
@@ -207,7 +207,7 @@ Install from the repository root when ready:
 npm install @fontsource/barlow-semi-condensed@5.3.0 @fontsource/public-sans@5.3.0 @fontsource/roboto-mono@5.3.0 @fontsource/archivo@5.3.0 @fontsource/source-sans-3@5.3.1 @fontsource/source-code-pro@5.3.1 @fontsource/libre-franklin@5.3.0
 ```
 
-The preview imports only Latin upright 400 and/or 600, as listed. No italic, synthetic bold, remote CSS or runtime font CDN. All three options load for comparison; a later approved application implementation should retain only its chosen families. The fixed MERKEN wordmark does not switch when comparing body typography.
+The preview imports only Latin upright 400 and/or 600, as listed. No italic, synthetic bold, remote CSS or runtime font CDN. All three options load for comparison; a later approved application implementation should retain only its chosen families. The fixed PULSYS wordmark does not switch when comparing body typography.
 
 ### Type scale and figures
 
@@ -292,8 +292,8 @@ Created files:
 
 - `docs/brand/brandbook.md`
 - `docs/brand/tokens.css`
-- `docs/brand/logo/merken-wordmark.svg`
-- `docs/brand/logo/merken-wordmark-mono.svg`
+- `docs/brand/logo/pulsys-wordmark.svg`
+- `docs/brand/logo/pulsys-wordmark-mono.svg`
 - `ui/brand.html`
 - `ui/src/brand.ts`
 - `ui/src/brand.css`

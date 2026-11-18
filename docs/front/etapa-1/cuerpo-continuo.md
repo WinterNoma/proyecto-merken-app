@@ -21,4 +21,4 @@ El usuario pidió aproximar la figura a la referencia híbrida, con un cuerpo in
 
 Capturas: [cuerpo dentro de la app](cuerpo-continuo-375.jpg) y [detalle de la figura y las tarjetas](cuerpo-continuo-detalle.jpg).
 
-El SVG también se copia en `entrega-diseno-merken/imagenes/14-cuerpo-humano-continuo.svg`; la guía compartida recoge el alcance móvil y esta forma de representar las zonas.
+El SVG también se copia en `entrega-diseno-pulsys/imagenes/14-cuerpo-humano-continuo.svg`; la guía compartida recoge el alcance móvil y esta forma de representar las zonas.

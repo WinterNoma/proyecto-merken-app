@@ -242,7 +242,7 @@ let telemetryMod;
 let historyMod;
 
 before(async () => {
-  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "merken-telemetry-ui-test-"));
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulsys-telemetry-ui-test-"));
   const build = await rolldown({
     input: {
       core: path.join(repoRoot, "ui/src/core-api.ts"),

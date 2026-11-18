@@ -365,13 +365,13 @@ mod tests {
         }
     }
     #[test]
-    #[ignore = "requires MERKEN_KOKORO_DIR with the installed v1.0 package and Merken supplement"]
+    #[ignore = "requires PULSYS_KOKORO_DIR with the installed v1.0 package and Pulsys supplement"]
     fn installed_lexicons_cover_normalizer_vocabulary() {
-        let dir = std::env::var_os("MERKEN_KOKORO_DIR")
+        let dir = std::env::var_os("PULSYS_KOKORO_DIR")
             .map(std::path::PathBuf::from)
-            .expect("set MERKEN_KOKORO_DIR");
+            .expect("set PULSYS_KOKORO_DIR");
         let base = dir.join("lexicon-us-en.txt");
-        let supplement = dir.join("merken-us-en.txt");
+        let supplement = dir.join("pulsys-us-en.txt");
         let lexicon = Lexicon::load_many(&[&base, &supplement]).unwrap();
         for input in [
             "bpm",

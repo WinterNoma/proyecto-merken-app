@@ -8,9 +8,9 @@ Umbrales médicos y sus fuentes: [`docs/api/umbrales-core.md`](../api/umbrales-c
 
 | Crate | Hace | No hace |
 |---|---|---|
-| `merken-core` | Tipos del catálogo (§5), validación dura, avisos de plausibilidad, evaluación (estados + escalado), registro efectivo (§6), DTO del contrato con `serde` | E/S, reloj, azar. El instante "ahora" entra como argumento |
-| `merken-store` | SQLite: perfil, registros (solo inserción), eventos, evaluaciones, outbox, cursor. Genera UUIDv7 | Decidir salud. Llama a `core` |
-| `merken-seed` | Perfil y escenarios **DEMO** deterministas | Datos de la persona real (nunca) |
+| `pulsys-core` | Tipos del catálogo (§5), validación dura, avisos de plausibilidad, evaluación (estados + escalado), registro efectivo (§6), DTO del contrato con `serde` | E/S, reloj, azar. El instante "ahora" entra como argumento |
+| `pulsys-store` | SQLite: perfil, registros (solo inserción), eventos, evaluaciones, outbox, cursor. Genera UUIDv7 | Decidir salud. Llama a `core` |
+| `pulsys-seed` | Perfil y escenarios **DEMO** deterministas | Datos de la persona real (nunca) |
 | `src-tauri` | Comandos Tauri. Lee el reloj del sistema y se lo pasa a `store`/`core` | Lógica de salud |
 
 ## 2. Tipos de `core` (resumen)

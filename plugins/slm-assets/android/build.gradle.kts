@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 android {
-    namespace = "com.merken.slmassets"
+    namespace = "com.pulsys.slmassets"
     compileSdk = 36
     defaultConfig { minSdk = 26 }
     compileOptions {

@@ -1,6 +1,6 @@
 [package]
-name = "merken-voice"
-description = "Local offline text-to-speech for Merken"
+name = "pulsys-voice"
+description = "Local offline text-to-speech for Pulsys"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

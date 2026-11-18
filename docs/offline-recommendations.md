@@ -20,7 +20,7 @@ are disabled rather than silently called simulated. The local profile supports
 canonical core indicators and keeps manual/Garmin origins separate.
 
 Backend snapshots retain conservative server flags but do not claim an independent
-onboard evaluation of another crew member. Profile status comes from merken-core.
+onboard evaluation of another crew member. Profile status comes from pulsys-core.
 Urgent actions bypass the language model; review flags remain in the packet.
 Exercise readiness is unknown until a trusted reviewed mission-plan integration
 exists. Mission exercise equipment is shown only as contextual information.

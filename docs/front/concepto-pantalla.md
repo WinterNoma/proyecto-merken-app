@@ -8,7 +8,7 @@ Una sola pantalla desde la que se maneja todo el panel. Puede haber pantallas se
 
 ## Distribución (móvil, de arriba abajo)
 
-1. **Barra superior:** logotipo MERKEN, selector de tripulante (abre el carrusel) y botón **Need help**, siempre visible y con diálogo de confirmación.
+1. **Barra superior:** logotipo PULSYS, selector de tripulante (abre el carrusel) y botón **Need help**, siempre visible y con diálogo de confirmación.
 2. **Estado general:** una caja con la barra lateral del color de estado, el texto del estado («Change detected»…) y la frescura («Live · hh:mm UTC» o «Last update…»).
 3. **Centro: body map** con las tarjetas de datos **en cajas, como en el brandbook** (superficie, borde, barra de estado de 3 px, etiqueta, valor en Roboto Mono y estado con icono y texto), a los dos lados del cuerpo:
    - izquierda: pulso, presión, SpO₂ y ánimo;

@@ -1,7 +1,7 @@
 //! Ground data synchronization is separate from offline model execution.
 use crate::{AppState, now, with_store};
-use merken_slm::contract::{self, Assessment, Input, Reading};
-use merken_store::{StoreError, api::ListRecordsInput};
+use pulsys_slm::contract::{self, Assessment, Input, Reading};
+use pulsys_store::{StoreError, api::ListRecordsInput};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[cfg(target_os = "android")]
@@ -78,7 +78,7 @@ pub fn recommendations_cached_crew(
         .map(Some)
         .map_err(|_| err("Cached backend snapshot is invalid"))
 }
-const ORIGIN: &str = "https://deployconmerken.gabogrobier.dev";
+const ORIGIN: &str = "https://deployconpulsys.gabogrobier.dev";
 const EXPIRED: &str = "Ground-station session expired; sign in again";
 
 fn unreachable() -> StoreError {
@@ -365,7 +365,7 @@ fn local_snapshot(
         } else {
             "MANUAL"
         };
-        use merken_core::evaluate::Escalation;
+        use pulsys_core::evaluate::Escalation;
         let core_action = match status.overall.escalation {
             Escalation::Urgent => "IMMEDIATE_PROTOCOL",
             Escalation::FlagForGround => "REVIEW_MEDICAL",
@@ -416,8 +416,8 @@ pub(crate) fn directory(
     let path = {
         let _ = app;
         PathBuf::from(
-            std::env::var("MERKEN_SLM_MODEL_DIR")
-                .map_err(|_| "Set MERKEN_SLM_MODEL_DIR to the verified offline bundle")?,
+            std::env::var("PULSYS_SLM_MODEL_DIR")
+                .map_err(|_| "Set PULSYS_SLM_MODEL_DIR to the verified offline bundle")?,
         )
     };
     // La verificación de V7 va aparte (`verified_v7_directory`): una APK de prueba
@@ -435,7 +435,7 @@ fn verified_v7_directory(
 ) -> Result<PathBuf, String> {
     let path = directory(app, cache)?;
     if V7_VERIFIED.get() != Some(&path) {
-        merken_slm::runtime::verify(&path)?;
+        pulsys_slm::runtime::verify(&path)?;
         let _ = V7_VERIFIED.set(path.clone());
     }
     Ok(path)
@@ -463,7 +463,7 @@ pub(crate) fn android_model_root(app: &tauri::AppHandle) -> Result<PathBuf, Stri
 /// Un solo modelo en memoria: descarga el del servicio SLM (v5) antes de cargar V7.
 /// Si el servicio está ocupado se rechaza la recomendación en vez de cargar 2 copias.
 fn release_service_model(app: &tauri::AppHandle) -> Result<(), String> {
-    use merken_slm::service::{default_deadline, wait_limit};
+    use pulsys_slm::service::{default_deadline, wait_limit};
     let service = app.state::<crate::SlmState>().service.clone();
     let deadline = default_deadline();
     service
@@ -534,7 +534,7 @@ pub async fn recommendations_generate(
             } else if let Ok(path) = verified_v7_directory(&app, &model_cache) {
                 release_service_model(&app).map_err(err)?;
                 let (response, _, elapsed) =
-                    merken_slm::runtime::generate(&path, &packet, &cancel).map_err(err)?;
+                    pulsys_slm::runtime::generate(&path, &packet, &cancel).map_err(err)?;
                 (response, elapsed, "SLM_OFFLINE")
             } else {
                 (

@@ -1,6 +1,6 @@
 # Compilar la app Android por CLI (sin abrir Android Studio)
 
-Proyecto: Tauri 2 + Rust (`com.merken.app`). Android Studio solo hace falta una vez, si quieres instalar `cmdline-tools` desde su SDK Manager.
+Proyecto: Tauri 2 + Rust (`com.pulsys.app`). Android Studio solo hace falta una vez, si quieres instalar `cmdline-tools` desde su SDK Manager.
 
 ## Requisitos previos
 

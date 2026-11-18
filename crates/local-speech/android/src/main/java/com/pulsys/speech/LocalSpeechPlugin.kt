@@ -1,4 +1,4 @@
-package com.merken.speech
+package com.pulsys.speech
 
 import android.Manifest
 import android.app.Activity

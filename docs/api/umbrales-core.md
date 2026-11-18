@@ -1,4 +1,4 @@
-# Umbrales del núcleo (merken-core)
+# Umbrales del núcleo (pulsys-core)
 
 Versión de reglas: **`rules-2026.11.14`** · Estado: **contrastado con Hydrogen** ([informe](../../reviews/umbrales-hydrogen.md) y [v2 del catálogo](../../reviews/umbrales-hydrogen-v2.md), 14-nov-2026). Las citas las aportó Hydrogen; Sol las revisa en [core-v1](../../reviews/core-v1.md).
 Fuente de verdad en código: `crates/core/src/rules.rs`. Los `source_ref` van en inglés porque la app los muestra.
@@ -17,7 +17,7 @@ Diseño: [decisión 003](../decisiones/003-nucleo-rust.md). Unidades del catálo
 | `plaus.body_temperature` | `celsius < 34.0` o `> 41.5` | `demo_heuristic` | — |
 | `plaus.glucose` | `mg_dl < 40` o `> 450` | `demo_heuristic` | — |
 | `plaus.sleep` | `hours > 14` | `demo_heuristic` | — |
-| `plaus.oxygen_in_blood` | `percentage < 80` | `demo_heuristic` | Corte de confirmación elegido por Merken, sin validación publicada específica. Referencia técnica: la guía FDA 510(k) de pulsioxímetros (2013) especifica la precisión en el rango 70–100 % (corregido tras Sol) |
+| `plaus.oxygen_in_blood` | `percentage < 80` | `demo_heuristic` | Corte de confirmación elegido por Pulsys, sin validación publicada específica. Referencia técnica: la guía FDA 510(k) de pulsioxímetros (2013) especifica la precisión en el rango 70–100 % (corregido tras Sol) |
 | `plaus.nutrition` | `kcal > 6000` | `demo_heuristic` | Atrapa `kJ` anotados como `kcal`; NASA-STD-3001 Vol. 2 [V2 7003]: 3035 kcal/día nominales |
 | `plaus.space_radiation` | `usv_h > 10000` | `demo_heuristic` | Fondo ISS 17–42 µSv/h (Cucinotta 2014), SAA hasta ~1500 µGy/h (Dachev 2011), Marte en tránsito ~77 µSv/h (Zeitlin 2013) |
 | `plaus.future_timestamp` | `measured_at > now + 10 min` | `approved_protocol` | Contrato §6 |

@@ -5,7 +5,7 @@ use crate::{
     engine::{DEFAULT_MAX_TOKENS, DEFAULT_SEED, DEFAULT_TEMPERATURE, Engine, GenerateRequest},
     error::{OutputIssue, SlmError},
 };
-use merken_core::{
+use pulsys_core::{
     ErrorCode,
     catalog::Indicator,
     interpret::MAX_INPUT_CHARS,
@@ -111,7 +111,7 @@ Output: {"schema_version":1,"interpreter":"slm","interpreter_version":"example",
 Input: no back pain
 Output: {"schema_version":1,"interpreter":"slm","interpreter_version":"example","records":[],"negated":["no back pain"],"uninterpreted":[]}"#;
 
-/// Trait para intérpretes de texto libre hacia una [`Proposal`] validable por `merken-core`.
+/// Trait para intérpretes de texto libre hacia una [`Proposal`] validable por `pulsys-core`.
 pub trait Interpreter {
     /// Interpreta `text` y devuelve una propuesta verificada con [`Proposal::check`].
     fn interpret(&mut self, text: &str, ctl: &mut Control<'_>) -> Result<Proposal, SlmError>;
@@ -520,7 +520,7 @@ mod tests {
         control::{CancelToken, Deadline},
         engine::MockEngine,
     };
-    use merken_core::catalog::{BodyZone, SleepQuality};
+    use pulsys_core::catalog::{BodyZone, SleepQuality};
     use serde_json::json;
     use std::time::Duration;
 

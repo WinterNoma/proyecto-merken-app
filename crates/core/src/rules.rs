@@ -373,8 +373,8 @@ pub const BP_DIASTOLIC_DELTA: f64 = 10.0;
 
 /// Identificadores y procedencia de reglas no numéricas.
 pub const EVENT_ALARM_ID: &str = "event.alarm";
-pub const EVENT_ALARM_SOURCE: &str = "Merken requirements RF-10: every alarm event raises an alarm";
+pub const EVENT_ALARM_SOURCE: &str = "Pulsys requirements RF-10: every alarm event raises an alarm";
 pub const BP_ORDER_ID: &str = "plaus.bp_order";
 pub const FUTURE_ID: &str = "plaus.future_timestamp";
-pub const FUTURE_SOURCE: &str = "Merken backend contract v0.3, section 6";
+pub const FUTURE_SOURCE: &str = "Pulsys backend contract v0.3, section 6";
 pub const OLD_ID: &str = "plaus.old_measurement";

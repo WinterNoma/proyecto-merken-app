@@ -18,7 +18,7 @@ mod inner {
             render_facts, validate_selection,
         },
     };
-    use merken_core::{
+    use pulsys_core::{
         RULES_VERSION, VERSION,
         catalog::BodyZone,
         evaluate::{Direction, Escalation, Evaluation, NotEvaluatedReason, SourceKind, Status},

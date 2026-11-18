@@ -11,7 +11,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             {
                 use tauri::Manager;
                 let handle =
-                    api.register_android_plugin("com.merken.slmassets", "SlmAssetsPlugin")?;
+                    api.register_android_plugin("com.pulsys.slmassets", "SlmAssetsPlugin")?;
                 app.manage(SlmAssets(handle));
             }
             #[cfg(not(target_os = "android"))]

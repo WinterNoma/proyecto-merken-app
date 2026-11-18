@@ -1,6 +1,6 @@
 //! Bloque determinista de hechos clínicos renderizado por Rust desde `Evaluation` (RF-15, RNF-14).
 
-use merken_core::{
+use pulsys_core::{
     catalog::BodyZone,
     evaluate::{Direction, Escalation, Evaluation, NotEvaluatedReason, SourceKind, Status},
 };
@@ -9,7 +9,7 @@ use serde_json::Value;
 
 /// Tabla central de cadenas visibles en inglés (RNF-14).
 mod strings {
-    use merken_core::catalog::BodyZone;
+    use pulsys_core::catalog::BodyZone;
 
     pub const INDICATOR_PREFIX: &str = "Indicator: ";
     pub const UNKNOWN_INDICATOR: &str = "Health indicator";

@@ -299,7 +299,7 @@ export interface SimImportInput {
   astronaut_id: string;
   /** Días hacia atrás (1–31). Por defecto 14, la ventana de historial del núcleo. */
   days?: number;
-  /** Token de la API de simulación. Si falta, Rust usa la variable MERKEN_SIM_TOKEN. */
+  /** Token de la API de simulación. Si falta, Rust usa la variable PULSYS_SIM_TOKEN. */
   token?: string;
 }
 
@@ -512,7 +512,7 @@ const DICTATION_MAX_SECONDS = 30;
 const DICTATION_MAX_TARGET_SAMPLES = DICTATION_TARGET_SAMPLE_RATE * DICTATION_MAX_SECONDS;
 
 const DICTATION_WORKLET_SOURCE = `
-class MerkenDictationProcessor extends AudioWorkletProcessor {
+class PulsysDictationProcessor extends AudioWorkletProcessor {
   process(inputs) {
     const input = inputs[0];
     if (input && input.length > 0 && input[0] && input[0].length > 0) {
@@ -535,7 +535,7 @@ class MerkenDictationProcessor extends AudioWorkletProcessor {
     return true;
   }
 }
-registerProcessor("merken-dictation-processor", MerkenDictationProcessor);
+registerProcessor("pulsys-dictation-processor", PulsysDictationProcessor);
 `;
 
 export interface DictationAudio {
@@ -792,7 +792,7 @@ export function recordDictation(): DictationRecording {
           cleanup();
           throw new Error("Dictation recording was cancelled");
         }
-        workletNode = new AudioWorkletNode(ctx, "merken-dictation-processor", {
+        workletNode = new AudioWorkletNode(ctx, "pulsys-dictation-processor", {
           numberOfInputs: 1,
           numberOfOutputs: 1,
           channelCount: 1,

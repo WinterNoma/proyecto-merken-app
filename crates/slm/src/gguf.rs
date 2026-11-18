@@ -419,7 +419,7 @@ mod tests {
     }
     fn check(base: &[u8], adapter: &[u8]) -> bool {
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("merken-gguf-{}-{id}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("pulsys-gguf-{}-{id}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let b = dir.join("base");
         let a = dir.join("adapter");
@@ -435,7 +435,7 @@ mod tests {
         use crate::{ChatTemplate, EngineErrorCode, SlmError};
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!(
-            "merken-gguf-architecture-{}-{id}",
+            "pulsys-gguf-architecture-{}-{id}",
             std::process::id()
         ));
         std::fs::create_dir_all(&dir).unwrap();

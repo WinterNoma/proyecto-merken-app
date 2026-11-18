@@ -8,7 +8,7 @@ Qué hace
     y lo publica con la transacción de 3 escrituras del §4: entidad en la tabla de
     registros + fila en el diario `sync_changes` + contador `sync_heads`.
   - Cada astronauta va a su propia partición `<prefijo><astronaut_key>` (por defecto
-    `merken-tech-test-`): NO toca las particiones de los astronautas reales.
+    `pulsys-tech-test-`): NO toca las particiones de los astronautas reales.
   - Es idempotente: el `record_id` sale del astronauta y el `reading_id`; reenviar una
     lectura da "duplicado" y no consume número de secuencia.
   - Guarda hasta dónde llegó cada astronauta en `backups/dynamo-telemetry-state.json`.
@@ -126,7 +126,7 @@ def iso(ms):
 
 # ---------- SQLite ----------
 def default_db():
-    return os.path.join(os.environ.get("APPDATA", ""), "com.merken.app", "merken.sqlite3")
+    return os.path.join(os.environ.get("APPDATA", ""), "com.pulsys.app", "pulsys.sqlite3")
 
 
 def row_hash(r):
@@ -160,15 +160,15 @@ def verify_chain(rows):
 
 
 def to_record(r, partition, now):
-    record_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"merken-telemetry:{r['astronaut_key']}:{r['reading_id']}"))
+    record_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"pulsys-telemetry:{r['astronaut_key']}:{r['reading_id']}"))
     note = f"TECH TEST - safe to delete. SQLite reading_id={r['reading_id']}, row_hash={r['row_hash']}"
     item = {
         "astronaut_id": S(partition), "record_id": S(record_id), "indicator": S(r["indicator"]),
         "value": to_attr(json.loads(r["value_json"])), "unit": S(r["unit"]),
         "measured_at": S(iso(r["observed_at"])), "logged_at": S(iso(r["observed_at"])),
-        "source": S("garmin"), "external_id": S(f"garmin:merken-telemetry-{r['astronaut_key']}-{r['reading_id']}"),
+        "source": S("garmin"), "external_id": S(f"garmin:pulsys-telemetry-{r['astronaut_key']}-{r['reading_id']}"),
         "note": S(note), "received_at": S(now),
-        "created_by": to_attr({"type": "ground_service", "id": "merken-tech-test"}),
+        "created_by": to_attr({"type": "ground_service", "id": "pulsys-tech-test"}),
         "schema_version": N(1), "app_version": S(r["app_version"]),
     }
     return record_id, item
@@ -357,7 +357,7 @@ def send_urgent(a, state, warned):
     for entity, eid, p in urgent_candidates(a.db, state):
         item = {k: to_attr(v) for k, v in p.items() if v is not None}
         item.update({"astronaut_id": S(part), "received_at": S(now),
-                     "created_by": to_attr({"type": "ground_service", "id": "merken-tech-test"})})
+                     "created_by": to_attr({"type": "ground_service", "id": "pulsys-tech-test"})})
         table = T_EVT if entity == "event" else T_EVAL
         try:
             publish_batch(table, part, entity, [(eid, item)])
@@ -408,8 +408,8 @@ def purge(prefix):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--db", default=default_db(), help="ruta de merken.sqlite3 (por defecto la de la app)")
-    ap.add_argument("--prefix", default="merken-tech-test-", help="prefijo de las particiones de prueba")
+    ap.add_argument("--db", default=default_db(), help="ruta de pulsys.sqlite3 (por defecto la de la app)")
+    ap.add_argument("--prefix", default="pulsys-tech-test-", help="prefijo de las particiones de prueba")
     ap.add_argument("--limit", type=int, default=0, help="máximo de lecturas por astronauta en esta ejecución")
     ap.add_argument("--astronaut", help="enviar solo este astronaut_key")
     ap.add_argument("--interval", type=int, default=45, help="segundos entre tandas con --watch (30-60)")

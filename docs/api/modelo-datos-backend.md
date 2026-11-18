@@ -1,4 +1,4 @@
-# Merken — Modelo de datos y API para el equipo de backend
+# Pulsys — Modelo de datos y API para el equipo de backend
 
 Versión 0.3.1 · 14-nov-2026 · Para: equipo de backend (MySQL + DynamoDB + servidor)
 Revisado por Sol: [v0.1](../../reviews/modelo-datos-backend.md) y [v0.2](../../reviews/modelo-datos-backend-v0.2.md); la v0.3 aplica sus correcciones exactas. Los nombres de campos, tablas y endpoints van en **inglés**, igual que los textos que ve el usuario.
@@ -11,7 +11,7 @@ Revisado por Sol: [v0.1](../../reviews/modelo-datos-backend.md) y [v0.2](../../r
 | **DynamoDB** | Historial clínico generado por la app, por Tierra y por Garmin, más un **diario de cambios** para sincronizar |
 | **Móvil (SQLite)** | Copia local del perfil y del historial de su astronauta; funciona sin conexión |
 
-**Cambios en v0.3.1:** tablas de DynamoDB renombradas: `health_records`, `health_events`, `health_evaluations`, `health_recommendations` (antes `merken_suggestions`), `recommendation_reviews` (antes `merken_suggestion_reviews`), `health_analyses`, `sync_changes` y `sync_heads`. Solo cambian los nombres de las tablas: los valores de `entity` en el diario (`record`, `suggestion`, `suggestion_review`…) y los campos (`suggestion_ids`…) siguen igual.
+**Cambios en v0.3.1:** tablas de DynamoDB renombradas: `health_records`, `health_events`, `health_evaluations`, `health_recommendations` (antes `pulsys_suggestions`), `recommendation_reviews` (antes `pulsys_suggestion_reviews`), `health_analyses`, `sync_changes` y `sync_heads`. Solo cambian los nombres de las tablas: los valores de `entity` en el diario (`record`, `suggestion`, `suggestion_review`…) y los campos (`suggestion_ids`…) siguen igual.
 
 **Cambios respecto a v0.1:**
 - La escritura condicional usa `attribute_not_exists(#pk)`, porque la v0.1 permitía sobrescribir.

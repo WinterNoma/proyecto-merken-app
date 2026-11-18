@@ -9,7 +9,7 @@ Base visual provisional: hibrido, sin paisaje rocoso. El usuario propone como ef
 - **Audio:** la energia de la voz modifica suavemente la amplitud y velocidad del movimiento. Web Audio / AnalyserNode puede obtener datos del audio cuando exista una captura real compatible con la plataforma.
 - **Tema:** un segmento de transcripcion suficientemente estable propone una categoria visual. La categoria modifica el recorrido o la concentracion local de las particulas mediante una transicion gradual. No se ejecuta interpretacion por fotograma.
 
-El analizador de audio no entiende temas. La respuesta semantica depende de la transcripcion y su latencia; si no hay parciales, solo podra actualizarse despues de transcribir al soltar el microfono. La captura, la transcripcion y el interprete siguen pendientes de integrar en Merken.
+El analizador de audio no entiende temas. La respuesta semantica depende de la transcripcion y su latencia; si no hay parciales, solo podra actualizarse despues de transcribir al soltar el microfono. La captura, la transcripcion y el interprete siguen pendientes de integrar en Pulsys.
 
 ## Ejemplos para comparar en un prototipo
 

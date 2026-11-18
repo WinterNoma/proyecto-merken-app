@@ -1,6 +1,6 @@
-//! # merken-core
+//! # pulsys-core
 //!
-//! Dominio y evaluación de Merken. **Puro y determinista** (RNF-03, RNF-04):
+//! Dominio y evaluación de Pulsys. **Puro y determinista** (RNF-03, RNF-04):
 //! sin E/S, sin reloj del sistema y sin nada que pueda entrar en pánico (RNF-01).
 
 pub mod telemetry;

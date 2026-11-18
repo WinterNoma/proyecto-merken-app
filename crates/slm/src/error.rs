@@ -1,4 +1,4 @@
-//! Tipos de error y problemas de validación de salida para `merken-slm`.
+//! Tipos de error y problemas de validación de salida para `pulsys-slm`.
 
 use serde::{Deserialize, Serialize};
 use std::fmt;

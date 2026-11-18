@@ -6,7 +6,7 @@ use std::error::Error;
 use std::fs;
 use std::time::{Duration, Instant};
 
-use merken_slm::{
+use pulsys_slm::{
     CancelToken, Control, Deadline, Engine, GenerateRequest, LlamaEngine, LlamaEngineConfig,
     ModelFile, ModelManifest, ModelPackage, ModelRole, ModelSlot, ModelStore,
     build_selection_grammar,
@@ -74,7 +74,7 @@ fn file(runtime: &Runtime, name: &str) -> Result<ModelFile, Box<dyn Error>> {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let dir =
-        std::path::PathBuf::from(std::env::var_os("MERKEN_V5_DIR").ok_or("falta MERKEN_V5_DIR")?);
+        std::path::PathBuf::from(std::env::var_os("PULSYS_V5_DIR").ok_or("falta PULSYS_V5_DIR")?);
     let runtime: Runtime = serde_json::from_str(&fs::read_to_string(dir.join("runtime.json"))?)?;
     let base = file(&runtime, &runtime.base_file)?;
     let adapter = file(&runtime, &runtime.adapter_file)?;

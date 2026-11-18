@@ -1,4 +1,4 @@
-# Investigación de front-end para Merken
+# Investigación de front-end para Pulsys
 
 **Consulta: 14 de noviembre de 2026.** Investigación sin cambios en código ni instalaciones. Estrellas aproximadas y actividad observada cambian; «sin verificar» indica que la fuente no permitió confirmar el dato. Los pesos deben medirse con la versión y el build Vite elegidos: tamaño instalado, comprimido y servido son cosas diferentes.
 
@@ -8,7 +8,7 @@
 
 - [Anthropic frontend-design](https://github.com/anthropics/skills/tree/main/skills/frontend-design): orientación para dirección visual, tipografía y composición; [LICENSE específico Apache-2.0](https://github.com/anthropics/skills/blob/main/skills/frontend-design/LICENSE.txt). Es útil ya para redactar un brief y revisar el resultado; adaptar la búsqueda de identidad a la lectura de datos y a TS vanilla.
 - [Awesome Claude Skills](https://github.com/ComposioHQ/awesome-claude-skills): catálogo de descubrimiento, no garantía de calidad o licencia de cada entrada. Licencia del catálogo y de cada skill **sin verificar**; leer el archivo específico antes de copiar o ejecutar.
-- [AGENTS.md de NASA Open MCT](https://github.com/nasa/openmct/blob/master/AGENTS.md) es un ejemplo de instrucciones de proyecto. Su [código principal es Apache-2.0 con componentes de terceros](https://github.com/nasa/openmct/blob/master/copyright-notice.html). La [guía de AGENTS.md de Codex](https://developers.openai.com/codex/guides/agents-md/) explica el mecanismo; licencia de la documentación **sin verificar**. Para Merken conviene fijar como instrucciones verificables: offline, sin framework, estados del núcleo, no inventar telemetría, accesibilidad y revisión visual.
+- [AGENTS.md de NASA Open MCT](https://github.com/nasa/openmct/blob/master/AGENTS.md) es un ejemplo de instrucciones de proyecto. Su [código principal es Apache-2.0 con componentes de terceros](https://github.com/nasa/openmct/blob/master/copyright-notice.html). La [guía de AGENTS.md de Codex](https://developers.openai.com/codex/guides/agents-md/) explica el mecanismo; licencia de la documentación **sin verificar**. Para Pulsys conviene fijar como instrucciones verificables: offline, sin framework, estados del núcleo, no inventar telemetría, accesibilidad y revisión visual.
 - [Reglas de Cursor](https://cursor.com/docs/context/rules): contexto y reglas dirigidas por proyecto. Licencia del texto **sin verificar**; utilizar la idea de reglas acotadas como referencia, evitando duplicar instrucciones incompatibles.
 - [Anthropic web-artifacts-builder](https://github.com/anthropics/skills/blob/main/skills/web-artifacts-builder/SKILL.md) incluye un flujo React/Tailwind; no es una plantilla adecuada aquí. Licencia específica **sin verificar**.
 
@@ -37,8 +37,8 @@ Otras alternativas: [Motion](https://github.com/motiondivision/motion), [anime.j
 
 ## 3. Patrones de UI de salud
 
-1. **Alarmas y prioridad.** La [IEC 60601-1-8 en ISO](https://www.iso.org/obp/ui?_escaped_fragment_=iso%3Astd%3Aiec%3A60601%3A-1-8%3Aed-2%3Av1%3Aen) trata sistemas de alarmas. Una [vista de la edición 2003](https://www.iteh.eu/catalog/standards/iec/8c7d1586-56b2-41a8-99ca-32947c93dabd/iec-60601-1-8-2003) muestra alta roja, media amarilla y baja cian o amarilla, diferenciadas también por comportamiento. Sirve de referencia visual histórica, no para afirmar cumplimiento: revisar edición aplicable, sonidos, tiempos y uso previsto con especialistas. En Merken: estado explícito con texto y símbolo; prioridad visible y alertas persistentes.
-2. **Lectura con contexto.** [NEWS2 del Royal College of Physicians](https://www.rcp.ac.uk/resources/national-early-warning-score-news-2/) organiza observaciones y comunicación del deterioro. Inspirarse en jerarquía y secuencia, sin inventar puntuaciones ni afirmar que Merken calcula NEWS2. Los gráficos originales tienen sus propios derechos.
+1. **Alarmas y prioridad.** La [IEC 60601-1-8 en ISO](https://www.iso.org/obp/ui?_escaped_fragment_=iso%3Astd%3Aiec%3A60601%3A-1-8%3Aed-2%3Av1%3Aen) trata sistemas de alarmas. Una [vista de la edición 2003](https://www.iteh.eu/catalog/standards/iec/8c7d1586-56b2-41a8-99ca-32947c93dabd/iec-60601-1-8-2003) muestra alta roja, media amarilla y baja cian o amarilla, diferenciadas también por comportamiento. Sirve de referencia visual histórica, no para afirmar cumplimiento: revisar edición aplicable, sonidos, tiempos y uso previsto con especialistas. En Pulsys: estado explícito con texto y símbolo; prioridad visible y alertas persistentes.
+2. **Lectura con contexto.** [NEWS2 del Royal College of Physicians](https://www.rcp.ac.uk/resources/national-early-warning-score-news-2/) organiza observaciones y comunicación del deterioro. Inspirarse en jerarquía y secuencia, sin inventar puntuaciones ni afirmar que Pulsys calcula NEWS2. Los gráficos originales tienen sus propios derechos.
 3. **Sparklines honestos.** Valor, unidad, hora de medición y estado del núcleo; una tendencia con ventana indicada y muestras reales de listRecords(), huecos si faltan registros y texto equivalente. No simular ECG desde una frecuencia ni exagerar variación con escala oculta.
 4. **Sin dato y antiguo.** Representar de forma diferente «Sin datos», «Dato antiguo», «Historial insuficiente» y «No evaluado» según reason. Mostrar última medición cuando exista y distinguir su hora de sincronización. not_applicable es contexto, no alarma. «En vivo» solo con fuente y frescura demostrables.
 5. **Wearables.** [Apple HealthKit HIG](https://developer.apple.com/design/human-interface-guidelines/healthkit) aporta orientación sobre datos de salud y marca. El patrón recomendado es lectura acompañada de historial y origen. Patrones específicos de Garmin y Oura y licencias de capturas **sin verificar**; no copiar sus marcas o pantallas.
@@ -48,7 +48,7 @@ Otras alternativas: [Motion](https://github.com/motiondivision/motion), [anime.j
 
 Tamaño: **sin verificar** significa que no se midió una versión y build concretos. Cargar recursos empaquetados localmente y conservar los avisos exigidos.
 
-| Recurso | Uso en Merken | Tamaño aproximado | Licencia | Compatibilidad |
+| Recurso | Uso en Pulsys | Tamaño aproximado | Licencia | Compatibilidad |
 |---|---|---|---|---|
 | CSS propio | tokens y estados | solo CSS propio; sin medir | código del proyecto | Sí; sin dependencia. |
 | Radix Colors | escalas oscuras | sin verificar | MIT | Sí, CSS local; probar contraste. |

@@ -172,7 +172,7 @@ export function setupRecommendations(available: boolean): void {
 
   function acceptSnapshot(next: Cache, manual: boolean): void {
     const missing = roster(next, manual);
-    window.dispatchEvent(new Event("merken:backend-snapshot"));
+    window.dispatchEvent(new Event("pulsys:backend-snapshot"));
     syncStatus.textContent = "Connected · updates every 15 s · Last snapshot " + utc(next.received_at)
       + (!manual && missing ? " · Selected astronaut unavailable; using on-device profile." : "");
   }

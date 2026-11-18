@@ -2,7 +2,7 @@
 //!
 //! Solo datos inventados: lo que se descarga se guarda en el móvil como DEMO
 //! (nunca se sube a Tierra). El token nunca va en el código: lo pasa quien
-//! llama (variable de entorno `MERKEN_SIM_TOKEN` o un campo de la interfaz).
+//! llama (variable de entorno `PULSYS_SIM_TOKEN` o un campo de la interfaz).
 //!
 //! **Logs:** nunca activar el nivel `TRACE` para `ureq` ni `ureq_proto` en
 //! ninguna configuración de logging: vuelcan las cabeceras enviadas, incluida
@@ -137,7 +137,7 @@ impl SimClient {
         if token.is_empty() {
             return Err(SyncError::new(
                 "missing_token",
-                "Set MERKEN_SIM_TOKEN or pass the simulation token",
+                "Set PULSYS_SIM_TOKEN or pass the simulation token",
             ));
         }
         let config = ureq::Agent::config_builder()

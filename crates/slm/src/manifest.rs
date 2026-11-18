@@ -14,7 +14,7 @@ use std::{
 
 pub(crate) const HASH_BUF_BYTES: usize = 64 * 1024;
 
-/// Papel funcional de un modelo dentro de `merken-slm`.
+/// Papel funcional de un modelo dentro de `pulsys-slm`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelRole {
@@ -66,7 +66,7 @@ pub struct ModelManifest {
 /// ausencia de enlaces simbólicos e integridad criptográfica.
 ///
 /// ```compile_fail
-/// use merken_slm::VerifiedFile;
+/// use pulsys_slm::VerifiedFile;
 /// use std::path::PathBuf;
 ///
 /// let _fake = VerifiedFile {
@@ -141,7 +141,7 @@ enum VerifiedPackage {
 /// de entregar las rutas a la fábrica.
 ///
 /// ```compile_fail
-/// use merken_slm::{ModelRole, VerifiedModel};
+/// use pulsys_slm::{ModelRole, VerifiedModel};
 /// use std::path::PathBuf;
 ///
 /// let _fake = VerifiedModel {
@@ -625,7 +625,7 @@ mod tests {
         fn new(label: &str) -> Self {
             let n = TEMP_SEQ.fetch_add(1, Ordering::SeqCst);
             let path = std::env::temp_dir().join(format!(
-                "merken_slm_manifest_{label}_{}_{}",
+                "pulsys_slm_manifest_{label}_{}_{}",
                 std::process::id(),
                 n
             ));

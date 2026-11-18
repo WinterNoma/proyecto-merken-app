@@ -47,7 +47,7 @@ for (const [key, name] of Object.entries(cardIcons)) {
 element("#sync-open .card-label").prepend(icon("sync"));
 const ambient = createAmbientParticles(element<HTMLCanvasElement>("#ambient-particles"));
 // Read-only measurements and an A/B switch for local visual QA, absent in builds.
-if (import.meta.env.DEV) Object.defineProperty(window, "__merkenAmbient", {
+if (import.meta.env.DEV) Object.defineProperty(window, "__pulsysAmbient", {
   configurable: true, value: { snapshot: ambient.snapshot, setEnabled: ambient.setEnabled },
 });
 const dashboard = createDashboard(available, zone => {

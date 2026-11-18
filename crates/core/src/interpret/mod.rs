@@ -1,4 +1,4 @@
-//! Capa 1 del intérprete de texto de Merken (RF-14): reglas deterministas.
+//! Capa 1 del intérprete de texto de Pulsys (RF-14): reglas deterministas.
 //!
 //! Convierte texto libre en español, inglés o mezclado en una [`Proposal`]
 //! determinista, pura (sin E/S ni reloj) e instantánea. Nunca guarda nada y

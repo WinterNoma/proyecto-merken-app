@@ -1,7 +1,7 @@
 //! Propuesta de registro a partir de texto libre (RF-14).
 //!
 //! Contrato común de las dos capas del intérprete: la capa 1 determinista
-//! (`interpret`, en este crate) y la capa 2 con SLM (`merken-slm`). Ninguna
+//! (`interpret`, en este crate) y la capa 2 con SLM (`pulsys-slm`). Ninguna
 //! guarda nada: devuelven una [`Proposal`] que el núcleo comprueba con
 //! [`Proposal::check`] y que el usuario confirma campo a campo.
 //!
@@ -40,9 +40,9 @@ const QUOTE_TOLERANCE: f64 = 1e-9;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InterpreterKind {
-    /// Capa 1: reglas deterministas de `merken-core`.
+    /// Capa 1: reglas deterministas de `pulsys-core`.
     Rules,
-    /// Capa 2: modelo pequeño con salida restringida (`merken-slm`).
+    /// Capa 2: modelo pequeño con salida restringida (`pulsys-slm`).
     Slm,
 }
 

@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fs;
 use std::time::{Duration, Instant};
 
-use merken_slm::{
+use pulsys_slm::{
     CancelToken, Control, Deadline, Engine, GenerateRequest, LlamaEngine, LlamaEngineConfig,
     ModelFile, ModelManifest, ModelPackage, ModelRole, ModelSlot, ModelStore, PROPOSAL_GBNF,
     Progress, build_selection_grammar,
@@ -73,7 +73,7 @@ fn percentile(sorted: &[f64], numerator: usize) -> Option<f64> {
 fn run() -> Result<(), Box<dyn Error>> {
     let limit = limit_arg()?;
     let dir =
-        std::path::PathBuf::from(std::env::var_os("MERKEN_V5_DIR").ok_or("falta MERKEN_V5_DIR")?);
+        std::path::PathBuf::from(std::env::var_os("PULSYS_V5_DIR").ok_or("falta PULSYS_V5_DIR")?);
     let runtime: Runtime = serde_json::from_str(&fs::read_to_string(dir.join("runtime.json"))?)?;
     if runtime.temperature != 0.0 || runtime.context_size != 1024 {
         return Err("runtime v5 no coincide con la configuración esperada".into());

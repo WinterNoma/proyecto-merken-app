@@ -7,7 +7,7 @@ import { after, test } from "node:test";
 import { rolldown } from "rolldown";
 
 const root = path.resolve(import.meta.dirname, "../..");
-const temp = await fs.mkdtemp(path.join(os.tmpdir(), "merken-front-graves-"));
+const temp = await fs.mkdtemp(path.join(os.tmpdir(), "pulsys-front-graves-"));
 const modules = {
   core: "core-api", panel: "ui/core-panel", dashboard: "ui/dashboard",
   statuses: "ui/status-copy", vital: "vital-status", telemetry: "ui/telemetry", vitals: "ui/vitals",

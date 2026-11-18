@@ -7,8 +7,8 @@
 //! `Store::import_synthetic` (sustituyen la DEMO anterior, nunca se suben a
 //! Tierra y no se mezclan con datos reales). La hora de cada registro es la
 //! `observed_at` guardada; el núcleo no inventa horas.
-use merken_core::{catalog::Indicator, time::Timestamp};
-use merken_store::{ListTelemetryInput, Store, StoreError, TelemetryItem};
+use pulsys_core::{catalog::Indicator, time::Timestamp};
+use pulsys_store::{ListTelemetryInput, Store, StoreError, TelemetryItem};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -127,7 +127,7 @@ pub fn local_records(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use merken_store::{RecordTelemetryInput, TelemetryReadingInput};
+    use pulsys_store::{RecordTelemetryInput, TelemetryReadingInput};
 
     fn reading(indicator: &str, value: Value, unit: &str) -> TelemetryReadingInput {
         TelemetryReadingInput {

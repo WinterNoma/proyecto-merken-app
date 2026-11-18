@@ -6,7 +6,7 @@ Se ejecuta en PR hacia `desarrollo`, pushes a `desarrollo` y manualmente.
 No despliega servicios ni necesita credenciales AWS, SSH o datos personales.
 
 En GitHub: Actions → Android APK → ejecución correcta → Artifacts. Descargar y
-extraer `merken-arm64-debug.apk`. En Windows con GitHub CLI:
+extraer `pulsys-arm64-debug.apk`. En Windows con GitHub CLI:
 
 ```powershell
 gh run download NUMERO_EJECUCION --repo WinterNoma/proyecto-merken-app --dir artifacts

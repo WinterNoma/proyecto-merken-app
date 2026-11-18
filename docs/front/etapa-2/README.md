@@ -50,7 +50,7 @@ En el navegador de desarrollo, a 360 × 800 y DPR 1:
 
 Son medidas breves del equipo de desarrollo. No miden tiempo completo de GPU, RAM total del proceso, consumo, temperatura ni rendimiento sostenido en un teléfono. Falta esa comparación en hardware móvil antes de sacar conclusiones sobre batería.
 
-Build: JS 61.94 kB (20.98 gzip), frente a aproximadamente 57.44/19.10 kB antes de esta etapa; incremento aproximado de 4.50 kB de JS y 1.88 kB gzip. CSS 41.48 kB (9.06 gzip), frente a 41.19/9.00 kB. La ilustración corporal y las fuentes no cambian. Los diagnósticos `window.__merkenAmbient` y las muestras sintéticas se excluyen del build de producción.
+Build: JS 61.94 kB (20.98 gzip), frente a aproximadamente 57.44/19.10 kB antes de esta etapa; incremento aproximado de 4.50 kB de JS y 1.88 kB gzip. CSS 41.48 kB (9.06 gzip), frente a 41.19/9.00 kB. La ilustración corporal y las fuentes no cambian. Los diagnósticos `window.__pulsysAmbient` y las muestras sintéticas se excluyen del build de producción.
 
 Medidas y resultados: [validacion.json](validacion.json). El diagnóstico de desarrollo ofrece `snapshot()` y `setEnabled(boolean)` para comparar con/sin efectos.
 

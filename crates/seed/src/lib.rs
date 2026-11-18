@@ -1,6 +1,6 @@
 //! Datos sintéticos, reproducibles y sin información de personas reales.
 
-use merken_core::{catalog::Indicator, time::Timestamp};
+use pulsys_core::{catalog::Indicator, time::Timestamp};
 use serde_json::{Value, json};
 
 const DAY_MS: i64 = 86_400_000;
@@ -136,7 +136,7 @@ pub fn scenario(scenario: Scenario, now: Timestamp) -> DemoData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use merken_core::{measurement::Measurement, plausibility};
+    use pulsys_core::{measurement::Measurement, plausibility};
 
     #[test]
     fn demo_values_are_valid_and_plausible() -> Result<(), Box<dyn std::error::Error>> {
@@ -157,9 +157,9 @@ mod tests {
 
     #[test]
     fn scenarios_produce_expected_evaluations() -> Result<(), Box<dyn std::error::Error>> {
-        use merken_core::effective::RecordView;
-        use merken_core::evaluate::{EventView, evaluate_all};
-        use merken_core::record::EventKind;
+        use pulsys_core::effective::RecordView;
+        use pulsys_core::evaluate::{EventView, evaluate_all};
+        use pulsys_core::record::EventKind;
         let now = Timestamp::from_millis(1_800_000_000_000);
         for scenario_kind in [
             Scenario::Routine,

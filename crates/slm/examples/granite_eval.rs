@@ -5,9 +5,9 @@ use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use merken_core::interpret::quote_number;
-use merken_core::proposal::{Proposal, ProposalIssue, TimeHint};
-use merken_slm::{
+use pulsys_core::interpret::quote_number;
+use pulsys_core::proposal::{Proposal, ProposalIssue, TimeHint};
+use pulsys_slm::{
     CancelToken, Control, Deadline, Engine, GenerateRequest, Interpreter, LlamaEngine,
     LlamaEngineConfig, ModelPackage, ModelSlot, ModelStore, Progress, SlmError, SlmInterpreter,
     service::granite_interpreter_manifest,
@@ -181,8 +181,8 @@ fn run() -> Result<(), Box<dyn Error>> {
         // Comparación con otro GGUF de confianza (p. ej. la base Qwen3 del v5 sin LoRA):
         // la identidad esperada se da explícitamente; nunca se calcula a partir del archivo.
         if let (Ok(sha), Ok(bytes)) = (
-            std::env::var("MERKEN_EVAL_SHA256"),
-            std::env::var("MERKEN_EVAL_BYTES"),
+            std::env::var("PULSYS_EVAL_SHA256"),
+            std::env::var("PULSYS_EVAL_BYTES"),
         ) {
             file.sha256 = sha;
             file.bytes = bytes.parse()?;

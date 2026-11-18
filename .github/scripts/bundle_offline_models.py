@@ -39,7 +39,7 @@ unknown = [n for n in found if n not in KNOWN]
 assert not unknown, f'Unknown model files: {unknown}'
 assert BASE in found, 'The base model was not downloaded'
 
-work = Path(os.environ['RUNNER_TEMP']) / 'merken-offline-apk'
+work = Path(os.environ['RUNNER_TEMP']) / 'pulsys-offline-apk'
 work.mkdir(exist_ok=True)
 unaligned = work / 'with-models.apk'
 aligned = work / 'aligned.apk'

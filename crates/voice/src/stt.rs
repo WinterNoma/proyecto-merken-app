@@ -323,7 +323,7 @@ mod tests {
                 .expect("clock")
                 .as_nanos();
             let path = std::env::temp_dir().join(format!(
-                "merken-stt-{}-{stamp}-{}",
+                "pulsys-stt-{}-{stamp}-{}",
                 std::process::id(),
                 NEXT.fetch_add(1, Ordering::Relaxed)
             ));

@@ -1,6 +1,6 @@
 # Referencias visuales de Hex
 
-Capturas oficiales de pruebas visuales publicadas en [anomalyco/hex](https://github.com/anomalyco/hex), descargadas como referencia para Merken. No son capturas nuevas de una instalacion local.
+Capturas oficiales de pruebas visuales publicadas en [anomalyco/hex](https://github.com/anomalyco/hex), descargadas como referencia para Pulsys. No son capturas nuevas de una instalacion local.
 
 Revision: `31feb6f0e8569700faea46ac54db083a535602cd`.
 
@@ -12,4 +12,4 @@ Revision: `31feb6f0e8569700faea46ac54db083a535602cd`.
 
 `fuentes.json` contiene los enlaces fijados a la revision exacta. `LICENSE-hex.txt` conserva la licencia del repositorio fuente.
 
-Las referencias se guardaron para explorar la direccion visual; no se modifico el frontend de Merken.
+Las referencias se guardaron para explorar la direccion visual; no se modifico el frontend de Pulsys.

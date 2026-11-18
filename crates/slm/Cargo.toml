@@ -1,5 +1,5 @@
 [package]
-name = "merken-slm"
+name = "pulsys-slm"
 description = "Asistente SLM en el dispositivo (interpretar y explicar), detrás de un trait"
 version.workspace = true
 edition.workspace = true
@@ -14,7 +14,7 @@ llama = ["dep:llama-cpp-2"]
 native = ["llama"]
 
 [dependencies]
-merken-core.workspace = true
+pulsys-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.10"

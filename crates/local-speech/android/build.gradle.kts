@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.merken.speech"
+    namespace = "com.pulsys.speech"
     compileSdk = 36
     defaultConfig { minSdk = 24 }
 

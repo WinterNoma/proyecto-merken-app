@@ -583,7 +583,7 @@ impl ModelStore {
             })?;
 
             let seq = INSTALL_SEQ.fetch_add(1, Ordering::SeqCst);
-            let tmp_path = parent.join(format!(".merken-installing-{}-{seq}", std::process::id()));
+            let tmp_path = parent.join(format!(".pulsys-installing-{}-{seq}", std::process::id()));
             staging.track(tmp_path.clone());
 
             write_and_hash_payload(&tmp_path, spec, payload, ctl)?;
@@ -870,7 +870,7 @@ mod tests {
         fn new(label: &str) -> Self {
             let n = TEMP_SEQ.fetch_add(1, Ordering::SeqCst);
             let path = std::env::temp_dir().join(format!(
-                "merken_slm_store_{label}_{}_{}",
+                "pulsys_slm_store_{label}_{}_{}",
                 std::process::id(),
                 n
             ));

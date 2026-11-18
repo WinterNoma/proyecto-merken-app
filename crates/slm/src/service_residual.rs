@@ -1,5 +1,5 @@
 //! Conservative word coverage. Citations are evidence, not semantic coverage.
-use merken_core::{
+use pulsys_core::{
     catalog::Indicator,
     interpret::{mentions_indicator, quote_number, quote_sleep_quality, quote_zone},
     proposal::{Proposal, ProposedField, TimeHint},
@@ -541,7 +541,7 @@ pub(super) fn unresolved_fragments(text: &str, proposal: &Proposal) -> Vec<Strin
 #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
-    use merken_core::{interpret::interpret, proposal::ProposedRecord};
+    use pulsys_core::{interpret::interpret, proposal::ProposedRecord};
 
     fn wide_record(text: &str) -> Proposal {
         let mut proposal = interpret("pulso 72");

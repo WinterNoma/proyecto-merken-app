@@ -6,7 +6,7 @@
 //! curadas sin modificaciones ni prosa libre generada por el modelo.
 
 use crate::error::SlmError;
-use merken_core::evaluate::Status;
+use pulsys_core::evaluate::Status;
 use serde::{Deserialize, Deserializer, Serialize, de};
 use serde_json::Value;
 use std::{

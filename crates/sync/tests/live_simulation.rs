@@ -1,9 +1,9 @@
 //! Pruebas contra la API de simulación real. Necesitan red, así que están
-//! marcadas `#[ignore]`: `cargo test -p merken-sync -- --ignored`.
-//! La prueba completa solo corre si existe `MERKEN_SIM_TOKEN`.
+//! marcadas `#[ignore]`: `cargo test -p pulsys-sync -- --ignored`.
+//! La prueba completa solo corre si existe `PULSYS_SIM_TOKEN`.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
-use merken_sync::simulation::{DEFAULT_BASE_URL, SimClient};
+use pulsys_sync::simulation::{DEFAULT_BASE_URL, SimClient};
 
 #[test]
 #[ignore = "necesita red"]
@@ -13,10 +13,10 @@ fn wrong_token_is_reported_as_unauthorized() {
 }
 
 #[test]
-#[ignore = "necesita red y MERKEN_SIM_TOKEN"]
+#[ignore = "necesita red y PULSYS_SIM_TOKEN"]
 fn downloads_two_days_of_one_astronaut() {
-    let Ok(token) = std::env::var("MERKEN_SIM_TOKEN") else {
-        eprintln!("MERKEN_SIM_TOKEN no está definido: se omite");
+    let Ok(token) = std::env::var("PULSYS_SIM_TOKEN") else {
+        eprintln!("PULSYS_SIM_TOKEN no está definido: se omite");
         return;
     };
     let client = SimClient::new(DEFAULT_BASE_URL, &token).unwrap();

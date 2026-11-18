@@ -1,4 +1,4 @@
-# Merken — lineamientos de diseño para el frontend
+# Pulsys — lineamientos de diseño para el frontend
 
 Material de traspaso para desarrollar un frontend separado manteniendo la estética que estamos explorando. El texto está en español para el equipo; la interfaz de la app va en inglés.
 
@@ -79,7 +79,7 @@ Estos son los tokens existentes, no colores extraídos de las imágenes generada
 
 - **Public Sans 400/600:** interfaz, etiquetas y botones.
 - **Roboto Mono 400:** cifras y datos cuando sea útil para mantener alineación.
-- **Barlow Semi Condensed 600:** marca MERKEN y títulos según la jerarquía existente.
+- **Barlow Semi Condensed 600:** marca PULSYS y títulos según la jerarquía existente.
 - Empaquetar fuentes localmente para funcionar sin conexión.
 
 Las imágenes generadas orientan el estilo, pero no garantizan que cada glifo coincida con estas familias. Usar las fuentes reales del proyecto en la implementación.
@@ -99,7 +99,7 @@ Los tamaños son puntos de partida para probar, no una obligación de encajar la
 
 De arriba abajo:
 
-1. **Cabecera:** MERKEN, selector de tripulante y `Need help`, siempre fácil de encontrar.
+1. **Cabecera:** PULSYS, selector de tripulante y `Need help`, siempre fácil de encontrar.
 2. **Encabezado:** `Daily overview` o un título equivalente, con estado general, actualización y marca DEMO cuando corresponda. El estado general debe provenir del servicio que lo evalúa.
 3. **Panel central:** figura humana con tarjetas a ambos lados.
 4. **Contexto:** radiación, distancia a Tierra y sincronización en un grupo más compacto y neutral.
@@ -216,7 +216,7 @@ Ya existe una primera muestra breve en navegador de escritorio para el Canvas ac
 ## 9. Límites funcionales que el diseño debe respetar
 
 - Todos los textos de la app en inglés; documentación del equipo en español.
-- Las evaluaciones y alarmas las decide `merken-core`; las animaciones no cambian estados.
+- Las evaluaciones y alarmas las decide `pulsys-core`; las animaciones no cambian estados.
 - Los datos sintéticos deben llevar DEMO de forma visible.
 - Las tarjetas del tripulante MySQL y los síntomas del perfil local son fuentes distintas en la implementación actual. No asumir que están vinculados.
 - La pérdida de conexión no convierte una alarma en un estado favorable. Mantener hora y origen de la información.
@@ -300,7 +300,7 @@ Este Markdown y la carpeta `imagenes/` son autosuficientes: compartirlos juntos 
 - Referencia de aplicación: [anomalyco/hex](https://github.com/anomalyco/hex).
 - Capturas oficiales de Hex: [tests/golden, revisión 31feb6f0e8569700faea46ac54db083a535602cd](https://github.com/anomalyco/hex/tree/31feb6f0e8569700faea46ac54db083a535602cd/tests/golden). Se incluye `LICENSE-hex.txt`.
 - La imagen de vidrio fue aportada por el usuario; no se atribuye a Hex ni se presenta como un recurso de producción con licencia comprobada.
-- Los mockups de Merken y tres fondos se generaron con image_gen para esta exploración.
+- Los mockups de Pulsys y tres fondos se generaron con image_gen para esta exploración.
 - Dentro del repo: `docs/brand/brandbook.md`, `docs/brand/tokens.css` y `docs/front/concepto-pantalla.md` sirven de contexto existente. Las decisiones actuales del usuario recogidas aquí orientan esta nueva iteración.
 - Los prompts completos de nuestra generación siguen en `docs/front/conceptos/hex-glass/PROMPTS.md` y `docs/front/conceptos/hex-glass/fondos/PROMPTS.md` del repositorio original.
 

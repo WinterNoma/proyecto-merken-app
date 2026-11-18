@@ -1,4 +1,4 @@
-# Rediseño de Merken · Pantalla principal
+# Rediseño de Pulsys · Pantalla principal
 
 14 de noviembre de 2026. Segunda ronda: implementación de `docs/front/concepto-pantalla.md`, sobre Basalt Standard + Flight Documentation. Interfaz en inglés; informe en español.
 

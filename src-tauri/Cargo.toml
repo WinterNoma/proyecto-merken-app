@@ -1,6 +1,6 @@
 [package]
-name = "merken"
-description = "Merken: monitoreo de salud para astronautas (NASA Space Apps 2026)"
+name = "pulsys"
+description = "Pulsys: monitoreo de salud para astronautas (NASA Space Apps 2026)"
 authors = ["Equipo Merken"]
 version.workspace = true
 edition.workspace = true
@@ -9,7 +9,7 @@ license.workspace = true
 [lib]
 # El sufijo `_lib` evita el choque de nombres entre lib y bin en Windows
 # (https://github.com/rust-lang/cargo/issues/8519).
-name = "merken_lib"
+name = "pulsys_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -21,12 +21,12 @@ tauri-plugin-opener = "2"
 tauri-plugin-local-speech = { path = "../crates/local-speech" }
 serde.workspace = true
 serde_json.workspace = true
-merken-core.workspace = true
-merken-slm = { path = "../crates/slm", features = ["native"] }
-merken-voice = { path = "../crates/voice", optional = true }
-merken-store.workspace = true
-merken-seed.workspace = true
-merken-sync.workspace = true
+pulsys-core.workspace = true
+pulsys-slm = { path = "../crates/slm", features = ["native"] }
+pulsys-voice = { path = "../crates/voice", optional = true }
+pulsys-store.workspace = true
+pulsys-seed.workspace = true
+pulsys-sync.workspace = true
 tauri-plugin-slm-assets = { path = "../plugins/slm-assets" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
@@ -34,6 +34,6 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 # Rama de integración: el motor llama.cpp va activado por defecto, porque las
 # recomendaciones V7 (PR #3) lo necesitan siempre y comparten la base con el v5.
 default = ["slm-llama"]
-slm-llama = ["merken-slm/llama"]
-voice-tts = ["dep:merken-voice", "merken-voice/tts"]
-voice-stt = ["dep:merken-voice", "merken-voice/stt"]
+slm-llama = ["pulsys-slm/llama"]
+voice-tts = ["dep:pulsys-voice", "pulsys-voice/tts"]
+voice-stt = ["dep:pulsys-voice", "pulsys-voice/stt"]

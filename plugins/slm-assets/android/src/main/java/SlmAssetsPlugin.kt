@@ -1,4 +1,4 @@
-package com.merken.slmassets
+package com.pulsys.slmassets
 
 import android.app.Activity
 import app.tauri.annotation.Command

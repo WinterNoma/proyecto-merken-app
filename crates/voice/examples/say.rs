@@ -1,4 +1,4 @@
-use merken_voice::{KokoroPaths, TtsConfig, TtsEngine, Voice};
+use pulsys_voice::{KokoroPaths, TtsConfig, TtsEngine, Voice};
 use std::error::Error;
 use std::time::Instant;
 

@@ -171,7 +171,7 @@
           "bottom": 98,
           "clipped": false,
           "height": 44,
-          "id": "Merken home",
+          "id": "Pulsys home",
           "width": 97.140625
         },
         {
@@ -473,7 +473,7 @@
           "bottom": 98,
           "clipped": false,
           "height": 44,
-          "id": "Merken home",
+          "id": "Pulsys home",
           "width": 97.140625
         },
         {
@@ -775,7 +775,7 @@
           "bottom": 98,
           "clipped": false,
           "height": 44,
-          "id": "Merken home",
+          "id": "Pulsys home",
           "width": 97.140625
         },
         {
@@ -910,7 +910,7 @@
   "checks": {
     "zoneCount": 14,
     "backSelection": "Back · No linked card",
-    "moodDetail": "DEMO crew · A. MorganCalm Self-reported · Not evaluatedSelf-reportedFixed synthetic sample. Not a live measurement.Navigation zone: Head. This link does not indicate a symptom.On-device evaluationLocal service unavailable. Open the Merken app to view recorded history.",
+    "moodDetail": "DEMO crew · A. MorganCalm Self-reported · Not evaluatedSelf-reportedFixed synthetic sample. Not a live measurement.Navigation zone: Head. This link does not indicate a symptom.On-device evaluationLocal service unavailable. Open the Pulsys app to view recorded history.",
     "manualVisible": null,
     "historyVisible": null,
     "chest": "Chest · 2 linked readings",

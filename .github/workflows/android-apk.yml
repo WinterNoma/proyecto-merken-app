@@ -72,7 +72,7 @@ jobs:
       - name: Install locked JavaScript dependencies
         run: npm ci
       - name: Test Rust domain and adapters with synthetic fixtures
-        run: cargo test --locked -p merken-core -p merken-store -p merken-sync -p merken-seed -p merken-slm
+        run: cargo test --locked -p pulsys-core -p pulsys-store -p pulsys-sync -p pulsys-seed -p pulsys-slm
       - name: Initialize Android project
         run: npm run tauri -- android init --ci --skip-targets-install
       # sherpa-onnx (offline dictation): official prebuilt Android libraries, pinned by SHA-256.
@@ -116,10 +116,10 @@ jobs:
           mkdir -p artifacts
           mapfile -t apks < <(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk')
           test "${#apks[@]}" -eq 1
-          python3 .github/scripts/bundle_offline_models.py "${apks[0]}" artifacts/merken-${ANDROID_ABI}-debug.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose artifacts/merken-${ANDROID_ABI}-debug.apk
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging artifacts/merken-${ANDROID_ABI}-debug.apk > artifacts/apk-info.txt
-          (cd artifacts && sha256sum merken-${ANDROID_ABI}-debug.apk > SHA256SUMS.txt)
+          python3 .github/scripts/bundle_offline_models.py "${apks[0]}" artifacts/pulsys-${ANDROID_ABI}-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose artifacts/pulsys-${ANDROID_ABI}-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging artifacts/pulsys-${ANDROID_ABI}-debug.apk > artifacts/apk-info.txt
+          (cd artifacts && sha256sum pulsys-${ANDROID_ABI}-debug.apk > SHA256SUMS.txt)
           printf '%s\n' "$GITHUB_SHA" > artifacts/source-revision.txt
           if [[ "${{ github.event_name }}" != pull_request ]]; then
             echo 'Test build: models from the private Release modelos-prueba-v1 are embedded and verified (see the build log for which ones). Offline inference uses native llama.cpp. Backend synchronization is optional and requires the ground-station login. Debug APK, not clinically validated; physical-device validation remains pending.' > artifacts/README.txt
@@ -128,7 +128,7 @@ jobs:
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: merken-android-${{ inputs.abi == 'x86_64' && 'x86_64' || 'arm64' }}-debug-${{ github.run_number }}
+          name: pulsys-android-${{ inputs.abi == 'x86_64' && 'x86_64' || 'arm64' }}-debug-${{ github.run_number }}
           path: artifacts/
           if-no-files-found: error
           retention-days: 14

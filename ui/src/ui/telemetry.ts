@@ -532,14 +532,14 @@ export function createTelemetryFeed(onUpdate: (state: FeedState) => void, cacheO
   void refresh();
   const timer = cacheOnly ? null : window.setInterval(() => { void refresh(); }, 2000);
   const saved = (): void => { void refresh(); };
-  if (cacheOnly) window.addEventListener("merken:backend-snapshot", saved);
+  if (cacheOnly) window.addEventListener("pulsys:backend-snapshot", saved);
   return {
     refresh,
     stop(): void {
       stopped = true;
       pendingBatch = null;
       if (timer !== null) window.clearInterval(timer);
-      if (cacheOnly) window.removeEventListener("merken:backend-snapshot", saved);
+      if (cacheOnly) window.removeEventListener("pulsys:backend-snapshot", saved);
       controller?.abort();
       clearActiveIpcTimer?.();
     },

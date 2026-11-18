@@ -1,4 +1,4 @@
-//! Explicador de evaluaciones de `merken-core` con hechos deterministas y selección curada (RF-15).
+//! Explicador de evaluaciones de `pulsys-core` con hechos deterministas y selección curada (RF-15).
 
 pub mod facts;
 pub mod prompt;
@@ -22,7 +22,7 @@ use crate::{
     engine::{DEFAULT_MAX_TOKENS, DEFAULT_SEED, DEFAULT_TEMPERATURE, Engine, GenerateRequest},
     error::SlmError,
 };
-use merken_core::evaluate::Evaluation;
+use pulsys_core::evaluate::Evaluation;
 use serde::Serialize;
 
 /// Resultado del explicador: hechos deterministas siempre visibles y nota opcional curada.

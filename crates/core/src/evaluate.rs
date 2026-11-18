@@ -145,7 +145,7 @@ pub fn evaluate_series(key: SeriesKey, series: &[&RecordView], now: Timestamp) -
         out.rule_id = "context.not_evaluated".into();
         out.source_kind = SourceKind::ApprovedProtocol;
         out.source_ref = Some(
-            "Merken catalog 2026-11-14: context indicator, no health status (RF-12 for radiation)"
+            "Pulsys catalog 2026-11-14: context indicator, no health status (RF-12 for radiation)"
                 .into(),
         );
         out.history_needed = 0;

@@ -62,7 +62,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .invoke_handler(tauri::generate_handler![start, finish]);
     #[cfg(target_os = "android")]
     let builder = builder.setup(|app, api| {
-        let native = api.register_android_plugin("com.merken.speech", "LocalSpeechPlugin")?;
+        let native = api.register_android_plugin("com.pulsys.speech", "LocalSpeechPlugin")?;
         app.manage(Speech(native));
         Ok(())
     });

@@ -7,7 +7,7 @@ import { after, test } from "node:test";
 import { rolldown } from "rolldown";
 
 const root = path.resolve(import.meta.dirname, "../..");
-const temp = await fs.mkdtemp(path.join(os.tmpdir(), "merken-refresh-"));
+const temp = await fs.mkdtemp(path.join(os.tmpdir(), "pulsys-refresh-"));
 const bundle = await rolldown({ input: path.join(root, "ui/src/ui/recommendations.ts") });
 await bundle.write({ dir: temp, format: "esm", entryFileNames: "recommendations.mjs" });
 await bundle.close();
@@ -53,7 +53,7 @@ test("sync starts refresh, dispatches snapshots, pauses and resumes, and stops o
     }
     throw Error(command);
   });
-  env.window.addEventListener("merken:backend-snapshot", () => snapshots++);
+  env.window.addEventListener("pulsys:backend-snapshot", () => snapshots++);
   setupRecommendations(true); await flush();
   submit(env.get("#recommendation-sync")); await flush();
   assert.equal(snapshots, 1);
@@ -94,7 +94,7 @@ test("null refresh is silent and pagehide stops polling", async t => {
     if (command === "recommendations_refresh_backend") return null;
     throw Error(command);
   });
-  env.window.addEventListener("merken:backend-snapshot", () => events++);
+  env.window.addEventListener("pulsys:backend-snapshot", () => events++);
   setupRecommendations(true); await flush();
   submit(env.get("#recommendation-sync")); await flush();
   const status = env.get("#recommendation-sync-status").textContent;
@@ -169,7 +169,7 @@ test("manual sync waits for stale refresh and retains its own error", async t =>
     }
     throw Error(command);
   });
-  env.window.addEventListener("merken:backend-snapshot", () => events++);
+  env.window.addEventListener("pulsys:backend-snapshot", () => events++);
   setupRecommendations(true); await flush();
   submit(env.get("#recommendation-sync")); await flush();
   t.mock.timers.tick(15000); await flush();

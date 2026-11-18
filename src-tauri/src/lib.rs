@@ -2,21 +2,21 @@
 //! Ninguna decisión de salud se toma aquí ni en TypeScript.
 //!
 //! Es el único sitio que lee el reloj del sistema: el instante se pasa a
-//! `merken-store` y `merken-core` como argumento (RNF-03).
+//! `pulsys-store` y `pulsys-core` como argumento (RNF-03).
 //! Contrato de los comandos: `docs/api/comandos-core.md` y `ui/src/core-api.ts`.
 
 mod crew_import;
 mod recommendations;
 
-use merken_core::time::Timestamp;
-use merken_slm::{
+use pulsys_core::time::Timestamp;
+use pulsys_slm::{
     Ficha,
     service::{
         ExplainResponse, InterpretResponse, ServiceError, SlmService, SlmStatus, default_deadline,
         wait_limit,
     },
 };
-use merken_store::{
+use pulsys_store::{
     ExportCounts, ExportInput, ListTelemetryInput, RecordTelemetryInput, RecordTelemetryResult,
     Scenario, Store, StoreError, TelemetryItem, VerifyTelemetryResult,
     api::{
@@ -24,7 +24,7 @@ use merken_store::{
         ProfileResponse, RaiseEventInput, RaiseEventResult, RecordItem, StatusResponse,
     },
 };
-use merken_sync::{
+use pulsys_sync::{
     SyncError,
     simulation::{DEFAULT_BASE_URL, SimAstronaut, SimClient},
 };
@@ -57,7 +57,7 @@ pub struct InterpretInput {
 pub struct ExplainInput {
     pub request_id: String,
     pub indicator: String,
-    pub body_zone: Option<merken_core::catalog::BodyZone>,
+    pub body_zone: Option<pulsys_core::catalog::BodyZone>,
 }
 
 fn slm_error(code: &str, field: Option<&str>, message: &str) -> StoreError {
@@ -80,7 +80,7 @@ fn service_error(e: ServiceError) -> StoreError {
     }
 }
 fn validate_request_id(id: &str) -> Result<(), StoreError> {
-    if merken_slm::service::valid_request_id(id) {
+    if pulsys_slm::service::valid_request_id(id) {
         Ok(())
     } else {
         Err(service_error(ServiceError::InvalidRequestId))
@@ -108,7 +108,7 @@ pub fn handle_find_evaluation(
     store: &mut Store,
     input: ExplainInput,
     at: Timestamp,
-) -> Result<merken_core::evaluate::Evaluation, StoreError> {
+) -> Result<pulsys_core::evaluate::Evaluation, StoreError> {
     validate_request_id(&input.request_id)?;
     let status = store.status(at, APP_VERSION)?;
     let entries = if input.indicator == "symptom" {
@@ -124,7 +124,7 @@ pub fn handle_find_evaluation(
 pub fn handle_explain(
     service: &SlmService,
     request_id: String,
-    eval: merken_core::evaluate::Evaluation,
+    eval: pulsys_core::evaluate::Evaluation,
     fichas: Vec<Ficha>,
 ) -> Result<ExplainResponse, StoreError> {
     let deadline = default_deadline();
@@ -272,7 +272,7 @@ pub struct LoadDemoInput {
 
 #[derive(Deserialize, Default)]
 pub struct SimListInput {
-    /// Token de la API de simulación. Si falta, se usa `MERKEN_SIM_TOKEN`.
+    /// Token de la API de simulación. Si falta, se usa `PULSYS_SIM_TOKEN`.
     pub token: Option<String>,
 }
 
@@ -304,14 +304,14 @@ fn sync_err(e: SyncError) -> StoreError {
     }
 }
 
-/// Token del comando o, si falta, de la variable de entorno `MERKEN_SIM_TOKEN`.
+/// Token del comando o, si falta, de la variable de entorno `PULSYS_SIM_TOKEN`.
 /// Nunca se guarda ni se escribe en registros.
 fn sim_client(token: Option<String>) -> Result<SimClient, StoreError> {
     let token = token
         .filter(|t| !t.trim().is_empty())
-        .or_else(|| std::env::var("MERKEN_SIM_TOKEN").ok())
+        .or_else(|| std::env::var("PULSYS_SIM_TOKEN").ok())
         .unwrap_or_default();
-    let base = std::env::var("MERKEN_SIM_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_owned());
+    let base = std::env::var("PULSYS_SIM_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_owned());
     SimClient::new(&base, &token).map_err(sync_err)
 }
 
@@ -385,7 +385,7 @@ fn export_io_error(message: &str) -> StoreError {
     }
 }
 
-/// `merken-export-AAAAMMDDTHHMMSSZ` a partir del instante en UTC.
+/// `pulsys-export-AAAAMMDDTHHMMSSZ` a partir del instante en UTC.
 fn export_stem(now: Timestamp) -> String {
     let iso = now.to_rfc3339(); // AAAA-MM-DDTHH:MM:SS.mmmZ
     let compact: String = iso
@@ -393,7 +393,7 @@ fn export_stem(now: Timestamp) -> String {
         .take_while(|c| *c != '.')
         .filter(|c| c.is_ascii_digit() || *c == 'T')
         .collect();
-    format!("merken-export-{compact}Z")
+    format!("pulsys-export-{compact}Z")
 }
 
 /// Escribe el documento en `<dir>/exports/` sin sobrescribir nunca un archivo.
@@ -419,7 +419,7 @@ pub fn write_export(
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     let tmp = exports.join(format!(
-        ".merken-export-{}-{unique}.tmp",
+        ".pulsys-export-{}-{unique}.tmp",
         std::process::id()
     ));
     let written = std::fs::OpenOptions::new()
@@ -490,10 +490,10 @@ fn handle_export_json(
 /// Comprueba de punta a punta que la interfaz llega al núcleo en Rust.
 #[tauri::command]
 fn core_status() -> Result<String, String> {
-    let sqlite = merken_store::version_sqlite().map_err(|e| e.to_string())?;
+    let sqlite = pulsys_store::version_sqlite().map_err(|e| e.to_string())?;
     Ok(format!(
-        "merken-core {} · SQLite {}",
-        merken_core::VERSION,
+        "pulsys-core {} · SQLite {}",
+        pulsys_core::VERSION,
         sqlite
     ))
 }
@@ -675,7 +675,7 @@ fn import_crew_member(
 fn open_store(app: &tauri::App) -> Result<Store, Box<dyn std::error::Error>> {
     let dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&dir)?;
-    Ok(Store::open(&dir.join("merken.sqlite3"))?)
+    Ok(Store::open(&dir.join("pulsys.sqlite3"))?)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -694,19 +694,19 @@ pub fn run() {
                 recommendations::android_model_root(app.handle()).map_err(std::io::Error::other)?;
             #[cfg(not(target_os = "android"))]
             let root = if cfg!(debug_assertions) {
-                std::env::var_os("MERKEN_SLM_MODELS_DIR")
+                std::env::var_os("PULSYS_SLM_MODELS_DIR")
                     .map(std::path::PathBuf::from)
                     .unwrap_or(app.path().app_data_dir()?.join("models"))
             } else {
                 app.path().app_data_dir()?.join("models")
             };
             #[cfg(feature = "slm-llama")]
-            let factory = merken_slm::service::LlamaFactory;
+            let factory = pulsys_slm::service::LlamaFactory;
             #[cfg(not(feature = "slm-llama"))]
-            let factory = merken_slm::service::NoEngineFactory;
+            let factory = pulsys_slm::service::NoEngineFactory;
             let handle = app.handle().clone();
             let progress =
-                std::sync::Arc::new(move |event: merken_slm::service::ServiceProgress| {
+                std::sync::Arc::new(move |event: pulsys_slm::service::ServiceProgress| {
                     let _ = handle.emit("slm-progress", event);
                 });
             app.manage(VoiceState::new(root.clone()));
@@ -714,7 +714,7 @@ pub fn run() {
                 root,
                 factory,
                 Some(progress),
-                Some(merken_slm::service::base_interpreter_manifest()),
+                Some(pulsys_slm::service::base_interpreter_manifest()),
             )?;
             app.manage(SlmState { service, fichas });
             app.manage(recommendations::RecommendationState::default());
@@ -768,8 +768,8 @@ mod tests {
     #[test]
     fn slm_handlers_use_local_status_and_validate_input() -> Result<(), StoreError> {
         let (service, fichas) = SlmService::start(
-            std::env::temp_dir().join("merken-tauri-slm-test"),
-            merken_slm::service::NoEngineFactory,
+            std::env::temp_dir().join("pulsys-tauri-slm-test"),
+            pulsys_slm::service::NoEngineFactory,
             None,
         )
         .map_err(|_| slm_error("slm_error", None, "Test setup failed"))?;
@@ -777,7 +777,7 @@ mod tests {
             &service,
             InterpretInput {
                 request_id: "tauri-test".into(),
-                text: "a".repeat(merken_core::interpret::MAX_INPUT_CHARS + 1),
+                text: "a".repeat(pulsys_core::interpret::MAX_INPUT_CHARS + 1),
                 source: None,
             },
         );
@@ -1020,7 +1020,7 @@ mod tests {
 
     fn scratch_dir(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "merken-export-test-{tag}-{}-{}",
+            "pulsys-export-test-{tag}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1045,15 +1045,15 @@ mod tests {
         let name = |p: &Path| p.file_name().map(|n| n.to_string_lossy().into_owned());
         assert_eq!(
             name(&first).as_deref(),
-            Some("merken-export-20270115T080000Z.json")
+            Some("pulsys-export-20270115T080000Z.json")
         );
         assert_eq!(
             name(&second).as_deref(),
-            Some("merken-export-20270115T080000Z-2.json")
+            Some("pulsys-export-20270115T080000Z-2.json")
         );
         assert_eq!(
             name(&third).as_deref(),
-            Some("merken-export-20270115T080000Z-3.json")
+            Some("pulsys-export-20270115T080000Z-3.json")
         );
 
         let text = std::fs::read_to_string(&first)?;

@@ -2,7 +2,7 @@
 
 ## Resumen y recomendación
 
-- **Elección para el piloto: pulsar para hablar → Whisper base multilingüe Q5_1 → intérprete Rust → Granite 4.0 350M Q4_K_M como respaldo → validación y confirmación.** Sus pesos suman **≈297 MB**; ambos modelos tienen licencias permisivas. La precisión conjunta en Merken todavía debe medirse. [Whisper](https://huggingface.co/ggerganov/whisper.cpp/tree/main), [Granite](https://huggingface.co/ibm-granite/granite-4.0-350m-GGUF).
+- **Elección para el piloto: pulsar para hablar → Whisper base multilingüe Q5_1 → intérprete Rust → Granite 4.0 350M Q4_K_M como respaldo → validación y confirmación.** Sus pesos suman **≈297 MB**; ambos modelos tienen licencias permisivas. La precisión conjunta en Pulsys todavía debe medirse. [Whisper](https://huggingface.co/ggerganov/whisper.cpp/tree/main), [Granite](https://huggingface.co/ibm-granite/granite-4.0-350m-GGUF).
 - Usaría el reconocimiento del sistema como optimización para móviles previamente comprobados; su disponibilidad depende del servicio y de los idiomas instalados. [Android](https://developer.android.com/reference/android/speech/SpeechRecognizer).
 - **Moonshine Streaming ES/EN merece competir en la prueba:** ya tiene modelos españoles con licencia MIT; no debe confundirse con su antiguo modelo español sin streaming. [Catálogo v0.1.6](https://github.com/moonshine-ai/moonshine/blob/v0.1.6/docs/models/available-models.md).
 - Para comandos cerrados, Vosk con vocabulario restringido es una alternativa razonable; para dictado libre hay que comprobar especialmente acentos y números. [Modelos y evaluaciones](https://alphacephei.com/vosk/models).
@@ -19,7 +19,7 @@ Hay dos implementaciones que conviene distinguir:
 - **Original, Swift para Mac Apple Silicon:** Whisper mediante **WhisperKit/Core ML** y Parakeet TDT v3 mediante **FluidAudio**. El repositorio anuncia que esta implementación dejó de mantenerse. [Hex original](https://github.com/kitlangton/Hex).
 - **Actual, Rust, macOS/Windows/Linux:** versión **3.4.0**, publicada el 11-nov-2026. Usa `transcribe-cpp` 0.4.1 con parches fijados; su catálogo incluye Parakeet y Whisper. No es una aplicación Android. [Versión](https://github.com/anomalyco/hex/releases/tag/v3.4.0), [dependencias](https://github.com/anomalyco/hex/blob/v3.4.0/Cargo.toml), [catálogo](https://github.com/anomalyco/hex/blob/v3.4.0/src/transcription/models.rs).
 
-**Aplicación a Merken — propuesta de diseño:** botón grande, estado visible de grabación, cancelar y revisar antes de confirmar. Añadir modo tocar para iniciar/tocar para terminar para quien no pueda mantener pulsado. Conviene copiar esta interacción; el rendimiento de Core ML en Mac no demuestra rendimiento equivalente en Android.
+**Aplicación a Pulsys — propuesta de diseño:** botón grande, estado visible de grabación, cancelar y revisar antes de confirmar. Añadir modo tocar para iniciar/tocar para terminar para quien no pueda mantener pulsado. Conviene copiar esta interacción; el rendimiento de Core ML en Mac no demuestra rendimiento equivalente en Android.
 
 ## Tabla comparativa de reconocimiento de voz
 
@@ -36,7 +36,7 @@ Hay dos implementaciones que conviene distinguir:
 | [Parakeet TDT 0.6B v3 INT8](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/nemo-transducer-models.html) | ≈670,6 MB, suma de [archivos ONNX](https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/tree/main) | NF | NF comparable | Sí, entre 25 idiomas; WER Android ES: NF | Esta variante: no; sherpa ofrece streaming simulado | Pesos [CC-BY-4.0](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3); runtime Apache 2.0 | sherpa Rust/Kotlin; APK de ejemplo | Disponible en Android; pesado |
 | [Canary 180M Flash INT8](https://k2-fsa.github.io/sherpa/onnx/nemo/canary.html) | ≈207,2 MB, suma de [ONNX y tokens](https://huggingface.co/csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8/tree/main) | NF | NF comparable | Sí: ES/EN/DE/FR | No nativo en esta integración | Pesos [CC-BY-4.0](https://huggingface.co/nvidia/canary-180m-flash); runtime Apache 2.0 | sherpa Rust/Kotlin | Alternativa vigente para comparar |
 | [Qwen3-ASR 0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B) | BF16: 1,88 GB; ONNX INT8 ≈0,98 GB + tokenizador, cálculo desde [listado](https://k2-fsa.github.io/sherpa/onnx/qwen3-asr/export.html) | NF | NF comparable | Sí | Integración sherpa consultada: por segmentos | Apache 2.0 | sherpa; distinto del Qwen textual | Vigente, fuera del objetivo ligero |
-| [Cheetah](https://picovoice.ai/docs/cheetah/) / [Leopard](https://picovoice.ai/docs/leopard/) | NF para paquete Android ES+EN | NF | NF comparable | Ambos ofrecen ES/EN; evaluación Merken: NF | Cheetah sí; Leopard por lotes | SDKs con Apache 2.0; uso sujeto a AccessKey/plan | SDK Android o C ABI con puente propio | Comercial; dependencia contractual |
+| [Cheetah](https://picovoice.ai/docs/cheetah/) / [Leopard](https://picovoice.ai/docs/leopard/) | NF para paquete Android ES+EN | NF | NF comparable | Ambos ofrecen ES/EN; evaluación Pulsys: NF | Cheetah sí; Leopard por lotes | SDKs con Apache 2.0; uso sujeto a AccessKey/plan | SDK Android o C ABI con puente propio | Comercial; dependencia contractual |
 
 **sherpa-onnx es un runtime, no un modelo:** soporta Rust, Kotlin y Android, y ya incluye ejemplos Tauri. Su licencia no sustituye la licencia de los pesos. [Proyecto y matriz](https://github.com/k2-fsa/sherpa-onnx), [ejemplo Tauri con micrófono](https://github.com/k2-fsa/sherpa-onnx/tree/v2.0.1/tauri-examples/non-streaming-speech-recognition-from-microphone).
 
@@ -69,11 +69,11 @@ Flujo recomendado para un plugin propio:
 - **Coste/licencia Picovoice:** la FAQ actual ofrece prueba empresarial y no planes personales/no comerciales dedicados; precio contractual exacto: **no encontrado**. Rhino contabiliza usuarios activos; Cheetah/Leopard, audio procesado. El proveedor documenta validación de AccessKey mediante Internet: inferencia local no significa independencia de sus servidores. [FAQ](https://picovoice.ai/docs/faq/general/), [AccessKey](https://github.com/Picovoice/pico-cookbook/blob/main/recipes/microcontroller-voice-assistant/mcu/stm32f411/README.md).
 - **Vosk:** `vosk_recognizer_new_grm()` acepta una lista JSON de frases y puede devolver `[unk]`. Restringe reconocimiento; **no entrega slots automáticamente ni implementa una gramática JSON de extracción**. Rust debe mapear las palabras a campos. Incluir rechazo y lenguaje fuera de vocabulario, no solo comandos válidos. [C API](https://github.com/alphacep/vosk-api/blob/master/src/vosk_api.h).
 - **Gemma 3n y Gemma 4:** aceptan audio, pero no pertenecen al presupuesto de un extractor diminuto. Gemma 3n E2B carga más de 5B parámetros en ejecución estándar; “E2B” describe parámetros efectivos bajo técnicas específicas. Gemma 4 E2B tiene 5,1B con embeddings y soporta audio. Los descartaría aquí por alcance y recursos. [Gemma 3n](https://ai.google.dev/gemma/docs/gemma-3n), [Gemma 4](https://ai.google.dev/gemma/docs/core/model_card_4).
-- **Moonshine Micro:** su modelo de ≈1,3 MiB reconoce letras, dígitos y comandos ingleses aislados; no es dictado continuo ES/EN para los ejemplos de Merken. [Alcance exacto](https://github.com/moonshine-ai/moonshine/blob/v0.1.6/micro/stt/README.md).
+- **Moonshine Micro:** su modelo de ≈1,3 MiB reconoce letras, dígitos y comandos ingleses aislados; no es dictado continuo ES/EN para los ejemplos de Pulsys. [Alcance exacto](https://github.com/moonshine-ai/moonshine/blob/v0.1.6/micro/stt/README.md).
 
 ## SLM diminuto para extraer (tabla)
 
-Los tamaños siguientes son archivos concretos, **no RAM de ejecución**. Para todos, rendimiento de extracción sanitaria ES/EN en Merken: **no encontrado**.
+Los tamaños siguientes son archivos concretos, **no RAM de ejecución**. Para todos, rendimiento de extracción sanitaria ES/EN en Pulsys: **no encontrado**.
 
 | Modelo | Bilingüismo y adecuación | Tamaño cuantizado | RAM Android | Gramática y ajuste | Licencia |
 |---|---|---|---|---|---|
@@ -97,7 +97,7 @@ Estos testimonios son **no verificados independientemente**; sirven para diseña
 - **Whisper y silencio:** hay reportes de subtítulos y frases inventadas sobre silencio, música y ruido, también en español. VAD y filtros reducen el problema; no constituyen garantía. [Discusión original](https://github.com/openai/whisper/discussions/679), [Hacker News](https://news.ycombinator.com/item?id=36973400).
 - **Rendimiento anecdótico:** un usuario comunica 11 s de audio en 1,5 s con tiny en un Motorola de 12 GB; faltan modelo exacto del móvil y protocolo comparable. Otro comenta que modelos mayores mejoran el polaco, pero resultan lentos. [Issue whisper.cpp](https://github.com/ggml-org/whisper.cpp/issues/2370).
 - **Fragilidad del sistema:** se documentaron problemas de permisos en Pixel con Android 16 tras una actualización de seguridad. Es un incidente concreto, no prueba de fallo general actual. [Issue y seguimiento](https://github.com/jamsch/expo-speech-recognition/issues/117).
-- **Calor y batería:** usuarios de LLM locales denuncian calentamiento y consumo sostenido. Son modelos y cargas diferentes; no encontré una comparación controlada de consumo ASR ES/EN en gama media que permita asignar cifras a Merken. [Testimonios](https://www.reddit.com/r/LocalLLaMA/comments/1pgrevr/pro_tip_for_local_llm_usage_on_the_phone/).
+- **Calor y batería:** usuarios de LLM locales denuncian calentamiento y consumo sostenido. Son modelos y cargas diferentes; no encontré una comparación controlada de consumo ASR ES/EN en gama media que permita asignar cifras a Pulsys. [Testimonios](https://www.reddit.com/r/LocalLLaMA/comments/1pgrevr/pro_tip_for_local_llm_usage_on_the_phone/).
 
 ## Dos combinaciones propuestas: "mínima" (lo más ligero) y "mejor calidad", con peso total estimado
 
@@ -108,7 +108,7 @@ Estos testimonios son **no verificados independientemente**; sirven para diseña
 | **Mínima autónoma** | Whisper **tiny Q5_1** + Rust + **Granite 350M Q4_K_M** | **≈269,1 MB** | **≈1,369 GB + B** |
 | **Mejor calidad, candidata** | Whisper **small Q5_1** + Rust + **Qwen3-0.6B Q4_K_M**, sin thinking | **≈674,3 MB** | **≈1,774 GB + B** |
 
-Cálculos a partir de [pesos Whisper](https://huggingface.co/ggerganov/whisper.cpp/tree/main), [Granite](https://huggingface.co/ibm-granite/granite-4.0-350m-GGUF) y [Qwen](https://huggingface.co/bartowski/Qwen_Qwen3-0.6B-GGUF). “Mejor calidad” expresa la hipótesis a probar; no una superioridad demostrada en Merken.
+Cálculos a partir de [pesos Whisper](https://huggingface.co/ggerganov/whisper.cpp/tree/main), [Granite](https://huggingface.co/ibm-granite/granite-4.0-350m-GGUF) y [Qwen](https://huggingface.co/bartowski/Qwen_Qwen3-0.6B-GGUF). “Mejor calidad” expresa la hipótesis a probar; no una superioridad demostrada en Pulsys.
 
 **Ajuste que elegiría inicialmente:** sustituir tiny por **base** cuesta solo **≈27,6 MB adicionales**: queda en **≈296,7 MB**, o **≈1,397 GB + B** con v5. Para un móvil controlado, sustituir ASR empaquetado por el sistema reduce los pesos propios a ≈237 MB, pero añade paquetes externos de tamaño desconocido y dependencia del proveedor. Es la variante más ligera del APK, condicionada a comprobar ese dispositivo. [Archivos](https://huggingface.co/ggerganov/whisper.cpp/tree/main), [disponibilidad Android](https://developer.android.com/reference/android/speech/SpeechRecognizer).
 

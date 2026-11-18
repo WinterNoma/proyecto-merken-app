@@ -194,7 +194,7 @@ impl KokoroPaths {
             voices: dir.join("voices.bin"),
             tokens: dir.join("tokens.txt"),
             lexicon: dir.join("lexicon-us-en.txt"),
-            supplemental_lexicon: dir.join("merken-us-en.txt"),
+            supplemental_lexicon: dir.join("pulsys-us-en.txt"),
         };
         paths.check()?;
         Ok(paths)
@@ -568,7 +568,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         let dir =
-            std::env::temp_dir().join(format!("merken-voice-{}-{unique}", std::process::id()));
+            std::env::temp_dir().join(format!("pulsys-voice-{}-{unique}", std::process::id()));
         std::fs::create_dir(&dir).unwrap();
         assert!(matches!(
             KokoroPaths::from_dir(&dir),
@@ -586,7 +586,7 @@ mod tests {
             KokoroPaths::from_dir(&dir),
             Err(VoiceError::ModelMissing)
         ));
-        std::fs::write(dir.join("merken-us-en.txt"), b"y y\n").unwrap();
+        std::fs::write(dir.join("pulsys-us-en.txt"), b"y y\n").unwrap();
         let comma_dir = dir.join("model,comma");
         std::fs::create_dir(&comma_dir).unwrap();
         assert!(matches!(

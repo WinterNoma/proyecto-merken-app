@@ -6,7 +6,7 @@ archivo JSON, autodescriptivo y verificable sin la app. No sube nada a ninguna p
 - Entrada opcional: `{ include_telemetry?: boolean (por defecto true), astronaut_key?: string }`.
   `astronaut_key` filtra **solo** la telemetría (el resto es del dispositivo: un perfil).
 - Salida: `{ path, file_name, bytes, exported_at, counts: { records, events, evaluations, telemetry_readings, outbox_pending } }`.
-- Archivo: `<datos de la app>/exports/merken-export-AAAAMMDDTHHMMSSZ.json` (UTC). Si el nombre existe se
+- Archivo: `<datos de la app>/exports/pulsys-export-AAAAMMDDTHHMMSSZ.json` (UTC). Si el nombre existe se
   usa `-2`, `-3`… (hasta 20 intentos). **Nunca sobrescribe.** Se escribe completo en un temporal exclusivo y solo entonces se publica sin reemplazar nada: nunca queda un `.json` vacío o a medias.
 - Todas las lecturas (incluida la verificación de la cadena) ocurren en **una sola transacción**: el
   archivo es un snapshot coherente aunque la app siga guardando telemetría.
@@ -50,7 +50,7 @@ signo), `batch_id`, `source`, `app_version`, `prev_hash`. `prev_hash` es el `row
 
 ```python
 import json, hashlib, struct
-d = json.load(open("merken-export.json", encoding="utf-8"))  # utf-8 explícito (en Windows el defecto es cp1252)
+d = json.load(open("pulsys-export.json", encoding="utf-8"))  # utf-8 explícito (en Windows el defecto es cp1252)
 rows = d["telemetry"]["readings"]
 last, count, bad = {}, {}, []
 prev_id = 0

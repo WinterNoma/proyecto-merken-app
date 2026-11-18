@@ -1,4 +1,4 @@
-# Merken: revisiones de especialista
+# Pulsys: revisiones de especialista
 
 **Tabla:** `specialist_reviews` · **Base de datos:** Amazon DynamoDB
 **Contrato de referencia:** `docs/api/modelo-datos-backend.md` v0.3 (repo de la app). Los nombres de tablas, campos y valores van en inglés, igual que en el contrato.
@@ -112,7 +112,7 @@ La API habla JSON normal.
 - Como el GSI es de consistencia eventual, una revisión recién creada puede tardar unos segundos en salir aquí. El móvil no usa este endpoint: recibe las revisiones por `GET /v1/sync/pull`.
 
 ## Panel
-Un aviso de especialista es una revisión con `attention_level: "soon"`. Sale en **Merken reviews**. Para que salga también en **Alert log**, el panel tiene que mezclar estos avisos con las alertas de telemetría.
+Un aviso de especialista es una revisión con `attention_level: "soon"`. Sale en **Pulsys reviews**. Para que salga también en **Alert log**, el panel tiene que mezclar estos avisos con las alertas de telemetría.
 
 ## En la app del astronauta
 - Recibe estas revisiones por la descarga del diario, con `entity = "specialist_review"`. Mientras no sepa mostrarlas, las guarda íntegras y no se pierde nada.

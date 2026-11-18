@@ -1,4 +1,4 @@
-# Merken
+# Pulsys
 
 App móvil de monitoreo de salud para astronautas. Es nuestro proyecto para el reto de NASA Space Apps 2026 [Health Monitoring Software](https://www.spaceappschallenge.org/2026/challenges/health-monitoring-software/).
 
@@ -61,7 +61,7 @@ Sin instalar nada: GitHub Actions → **Android APK** genera un APK debug arm64 
 
 La APK **no se conecta a MySQL directamente**, y es a propósito: tendría que llevar dentro la contraseña de MySQL, que cualquiera puede sacar de un APK. Además, MySQL tendría que quedar abierto a todo internet.
 
-- **APK:** en **Recommendations → Ground-station snapshot**, inicia sesión con el usuario del backend (`deployconmerken.gabogrobier.dev`). Es el backend quien lee MySQL. A partir de ahí la app se actualiza sola cada 15 s mientras está abierta. La sesión vive solo en memoria, y al cerrar la app hay que volver a sincronizar. La contraseña no se guarda nunca.
+- **APK:** en **Recommendations → Ground-station snapshot**, inicia sesión con el usuario del backend (`deployconpulsys.gabogrobier.dev`). Es el backend quien lee MySQL. A partir de ahí la app se actualiza sola cada 15 s mientras está abierta. La sesión vive solo en memoria, y al cerrar la app hay que volver a sincronizar. La contraseña no se guarda nunca.
 - **Modo dev** (`npm run dev` o `npm run tauri android dev`): Vite lee MySQL con las credenciales de `server/.env` (copia `server/.env.example`) y refresca cada 2 s.
 - Si algún día hace falta otra fuente, la vía correcta es una API propia con login delante de MySQL, nunca las credenciales dentro de la app.
 
@@ -77,6 +77,6 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## Reglas del proyecto
 
-- **Las decisiones de salud las toma `merken-core`.** Ni TypeScript, ni el SLM, ni el servidor.
+- **Las decisiones de salud las toma `pulsys-core`.** Ni TypeScript, ni el SLM, ni el servidor.
 - En `crates/*` están prohibidos `unwrap`, `expect`, `panic!` y el indexado sin comprobar (lo hace cumplir clippy).
 - **Nunca** subir credenciales: van en `.env` (ignorado). Los modelos `.gguf` tampoco se suben (van en `externo/`).

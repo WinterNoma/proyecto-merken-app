@@ -4,7 +4,7 @@ use crate::{
     ModelManifest, ModelPackage, ModelRole, ModelSlot, ModelStore, Progress, SlmError,
     SlmExplainer, SlmInterpreter, offered_statements, render_facts,
 };
-use merken_core::{
+use pulsys_core::{
     evaluate::Evaluation,
     interpret::{MAX_INPUT_CHARS, interpret},
     proposal::Proposal,
@@ -842,7 +842,7 @@ pub fn default_deadline() -> Deadline {
 )]
 mod tests {
     use super::*;
-    use merken_core::{evaluate::evaluate_all, time::Timestamp};
+    use pulsys_core::{evaluate::evaluate_all, time::Timestamp};
 
     #[test]
     fn granite_manifest_is_embedded_and_valid() {
@@ -870,7 +870,7 @@ mod tests {
     #[test]
     fn no_model_returns_rules_and_facts() {
         let (service, fichas) = SlmService::start(
-            std::env::temp_dir().join("merken-slm-no-model"),
+            std::env::temp_dir().join("pulsys-slm-no-model"),
             NoEngineFactory,
             None,
         )
@@ -927,7 +927,7 @@ mod tests {
     fn no_fichas_never_loads_engine() {
         let count = std::sync::Arc::new(AtomicUsize::new(0));
         let (service, fichas) = SlmService::start(
-            std::env::temp_dir().join("merken-slm-no-fichas"),
+            std::env::temp_dir().join("pulsys-slm-no-fichas"),
             CountingFactory(count.clone()),
             None,
         )
@@ -947,7 +947,7 @@ mod tests {
     #[test]
     fn length_limit_is_reported_before_queueing() {
         let (service, _) = SlmService::start(
-            std::env::temp_dir().join("merken-slm-limit"),
+            std::env::temp_dir().join("pulsys-slm-limit"),
             NoEngineFactory,
             None,
         )
@@ -964,7 +964,7 @@ mod tests {
     #[test]
     fn residual_examples() {
         let (service, _) = SlmService::start(
-            std::env::temp_dir().join("merken-residual"),
+            std::env::temp_dir().join("pulsys-residual"),
             NoEngineFactory,
             None,
         )
@@ -1092,7 +1092,7 @@ mod tests {
     }
     #[test]
     fn model_dir_prefers_subfolder_and_falls_back_to_flat_root() {
-        let root = std::env::temp_dir().join(format!("merken-model-dir-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pulsys-model-dir-{}", std::process::id()));
         std::fs::create_dir_all(root.join(V5_ID)).unwrap();
         assert_eq!(model_dir(&root, V5_ID), root.join(V5_ID));
         assert_eq!(model_dir(&root, "space-health-base"), root);
@@ -1103,7 +1103,7 @@ mod tests {
         static SEQ: AtomicUsize = AtomicUsize::new(0);
         let id = SEQ.fetch_add(1, Ordering::SeqCst);
         let root =
-            std::env::temp_dir().join(format!("merken-service-test-{}-{id}", std::process::id()));
+            std::env::temp_dir().join(format!("pulsys-service-test-{}-{id}", std::process::id()));
         for model in ["test-interpreter", V5_ID] {
             let dir = root.join(model);
             std::fs::create_dir_all(&dir).unwrap();
@@ -1140,7 +1140,7 @@ mod tests {
         assert_eq!(extra.records.len(), 1);
         assert_eq!(
             extra.records[0].indicator,
-            merken_core::catalog::Indicator::SpaceRadiation
+            pulsys_core::catalog::Indicator::SpaceRadiation
         );
         assert!(extra.check(input).is_empty());
         assert_eq!(first.proposal, interpret(input));
@@ -1536,7 +1536,7 @@ mod tests {
 
     #[test]
     fn broad_scalar_quotes_only_cover_value_expressions() {
-        use merken_core::proposal::ProposedField;
+        use pulsys_core::proposal::ProposedField;
         // Deliberately widen real layer-1 field quotes, keeping the original value.
         for (text, key, expected) in [
             ("pulso 72 estoy agotado", "bpm", vec!["estoy agotado"]),
@@ -1593,7 +1593,7 @@ mod tests {
 
     #[test]
     fn compound_mentions_cover_aliases_without_consuming_neighbours() {
-        use merken_core::{
+        use pulsys_core::{
             catalog::Indicator,
             proposal::{ProposedRecord, TimeHint},
         };
@@ -1608,7 +1608,7 @@ mod tests {
             (Indicator::SpaceRadiation, "radiación espacial"),
             (Indicator::DistanceFromEarth, "distancia desde la tierra"),
         ] {
-            assert!(merken_core::interpret::mentions_indicator(indicator, alias));
+            assert!(pulsys_core::interpret::mentions_indicator(indicator, alias));
             let text = format!("misterio {alias} exhausted");
             let mut proposal = interpret("");
             proposal.records.push(ProposedRecord {
@@ -1745,7 +1745,7 @@ mod tests {
     #[test]
     fn worker_unwind_preserves_rules_and_restarts_without_overlap() {
         let (service, _) = SlmService::start_with_interpreter(
-            std::env::temp_dir().join("merken-worker-unwind"),
+            std::env::temp_dir().join("pulsys-worker-unwind"),
             PanicFactory,
             None,
             Some(fixture_manifest("test-interpreter", ModelRole::Interpreter)),
@@ -1842,7 +1842,7 @@ mod tests {
     fn explainer_unwind_keeps_precomputed_facts() {
         use crate::{FichaId, Statement, StatementId};
         let (service, _) = SlmService::start(
-            std::env::temp_dir().join("merken-explainer-unwind"),
+            std::env::temp_dir().join("pulsys-explainer-unwind"),
             PanicFactory,
             None,
         )
@@ -1879,7 +1879,7 @@ mod tests {
         let events = Arc::new(Mutex::new(Vec::new()));
         let seen = events.clone();
         let (service, _) = SlmService::start_with_interpreter(
-            std::env::temp_dir().join("merken-progress-test"),
+            std::env::temp_dir().join("pulsys-progress-test"),
             ProgressFactory,
             Some(Arc::new(move |event| {
                 seen.lock().unwrap().push(event);

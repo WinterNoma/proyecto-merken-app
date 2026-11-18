@@ -1,12 +1,12 @@
 [package]
-name = "merken-sync"
+name = "pulsys-sync"
 description = "Cliente de la API de sincronización con Tierra"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-merken-core.workspace = true
+pulsys-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true

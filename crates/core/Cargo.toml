@@ -1,5 +1,5 @@
 [package]
-name = "merken-core"
+name = "pulsys-core"
 description = "Dominio, tipos, referencia personal y motor de evaluación (puro, sin E/S)"
 version.workspace = true
 edition.workspace = true
