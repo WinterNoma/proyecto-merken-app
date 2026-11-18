@@ -86,7 +86,7 @@ jobs:
         run: |
           flutter analyze --fatal-infos
           dart format --output=none --set-exit-if-changed lib test integration_test
-          flutter test
+          flutter test --exclude-tags golden
       - name: Build Android debug APK
         working-directory: app
         run: flutter build apk --debug

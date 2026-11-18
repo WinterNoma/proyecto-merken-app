@@ -17,6 +17,7 @@ void main() {
     );
     expect(workflow, contains('            app/lib/l10n/generated'));
     expect(workflow, contains('git ls-files --others --exclude-standard'));
+    expect(workflow, contains('flutter test --exclude-tags golden'));
   });
 
   test('manual Flutter and Android files have no template instructions', () {

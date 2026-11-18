@@ -1,3 +1,7 @@
+// Baselines are rendered on Windows; Linux CI rasterizes text differently.
+@Tags(<String>['golden'])
+library;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
