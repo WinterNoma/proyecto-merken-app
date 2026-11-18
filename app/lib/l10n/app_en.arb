@@ -1,0 +1,127 @@
+{
+  "@@locale": "en",
+  "appTitle": "Pulsys",
+  "wordmark": "PULSYS",
+  "pulseScreenTitle": "Pulse",
+  "pulseSectionSubtitle": "Record a heart rate reading in bpm. Saved on this device.",
+  "pulseBpmLabel": "Pulse (bpm)",
+  "pulseBpmHint": "e.g. 72",
+  "pulseBpmUnit": "bpm",
+  "pulseTimeLabel": "Measurement time (UTC, optional)",
+  "pulseTimeHint": "YYYY-MM-DD HH:MM",
+  "pulseTimeHelper": "Leave blank to use the current UTC time.",
+  "pulseNoteLabel": "Note (optional)",
+  "pulseNoteHint": "Add context such as rest or post-exercise.",
+  "pulseSaveAction": "Save reading",
+  "pulseNewReadingAction": "New reading",
+  "pulseSavingAction": "Saving…",
+  "pulseSaveRealDataAction": "Save real data",
+  "pulseSavedLocallyHeading": "Saved locally",
+  "pulseSavedReceipt": "{bpm} bpm · Measured {measuredAtUtc}",
+  "@pulseSavedReceipt": {
+    "placeholders": {
+      "bpm": {
+        "type": "String"
+      },
+      "measuredAtUtc": {
+        "type": "String"
+      }
+    }
+  },
+  "pulseSyncPending": "Synchronization pending. Ground receipt is not confirmed.",
+  "pulseSyncLocalOnly": "Saved on this device only.",
+  "pulseHistoryHeading": "Recorded pulse history",
+  "pulseHistoryLoading": "Loading pulse history…",
+  "pulseHistoryUnavailable": "History unavailable. Try again.",
+  "pulseHistoryRetry": "Retry",
+  "pulseHistoryEmptyTitle": "No data",
+  "pulseHistoryEmptyBody": "No pulse readings recorded yet.",
+  "pulseCorrectedLabel": "Corrected",
+  "pulseDemoTag": "DEMO",
+  "pulseSourceForm": "Form",
+  "pulseSourceText": "Text",
+  "pulseSourceVoice": "Voice",
+  "pulseSourceEarth": "Ground",
+  "pulseSourceGarmin": "Garmin",
+  "pulseStatusHeading": "Current pulse status",
+  "statusStable": "Stable",
+  "statusChange": "Change detected",
+  "statusAlarm": "Alarm",
+  "statusNotEvaluated": "Not evaluated",
+  "statusNoData": "No data",
+  "statusStale": "Stale reading",
+  "statusInsufficientHistory": "Insufficient history ({count}/{needed})",
+  "@statusInsufficientHistory": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "needed": {
+        "type": "int"
+      }
+    }
+  },
+  "statusContextOnly": "Context only",
+  "statusIncreasing": "Increasing",
+  "statusDecreasing": "Decreasing",
+  "statusPersistent": "Persistent",
+  "zonesSummaryLabel": "Body zones evaluated: {count}",
+  "@zonesSummaryLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "confirmDialogTitle": "Confirm pulse reading?",
+  "confirmDialogDemoTitle": "Demo data will be removed",
+  "confirmDialogDemoBody": "Saving real data will remove the demo data.",
+  "confirmDialogWarningsIntro": "Review these warnings before saving:",
+  "confirmDialogLocalNote": "This reading will be saved locally on this device.",
+  "confirmDialogCancel": "Cancel",
+  "confirmDialogConfirm": "Confirm and save",
+  "warningUnusualValue": "This pulse value is outside the typical range.",
+  "warningFutureTimestamp": "The measurement time is in the future.",
+  "warningOldMeasurement": "The measurement time is more than seven days old.",
+  "warningFallback": "Review this reading before saving ({code}).",
+  "@warningFallback": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "errorBpmRequired": "Enter a pulse in bpm.",
+  "errorBpmInvalid": "Enter a positive number in bpm.",
+  "errorTimeInvalid": "Enter a valid UTC time (YYYY-MM-DD HH:MM).",
+  "errorNoteTooLong": "Note must contain at most 2,000 characters.",
+  "errorIdempotencyConflict": "This submission conflicts with a previously saved reading. Edit a field and try again.",
+  "errorActionExpired": "The target profile changed before saving. Review and try again.",
+  "errorLocalServiceUnavailable": "The local service could not be reached. This action was not confirmed.",
+  "errorStorageBusy": "The local store is busy. Try again; your entry has been kept.",
+  "errorNotFoundReplaces": "The original reading to correct was not found.",
+  "errorGenericSave": "The reading could not be saved. Your entry has been kept.",
+  "semanticsBpmField": "Pulse reading in beats per minute",
+  "semanticsTimeField": "Optional measurement time in UTC",
+  "semanticsNoteField": "Optional note for the pulse reading",
+  "semanticsSaveButton": "Save pulse reading",
+  "startupStorageError": "Pulsys could not open local storage.",
+  "pulseStatusLastAvailable": "Last available pulse status",
+  "pulseStatusUnavailable": "Pulse status could not be refreshed.",
+  "pulseStatusRetry": "Retry pulse status",
+  "pulseHistoryLastAvailable": "Last available pulse history",
+  "pulseRecoveryNewerVersion": "A pending reading requires a newer app version. It has been kept on this device.",
+  "pulseRecoveryUnavailable": "A pending reading could not be recovered. It has been kept on this device.",
+  "pulseRecoveryRetry": "Retry recovery",
+  "pulseCorrectionHeading": "Correcting a previous reading",
+  "pulseCorrectAction": "Correct reading",
+  "pulseDestinationLabel": "Save for {target}",
+  "@pulseDestinationLabel": {
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "pulseLocalProfile": "Local profile"
+}

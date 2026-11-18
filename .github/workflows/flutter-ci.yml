@@ -1,0 +1,151 @@
+name: Pulsys Flutter CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RUSTUP_TOOLCHAIN: '1.96.0'
+  FLUTTER_VERSION: '3.50.0'
+  FRB_VERSION: '2.11.1'
+  CARGO_EXPAND_VERSION: '1.0.118'
+  CARGO_NDK_VERSION: '4.1.2'
+
+jobs:
+  rust:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+          rustup component add rustfmt clippy
+      - name: Rust format
+        run: cargo fmt -p pulsys-api -p pulsys-bridge -- --check
+      - name: Clippy
+        run: cargo clippy --locked -p pulsys-api -p pulsys-bridge --all-targets -- -D warnings
+      - name: Rust tests
+        run: cargo test --locked -p pulsys-core -p pulsys-store -p pulsys-api -p pulsys-bridge
+
+  flutter:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - name: Install Android SDK and NDK
+        run: |
+          sdkmanager --install "platforms;android-37.0" "build-tools;36.0.0" "ndk;28.2.13676358"
+          flutter config --jdk-dir="$JAVA_HOME"
+      - name: Install Rust tools and Android targets
+        run: |
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+          rustup component add rustfmt
+          rustup target add aarch64-linux-android x86_64-linux-android
+          cargo install --locked cargo-expand --version "$CARGO_EXPAND_VERSION"
+          cargo install --locked flutter_rust_bridge_codegen --version "$FRB_VERSION"
+          cargo install --locked cargo-ndk --version "$CARGO_NDK_VERSION"
+      - name: Resolve Flutter dependencies
+        working-directory: app
+        run: flutter pub get --enforce-lockfile
+      - name: Regenerate bindings
+        working-directory: app
+        run: |
+          flutter_rust_bridge_codegen generate
+          dart run build_runner build
+          dart format lib/platform/generated
+          flutter gen-l10n
+      - name: Check generated bindings
+        run: |
+          generated=(
+            crates/bridge/src/frb_generated.rs
+            app/lib/platform/generated
+            app/lib/l10n/generated
+            app/ios/Runner/frb_generated.h
+            Cargo.lock
+            app/pubspec.lock
+          )
+          git diff --exit-code -- "${generated[@]}"
+          untracked="$(git ls-files --others --exclude-standard -- "${generated[@]}")"
+          if [[ -n "$untracked" ]]; then
+            printf '%s\n' "$untracked"
+            exit 1
+          fi
+      - name: Analyze, format and test Flutter
+        working-directory: app
+        run: |
+          flutter analyze --fatal-infos
+          dart format --output=none --set-exit-if-changed lib test integration_test
+          flutter test
+      - name: Build Android debug APK
+        working-directory: app
+        run: flutter build apk --debug
+
+  ios:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - name: Install Rust and iOS targets
+        run: |
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+      - name: Resolve Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Boot an iPhone simulator
+        id: simulator
+        run: |
+          udid="$(xcrun simctl list devices available --json | jq -r '
+            [.devices | to_entries[] | select(.key | contains(".iOS-")) | .value[]
+              | select(.isAvailable and (.name | startswith("iPhone")))]
+            | (map(select(.state == "Booted")) + .)[0].udid // empty
+          ')"
+          if [[ -z "$udid" ]]; then
+            echo "No available iPhone simulator"
+            exit 1
+          fi
+          xcrun simctl bootstatus "$udid" -b
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Build iOS simulator app
+        id: ios-debug
+        run: |
+          flutter build ios --simulator --debug
+          ditto build/ios/iphonesimulator/Runner.app "$RUNNER_TEMP/Pulsys.app"
+      - name: Run the pulse integration test
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: flutter test integration_test/pulse_flow_test.dart -d "$SIMULATOR_UDID"
+      - name: Capture Pulsys on iPhone
+        if: ${{ !cancelled() && steps.ios-debug.outcome == 'success' }}
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          xcrun simctl install "$SIMULATOR_UDID" "$RUNNER_TEMP/Pulsys.app"
+          xcrun simctl launch --terminate-running-process "$SIMULATOR_UDID" com.pulsys.app
+          sleep 3
+          xcrun simctl io "$SIMULATOR_UDID" screenshot "$RUNNER_TEMP/pulsys-ios.png"
+      - name: Upload iPhone screenshot
+        if: ${{ !cancelled() && steps.ios-debug.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pulsys-ios-simulator
+          path: ${{ runner.temp }}/pulsys-ios.png
+          if-no-files-found: error
+      - name: Build unsigned iOS device app
+        run: flutter build ios --release --no-codesign

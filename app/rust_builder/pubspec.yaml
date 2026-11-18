@@ -1,0 +1,17 @@
+name: rust_builder
+description: Builds the Pulsys Rust bridge for Flutter.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.14.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        ffiPlugin: true

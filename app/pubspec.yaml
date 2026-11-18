@@ -1,0 +1,58 @@
+name: pulsys
+description: "Pulsys health monitoring for astronauts"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.14.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  material_ui: ^1.11.1
+
+  cupertino_icons: ^1.0.8
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.3
+  flutter_rust_bridge: 2.11.1
+  freezed_annotation: 3.1.0
+  rust_builder:
+    path: rust_builder
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  build_runner: 2.15.1
+  freezed: 3.2.5
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  generate: true
+
+  uses-material-design: true
+
+  assets:
+    - lib/design/fonts/barlowsemicondensed-OFL.txt
+    - lib/design/fonts/publicsans-OFL.txt
+    - lib/design/fonts/robotomono-OFL.txt
+
+  fonts:
+    - family: Barlow Semi Condensed
+      fonts:
+        - asset: lib/design/fonts/BarlowSemiCondensed-SemiBold.ttf
+          weight: 600
+    - family: Public Sans
+      fonts:
+        - asset: lib/design/fonts/PublicSans-Variable.ttf
+          weight: 400
+        - asset: lib/design/fonts/PublicSans-Variable.ttf
+          weight: 600
+    - family: Roboto Mono
+      fonts:
+        - asset: lib/design/fonts/RobotoMono-Variable.ttf
+          weight: 400

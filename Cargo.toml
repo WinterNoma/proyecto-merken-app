@@ -8,6 +8,7 @@ members = [
     "crates/slm",
     "crates/voice",
     "crates/api",
+    "crates/bridge",
 ]
 exclude = ["src-tauri", "plugins/slm-assets", "crates/local-speech"]
 

@@ -1,0 +1,11 @@
+rust_root: ../crates/bridge
+rust_input: crate::api
+dart_output: lib/platform/generated
+c_output: ios/Runner/frb_generated.h
+add_mod_to_lib: false
+auto_upgrade_dependency: false
+dart_fix: false
+build_runner: false
+type_64bit_int: true
+stop_on_error: true
+web: false
